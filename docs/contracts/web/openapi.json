@@ -10,7 +10,7 @@
     }
   ],
   "paths": {
-    "/payer/payments/{payerPageId}": {
+    "/api/payer/payments/{payerPageId}": {
       "get": {
         "tags": [
           "Payer"
@@ -50,7 +50,7 @@
         }
       }
     },
-    "/payer/payments/{payerPageId}/currency-selection": {
+    "/api/payer/payments/{payerPageId}/currency-selection": {
       "post": {
         "tags": [
           "Payer"
@@ -126,7 +126,7 @@
         }
       }
     },
-    "/admin/csrf": {
+    "/api/admin/csrf": {
       "get": {
         "tags": [
           "Admin"
@@ -146,7 +146,7 @@
         }
       }
     },
-    "/admin/session": {
+    "/api/admin/session": {
       "get": {
         "tags": [
           "Admin"
@@ -176,7 +176,7 @@
         }
       }
     },
-    "/admin/payments": {
+    "/api/admin/payments": {
       "get": {
         "tags": [
           "Admin"
@@ -220,7 +220,7 @@
         }
       }
     },
-    "/admin/payments/{paymentId}": {
+    "/api/admin/payments/{paymentId}": {
       "get": {
         "tags": [
           "Admin"
@@ -271,7 +271,7 @@
         }
       }
     },
-    "/admin/payments/{paymentId}/settle": {
+    "/api/admin/payments/{paymentId}/settle": {
       "post": {
         "tags": [
           "Admin"
@@ -368,7 +368,7 @@
         }
       }
     },
-    "/admin/reorg-alerts": {
+    "/api/admin/reorg-alerts": {
       "get": {
         "tags": [
           "Admin"
@@ -412,7 +412,7 @@
         }
       }
     },
-    "/admin/observation-health": {
+    "/api/admin/observation-health": {
       "get": {
         "tags": [
           "Admin"
@@ -442,7 +442,7 @@
         }
       }
     },
-    "/admin/audit-log": {
+    "/api/admin/audit-log": {
       "get": {
         "tags": [
           "Admin"
@@ -486,7 +486,7 @@
         }
       }
     },
-    "/admin/audit-log/{eventId}": {
+    "/api/admin/audit-log/{eventId}": {
       "get": {
         "tags": [
           "Admin"
@@ -547,7 +547,7 @@
         }
       }
     },
-    "/admin/webhook-deliveries": {
+    "/api/admin/webhook-deliveries": {
       "get": {
         "tags": [
           "Admin"
@@ -591,7 +591,7 @@
         }
       }
     },
-    "/admin/integration-api-credentials": {
+    "/api/admin/integration-api-credentials": {
       "get": {
         "tags": [
           "Admin"
@@ -685,7 +685,7 @@
         }
       }
     },
-    "/admin/integration-api-credentials/{credentialId}/rotate": {
+    "/api/admin/integration-api-credentials/{credentialId}/rotate": {
       "post": {
         "tags": [
           "Admin"
@@ -782,7 +782,7 @@
         }
       }
     },
-    "/admin/integration-api-credentials/{credentialId}/disable": {
+    "/api/admin/integration-api-credentials/{credentialId}/disable": {
       "post": {
         "tags": [
           "Admin"
@@ -879,7 +879,7 @@
         }
       }
     },
-    "/admin/webhook-endpoints": {
+    "/api/admin/webhook-endpoints": {
       "get": {
         "tags": [
           "Admin"
@@ -1003,7 +1003,7 @@
         }
       }
     },
-    "/admin/webhook-endpoints/{endpointId}/update": {
+    "/api/admin/webhook-endpoints/{endpointId}/update": {
       "post": {
         "tags": [
           "Admin"
@@ -1100,7 +1100,7 @@
         }
       }
     },
-    "/admin/webhook-endpoints/{endpointId}/rotate-secret": {
+    "/api/admin/webhook-endpoints/{endpointId}/rotate-secret": {
       "post": {
         "tags": [
           "Admin"
@@ -1197,7 +1197,7 @@
         }
       }
     },
-    "/admin/webhook-endpoints/{endpointId}/disable": {
+    "/api/admin/webhook-endpoints/{endpointId}/disable": {
       "post": {
         "tags": [
           "Admin"
@@ -1294,7 +1294,7 @@
         }
       }
     },
-    "/admin/native-eth-address-pool": {
+    "/api/admin/native-eth-address-pool": {
       "get": {
         "tags": [
           "Admin"
@@ -1324,7 +1324,7 @@
         }
       }
     },
-    "/admin/native-eth-address-pool/import": {
+    "/api/admin/native-eth-address-pool/import": {
       "post": {
         "tags": [
           "Admin"
@@ -1400,7 +1400,7 @@
         }
       }
     },
-    "/admin/audit-log/export": {
+    "/api/admin/audit-log/export": {
       "post": {
         "tags": [
           "Admin"
@@ -1456,7 +1456,7 @@
         }
       }
     },
-    "/admin/webhook-deliveries/{eventId}/resend": {
+    "/api/admin/webhook-deliveries/{eventId}/resend": {
       "post": {
         "tags": [
           "Admin"
@@ -1527,7 +1527,7 @@
         }
       }
     },
-    "/admin/auth/login": {
+    "/api/admin/auth/login": {
       "post": {
         "tags": [
           "Admin Authentication"
@@ -1583,7 +1583,7 @@
         }
       }
     },
-    "/admin/auth/mfa": {
+    "/api/admin/auth/mfa": {
       "post": {
         "tags": [
           "Admin Authentication"
@@ -1639,7 +1639,7 @@
         }
       }
     },
-    "/admin/auth/step-up": {
+    "/api/admin/auth/step-up": {
       "post": {
         "tags": [
           "Admin Authentication"
@@ -1695,7 +1695,7 @@
         }
       }
     },
-    "/admin/auth/recovery-codes": {
+    "/api/admin/auth/recovery-codes": {
       "post": {
         "tags": [
           "Admin Authentication"
@@ -1745,7 +1745,7 @@
         }
       }
     },
-    "/admin/auth/logout": {
+    "/api/admin/auth/logout": {
       "post": {
         "tags": [
           "Admin Authentication"

@@ -48,13 +48,13 @@ public sealed class WebOpenApiContractTests
         Assert.DoesNotContain(
             paths.EnumerateObject(),
             path => path.Name.StartsWith("/api/v1/", StringComparison.Ordinal));
-        Assert.True(paths.TryGetProperty("/payer/payments/{payerPageId}", out _));
-        Assert.True(paths.TryGetProperty("/admin/payments/{paymentId}/settle", out _));
-        Assert.True(paths.TryGetProperty("/admin/integration-api-credentials", out _));
-        Assert.True(paths.TryGetProperty("/admin/webhook-endpoints", out _));
-        Assert.True(paths.TryGetProperty("/admin/native-eth-address-pool/import", out _));
-        Assert.True(paths.TryGetProperty("/admin/observation-health", out _));
-        Assert.True(paths.TryGetProperty("/admin/reorg-alerts", out _));
+        Assert.True(paths.TryGetProperty("/api/payer/payments/{payerPageId}", out _));
+        Assert.True(paths.TryGetProperty("/api/admin/payments/{paymentId}/settle", out _));
+        Assert.True(paths.TryGetProperty("/api/admin/integration-api-credentials", out _));
+        Assert.True(paths.TryGetProperty("/api/admin/webhook-endpoints", out _));
+        Assert.True(paths.TryGetProperty("/api/admin/native-eth-address-pool/import", out _));
+        Assert.True(paths.TryGetProperty("/api/admin/observation-health", out _));
+        Assert.True(paths.TryGetProperty("/api/admin/reorg-alerts", out _));
 
         var schemas = root.GetProperty("components").GetProperty("schemas");
         Assert.True(schemas.TryGetProperty("PaymentResponse", out _));

@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/payer/payments/{payerPageId}": {
+    "/api/payer/payments/{payerPageId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -20,7 +20,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/payer/payments/{payerPageId}/currency-selection": {
+    "/api/payer/payments/{payerPageId}/currency-selection": {
         parameters: {
             query?: never;
             header?: never;
@@ -36,7 +36,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/csrf": {
+    "/api/admin/csrf": {
         parameters: {
             query?: never;
             header?: never;
@@ -52,7 +52,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/session": {
+    "/api/admin/session": {
         parameters: {
             query?: never;
             header?: never;
@@ -68,7 +68,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/payments": {
+    "/api/admin/payments": {
         parameters: {
             query?: never;
             header?: never;
@@ -84,7 +84,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/payments/{paymentId}": {
+    "/api/admin/payments/{paymentId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -100,7 +100,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/payments/{paymentId}/settle": {
+    "/api/admin/payments/{paymentId}/settle": {
         parameters: {
             query?: never;
             header?: never;
@@ -116,7 +116,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/reorg-alerts": {
+    "/api/admin/reorg-alerts": {
         parameters: {
             query?: never;
             header?: never;
@@ -132,7 +132,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/observation-health": {
+    "/api/admin/observation-health": {
         parameters: {
             query?: never;
             header?: never;
@@ -148,7 +148,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/audit-log": {
+    "/api/admin/audit-log": {
         parameters: {
             query?: never;
             header?: never;
@@ -164,7 +164,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/audit-log/{eventId}": {
+    "/api/admin/audit-log/{eventId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -180,7 +180,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/webhook-deliveries": {
+    "/api/admin/webhook-deliveries": {
         parameters: {
             query?: never;
             header?: never;
@@ -196,7 +196,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/integration-api-credentials": {
+    "/api/admin/integration-api-credentials": {
         parameters: {
             query?: never;
             header?: never;
@@ -212,7 +212,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/integration-api-credentials/{credentialId}/rotate": {
+    "/api/admin/integration-api-credentials/{credentialId}/rotate": {
         parameters: {
             query?: never;
             header?: never;
@@ -228,7 +228,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/integration-api-credentials/{credentialId}/disable": {
+    "/api/admin/integration-api-credentials/{credentialId}/disable": {
         parameters: {
             query?: never;
             header?: never;
@@ -244,7 +244,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/webhook-endpoints": {
+    "/api/admin/webhook-endpoints": {
         parameters: {
             query?: never;
             header?: never;
@@ -260,7 +260,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/webhook-endpoints/{endpointId}/update": {
+    "/api/admin/webhook-endpoints/{endpointId}/update": {
         parameters: {
             query?: never;
             header?: never;
@@ -276,7 +276,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/webhook-endpoints/{endpointId}/rotate-secret": {
+    "/api/admin/webhook-endpoints/{endpointId}/rotate-secret": {
         parameters: {
             query?: never;
             header?: never;
@@ -292,7 +292,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/webhook-endpoints/{endpointId}/disable": {
+    "/api/admin/webhook-endpoints/{endpointId}/disable": {
         parameters: {
             query?: never;
             header?: never;
@@ -308,7 +308,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/native-eth-address-pool": {
+    "/api/admin/native-eth-address-pool": {
         parameters: {
             query?: never;
             header?: never;
@@ -324,7 +324,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/native-eth-address-pool/import": {
+    "/api/admin/native-eth-address-pool/import": {
         parameters: {
             query?: never;
             header?: never;
@@ -340,7 +340,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/audit-log/export": {
+    "/api/admin/audit-log/export": {
         parameters: {
             query?: never;
             header?: never;
@@ -356,7 +356,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/webhook-deliveries/{eventId}/resend": {
+    "/api/admin/webhook-deliveries/{eventId}/resend": {
         parameters: {
             query?: never;
             header?: never;
@@ -372,7 +372,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/auth/login": {
+    "/api/admin/auth/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -388,7 +388,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/auth/mfa": {
+    "/api/admin/auth/mfa": {
         parameters: {
             query?: never;
             header?: never;
@@ -404,7 +404,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/auth/step-up": {
+    "/api/admin/auth/step-up": {
         parameters: {
             query?: never;
             header?: never;
@@ -420,7 +420,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/auth/recovery-codes": {
+    "/api/admin/auth/recovery-codes": {
         parameters: {
             query?: never;
             header?: never;
@@ -436,7 +436,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/auth/logout": {
+    "/api/admin/auth/logout": {
         parameters: {
             query?: never;
             header?: never;

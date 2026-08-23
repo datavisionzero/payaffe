@@ -194,7 +194,7 @@ section "Payer Page"
 
 PAYER_PAGE_ID="${PAYER_PAGE_URL##*/}"
 STATUS="$(curl -s -o /tmp/payaffe-smoke-body -w '%{http_code}' \
-  "http://localhost:$API_PORT/payer/payments/$PAYER_PAGE_ID")"
+  "http://localhost:$API_PORT/api/payer/payments/$PAYER_PAGE_ID")"
 if [ "$STATUS" = "200" ]; then
   pass "Payer API serves the Payment by Payer Page id"
 else
@@ -217,7 +217,7 @@ print(option.get("unavailableReasonCode") or "")
 
 STATUS="$(curl -s -o /tmp/payaffe-smoke-body -w '%{http_code}' -X POST \
   -H "Content-Type: application/json" -d '{"supportedCurrency":"BTC"}' \
-  "http://localhost:$API_PORT/payer/payments/$PAYER_PAGE_ID/currency-selection")"
+  "http://localhost:$API_PORT/api/payer/payments/$PAYER_PAGE_ID/currency-selection")"
 SELECTION_CODE="$(python3 -c 'import json;print(json.load(open("/tmp/payaffe-smoke-body")).get("code",""))' 2>/dev/null || true)"
 
 if [ "$STATUS" = "200" ]; then

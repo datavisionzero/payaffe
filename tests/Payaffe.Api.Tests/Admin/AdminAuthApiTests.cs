@@ -25,7 +25,7 @@ public sealed class AdminAuthApiTests
         using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = " admin@example.test ",
@@ -60,7 +60,7 @@ public sealed class AdminAuthApiTests
         using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -95,7 +95,7 @@ public sealed class AdminAuthApiTests
         await factory.SeedAdminAccountAsync("admin@example.test", "correct-password");
         using var client = factory.CreateClient();
         var firstResponse = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -104,7 +104,7 @@ public sealed class AdminAuthApiTests
         Assert.Equal(HttpStatusCode.Unauthorized, firstResponse.StatusCode);
 
         var response = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -139,7 +139,7 @@ public sealed class AdminAuthApiTests
             totpSecret: TotpSecret);
         using var client = factory.CreateClient();
         var loginResponse = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -148,7 +148,7 @@ public sealed class AdminAuthApiTests
         var loginStart = await loginResponse.Content.ReadFromJsonAsync<LoginStartResponse>();
 
         var response = await client.PostAsJsonAsync(
-            "/admin/auth/mfa",
+            "/api/admin/auth/mfa",
             new
             {
                 challengeId = loginStart!.ChallengeId,
@@ -189,7 +189,7 @@ public sealed class AdminAuthApiTests
         var recoveryCodeId = await SeedRecoveryCodeAsync(factory, adminAccountId, "ABCD-EFGH-JK23");
         using var client = factory.CreateClient();
         var loginResponse = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -198,7 +198,7 @@ public sealed class AdminAuthApiTests
         var loginStart = await loginResponse.Content.ReadFromJsonAsync<LoginStartResponse>();
 
         var response = await client.PostAsJsonAsync(
-            "/admin/auth/mfa",
+            "/api/admin/auth/mfa",
             new
             {
                 challengeId = loginStart!.ChallengeId,
@@ -254,7 +254,7 @@ public sealed class AdminAuthApiTests
         await SeedRecoveryCodeAsync(factory, adminAccountId, "ABCD-EFGH-JK23");
         using var client = factory.CreateClient();
         var firstLoginResponse = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -262,7 +262,7 @@ public sealed class AdminAuthApiTests
             });
         var firstLoginStart = await firstLoginResponse.Content.ReadFromJsonAsync<LoginStartResponse>();
         var firstMfaResponse = await client.PostAsJsonAsync(
-            "/admin/auth/mfa",
+            "/api/admin/auth/mfa",
             new
             {
                 challengeId = firstLoginStart!.ChallengeId,
@@ -271,7 +271,7 @@ public sealed class AdminAuthApiTests
         firstMfaResponse.EnsureSuccessStatusCode();
 
         var secondLoginResponse = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -279,7 +279,7 @@ public sealed class AdminAuthApiTests
             });
         var secondLoginStart = await secondLoginResponse.Content.ReadFromJsonAsync<LoginStartResponse>();
         var secondMfaResponse = await client.PostAsJsonAsync(
-            "/admin/auth/mfa",
+            "/api/admin/auth/mfa",
             new
             {
                 challengeId = secondLoginStart!.ChallengeId,
@@ -323,7 +323,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync("/admin/session");
+        var response = await sessionClient.GetAsync("/api/admin/session");
 
         response.EnsureSuccessStatusCode();
         var sessionResponse = await response.Content.ReadFromJsonAsync<SessionResponse>();
@@ -347,7 +347,7 @@ public sealed class AdminAuthApiTests
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/admin/session");
+        var response = await client.GetAsync("/api/admin/session");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -376,7 +376,7 @@ public sealed class AdminAuthApiTests
 
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
-        var response = await sessionClient.GetAsync("/admin/session");
+        var response = await sessionClient.GetAsync("/api/admin/session");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -389,7 +389,7 @@ public sealed class AdminAuthApiTests
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/admin/payments");
+        var response = await client.GetAsync("/api/admin/payments");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -427,7 +427,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync("/admin/payments?limit=1");
+        var response = await sessionClient.GetAsync("/api/admin/payments?limit=1");
 
         response.EnsureSuccessStatusCode();
         var adminPayments = await response.Content.ReadFromJsonAsync<AdminPaymentsResponse>();
@@ -450,7 +450,7 @@ public sealed class AdminAuthApiTests
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync($"/admin/payments/{Guid.NewGuid()}");
+        var response = await client.GetAsync($"/api/admin/payments/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -470,7 +470,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={ExtractCookieValue(sessionCookie)}");
 
-        var response = await sessionClient.GetAsync($"/admin/payments/{Guid.NewGuid()}");
+        var response = await sessionClient.GetAsync($"/api/admin/payments/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -504,7 +504,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync($"/admin/payments/{paymentId}");
+        var response = await sessionClient.GetAsync($"/api/admin/payments/{paymentId}");
 
         response.EnsureSuccessStatusCode();
         var payment = await response.Content.ReadFromJsonAsync<AdminPaymentDetailResponse>();
@@ -527,7 +527,7 @@ public sealed class AdminAuthApiTests
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/admin/audit-log");
+        var response = await client.GetAsync("/api/admin/audit-log");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -565,7 +565,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync("/admin/audit-log?limit=1");
+        var response = await sessionClient.GetAsync("/api/admin/audit-log?limit=1");
 
         response.EnsureSuccessStatusCode();
         var auditLog = await response.Content.ReadFromJsonAsync<AdminAuditLogResponse>();
@@ -600,7 +600,7 @@ public sealed class AdminAuthApiTests
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync($"/admin/audit-log/{Guid.NewGuid()}");
+        var response = await client.GetAsync($"/api/admin/audit-log/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -636,7 +636,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync($"/admin/audit-log/{eventId}");
+        var response = await sessionClient.GetAsync($"/api/admin/audit-log/{eventId}");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -677,7 +677,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync($"/admin/audit-log/{eventId}");
+        var response = await sessionClient.GetAsync($"/api/admin/audit-log/{eventId}");
 
         response.EnsureSuccessStatusCode();
         var detail = await response.Content.ReadFromJsonAsync<AdminAuditLogEntryDetailResponse>();
@@ -721,7 +721,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = CreateHttpsClient(factory);
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.PostAsJsonAsync("/admin/audit-log/export", new { limit = 10 });
+        var response = await sessionClient.PostAsJsonAsync("/api/admin/audit-log/export", new { limit = 10 });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -759,7 +759,7 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsJsonAsync("/admin/audit-log/export", new { limit = 10 });
+        var response = await sessionClient.PostAsJsonAsync("/api/admin/audit-log/export", new { limit = 10 });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -811,7 +811,7 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsJsonAsync("/admin/audit-log/export", new { limit = 1 });
+        var response = await sessionClient.PostAsJsonAsync("/api/admin/audit-log/export", new { limit = 1 });
 
         response.EnsureSuccessStatusCode();
         var export = await response.Content.ReadFromJsonAsync<AdminAuditLogExportResponse>();
@@ -849,7 +849,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = CreateHttpsClient(factory);
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.PostAsync("/admin/auth/recovery-codes", content: null);
+        var response = await sessionClient.PostAsync("/api/admin/auth/recovery-codes", content: null);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -888,7 +888,7 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsync("/admin/auth/recovery-codes", content: null);
+        var response = await sessionClient.PostAsync("/api/admin/auth/recovery-codes", content: null);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -925,7 +925,7 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsync("/admin/auth/recovery-codes", content: null);
+        var response = await sessionClient.PostAsync("/api/admin/auth/recovery-codes", content: null);
 
         response.EnsureSuccessStatusCode();
         var recovery = await response.Content.ReadFromJsonAsync<RecoveryCodesResponse>();
@@ -978,10 +978,10 @@ public sealed class AdminAuthApiTests
             "Cookie",
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
-        var firstResponse = await sessionClient.PostAsync("/admin/auth/recovery-codes", content: null);
+        var firstResponse = await sessionClient.PostAsync("/api/admin/auth/recovery-codes", content: null);
         firstResponse.EnsureSuccessStatusCode();
 
-        var secondResponse = await sessionClient.PostAsync("/admin/auth/recovery-codes", content: null);
+        var secondResponse = await sessionClient.PostAsync("/api/admin/auth/recovery-codes", content: null);
 
         secondResponse.EnsureSuccessStatusCode();
         using var scope = factory.Services.CreateScope();
@@ -1024,7 +1024,7 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsync($"/admin/webhook-deliveries/{eventId}/resend", content: null);
+        var response = await sessionClient.PostAsync($"/api/admin/webhook-deliveries/{eventId}/resend", content: null);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -1061,7 +1061,7 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsync($"/admin/webhook-deliveries/{eventId}/resend", content: null);
+        var response = await sessionClient.PostAsync($"/api/admin/webhook-deliveries/{eventId}/resend", content: null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -1085,7 +1085,7 @@ public sealed class AdminAuthApiTests
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/admin/webhook-deliveries");
+        var response = await client.GetAsync("/api/admin/webhook-deliveries");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -1128,7 +1128,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync("/admin/webhook-deliveries?limit=10");
+        var response = await sessionClient.GetAsync("/api/admin/webhook-deliveries?limit=10");
 
         response.EnsureSuccessStatusCode();
         var webhookDeliveries = await response.Content.ReadFromJsonAsync<AdminWebhookDeliveriesResponse>();
@@ -1155,7 +1155,7 @@ public sealed class AdminAuthApiTests
         await using var factory = new PaymentApiFactory();
         using var client = CreateHttpsClient(factory);
 
-        var response = await client.GetAsync("/admin/csrf");
+        var response = await client.GetAsync("/api/admin/csrf");
 
         response.EnsureSuccessStatusCode();
         var csrfResponse = await response.Content.ReadFromJsonAsync<CsrfResponse>();
@@ -1174,7 +1174,7 @@ public sealed class AdminAuthApiTests
     {
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Options, "/admin/session");
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/api/admin/session");
         request.Headers.Add("Origin", "http://localhost:3000");
         request.Headers.Add("Access-Control-Request-Method", "GET");
 
@@ -1201,7 +1201,7 @@ public sealed class AdminAuthApiTests
         using var sessionClient = CreateHttpsClient(factory);
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.PostAsync("/admin/auth/logout", content: null);
+        var response = await sessionClient.PostAsync("/api/admin/auth/logout", content: null);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -1209,7 +1209,7 @@ public sealed class AdminAuthApiTests
         Assert.DoesNotContain(rawSessionToken, body, StringComparison.Ordinal);
         Assert.False(response.Headers.TryGetValues("Set-Cookie", out _));
 
-        var sessionResponse = await sessionClient.GetAsync("/admin/session");
+        var sessionResponse = await sessionClient.GetAsync("/api/admin/session");
         sessionResponse.EnsureSuccessStatusCode();
 
         using var scope = factory.Services.CreateScope();
@@ -1234,7 +1234,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
         var response = await sessionClient.PostAsJsonAsync(
-            "/admin/auth/step-up",
+            "/api/admin/auth/step-up",
             new { totpCode = ComputeTotpCode(TotpSecret, DateTimeOffset.UtcNow) });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1275,7 +1275,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
         var response = await sessionClient.PostAsJsonAsync(
-            "/admin/auth/step-up",
+            "/api/admin/auth/step-up",
             new { totpCode = ComputeTotpCode(TotpSecret, DateTimeOffset.UtcNow) });
 
         response.EnsureSuccessStatusCode();
@@ -1318,7 +1318,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
         var response = await sessionClient.PostAsJsonAsync(
-            "/admin/auth/step-up",
+            "/api/admin/auth/step-up",
             new { totpCode = "000000" });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -1356,7 +1356,7 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsync("/admin/auth/logout", content: null);
+        var response = await sessionClient.PostAsync("/api/admin/auth/logout", content: null);
 
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync();
@@ -1369,7 +1369,7 @@ public sealed class AdminAuthApiTests
         Assert.Contains("secure", clearedCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=lax", clearedCookie, StringComparison.OrdinalIgnoreCase);
 
-        var sessionResponse = await sessionClient.GetAsync("/admin/session");
+        var sessionResponse = await sessionClient.GetAsync("/api/admin/session");
         Assert.Equal(HttpStatusCode.Unauthorized, sessionResponse.StatusCode);
 
         using var scope = factory.Services.CreateScope();
@@ -1391,7 +1391,7 @@ public sealed class AdminAuthApiTests
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.PostAsync("/admin/auth/logout", content: null);
+        var response = await client.PostAsync("/api/admin/auth/logout", content: null);
 
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync();
@@ -1416,7 +1416,7 @@ public sealed class AdminAuthApiTests
             totpSecret: TotpSecret);
         using var client = factory.CreateClient();
         var loginResponse = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -1425,7 +1425,7 @@ public sealed class AdminAuthApiTests
         var loginStart = await loginResponse.Content.ReadFromJsonAsync<LoginStartResponse>();
 
         var response = await client.PostAsJsonAsync(
-            "/admin/auth/mfa",
+            "/api/admin/auth/mfa",
             new
             {
                 challengeId = loginStart!.ChallengeId,
@@ -1459,7 +1459,7 @@ public sealed class AdminAuthApiTests
         for (var attempt = 0; attempt < 5; attempt++)
         {
             var response = await client.PostAsJsonAsync(
-                "/admin/auth/login",
+                "/api/admin/auth/login",
                 new
                 {
                     username = "admin@example.test",
@@ -1485,7 +1485,7 @@ public sealed class AdminAuthApiTests
         using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "missing@example.test",
@@ -1538,7 +1538,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
         var createResponse = await sessionClient.PostAsJsonAsync(
-            "/admin/integration-api-credentials",
+            "/api/admin/integration-api-credentials",
             new { name = " Partner production " });
 
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
@@ -1565,7 +1565,7 @@ public sealed class AdminAuthApiTests
                 audit.SubjectId == stored.Id.ToString("D"));
         }
 
-        var listResponse = await sessionClient.GetAsync("/admin/integration-api-credentials");
+        var listResponse = await sessionClient.GetAsync("/api/admin/integration-api-credentials");
         listResponse.EnsureSuccessStatusCode();
         var listBody = await listResponse.Content.ReadAsStringAsync();
         Assert.DoesNotContain(created.Token, listBody, StringComparison.Ordinal);
@@ -1591,7 +1591,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
         var csrfResponse = await sessionClient.PostAsJsonAsync(
-            "/admin/integration-api-credentials",
+            "/api/admin/integration-api-credentials",
             new { name = "Partner" });
 
         Assert.Equal(HttpStatusCode.Forbidden, csrfResponse.StatusCode);
@@ -1615,7 +1615,7 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         steppedOutClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
         var stepUpResponse = await steppedOutClient.PostAsJsonAsync(
-            "/admin/integration-api-credentials",
+            "/api/admin/integration-api-credentials",
             new { name = "Partner" });
 
         Assert.Equal(HttpStatusCode.Forbidden, stepUpResponse.StatusCode);
@@ -1653,7 +1653,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
         var rotateResponse = await sessionClient.PostAsJsonAsync(
-            $"/admin/integration-api-credentials/{credentialId:D}/rotate",
+            $"/api/admin/integration-api-credentials/{credentialId:D}/rotate",
             new { expectedVersion = 1 });
 
         rotateResponse.EnsureSuccessStatusCode();
@@ -1715,7 +1715,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
         var conflictResponse = await sessionClient.PostAsJsonAsync(
-            $"/admin/integration-api-credentials/{credentialId:D}/disable",
+            $"/api/admin/integration-api-credentials/{credentialId:D}/disable",
             new { expectedVersion = 7 });
 
         Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
@@ -1724,7 +1724,7 @@ public sealed class AdminAuthApiTests
         Assert.Contains("\"currentVersion\":1", conflictBody, StringComparison.Ordinal);
 
         var disableResponse = await sessionClient.PostAsJsonAsync(
-            $"/admin/integration-api-credentials/{credentialId:D}/disable",
+            $"/api/admin/integration-api-credentials/{credentialId:D}/disable",
             new { expectedVersion = 1 });
 
         disableResponse.EnsureSuccessStatusCode();
@@ -1775,7 +1775,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
         var createResponse = await sessionClient.PostAsJsonAsync(
-            "/admin/webhook-endpoints",
+            "/api/admin/webhook-endpoints",
             new
             {
                 integrationApiCredentialId = credentialId,
@@ -1795,7 +1795,7 @@ public sealed class AdminAuthApiTests
         Assert.DoesNotContain("first-webhook-secret", createBody, StringComparison.Ordinal);
 
         var updateResponse = await sessionClient.PostAsJsonAsync(
-            $"/admin/webhook-endpoints/{created.Endpoint.Id:D}/update",
+            $"/api/admin/webhook-endpoints/{created.Endpoint.Id:D}/update",
             new
             {
                 expectedVersion = 1,
@@ -1809,7 +1809,7 @@ public sealed class AdminAuthApiTests
         Assert.Equal(2, updated.Endpoint.Version);
 
         var rotateResponse = await sessionClient.PostAsJsonAsync(
-            $"/admin/webhook-endpoints/{created.Endpoint.Id:D}/rotate-secret",
+            $"/api/admin/webhook-endpoints/{created.Endpoint.Id:D}/rotate-secret",
             new
             {
                 expectedVersion = 2,
@@ -1825,13 +1825,13 @@ public sealed class AdminAuthApiTests
             StringComparison.Ordinal);
 
         var listResponse = await sessionClient.GetAsync(
-            $"/admin/webhook-endpoints?integrationApiCredentialId={credentialId:D}");
+            $"/api/admin/webhook-endpoints?integrationApiCredentialId={credentialId:D}");
         listResponse.EnsureSuccessStatusCode();
         var listed = await listResponse.Content.ReadFromJsonAsync<AdminWebhookEndpointsResponse>();
         Assert.Equal(created.Endpoint.Id, Assert.Single(listed!.Endpoints).Id);
 
         var disableResponse = await sessionClient.PostAsJsonAsync(
-            $"/admin/webhook-endpoints/{created.Endpoint.Id:D}/disable",
+            $"/api/admin/webhook-endpoints/{created.Endpoint.Id:D}/disable",
             new { expectedVersion = 3 });
         disableResponse.EnsureSuccessStatusCode();
         var disabled = await disableResponse.Content.ReadFromJsonAsync<AdminWebhookEndpointResponse>();
@@ -1881,7 +1881,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
         var missingSecretResponse = await sessionClient.PostAsJsonAsync(
-            "/admin/webhook-endpoints",
+            "/api/admin/webhook-endpoints",
             new
             {
                 integrationApiCredentialId = credentialId,
@@ -1896,7 +1896,7 @@ public sealed class AdminAuthApiTests
             StringComparison.Ordinal);
 
         var disabledCredentialResponse = await sessionClient.PostAsJsonAsync(
-            "/admin/webhook-endpoints",
+            "/api/admin/webhook-endpoints",
             new
             {
                 integrationApiCredentialId = credentialId,
@@ -1967,7 +1967,7 @@ public sealed class AdminAuthApiTests
         const string secondAddress = "0x2222222222222222222222222222222222222222";
 
         var importResponse = await sessionClient.PostAsJsonAsync(
-            "/admin/native-eth-address-pool/import",
+            "/api/admin/native-eth-address-pool/import",
             new { addresses = new[] { firstAddress.ToUpperInvariant(), secondAddress } });
 
         Assert.Equal(HttpStatusCode.Created, importResponse.StatusCode);
@@ -1979,7 +1979,7 @@ public sealed class AdminAuthApiTests
         Assert.True(imported.Summary.IsLowCapacity);
 
         var duplicateResponse = await sessionClient.PostAsJsonAsync(
-            "/admin/native-eth-address-pool/import",
+            "/api/admin/native-eth-address-pool/import",
             new { addresses = new[] { firstAddress } });
         Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
         Assert.Contains(
@@ -1987,7 +1987,7 @@ public sealed class AdminAuthApiTests
             await duplicateResponse.Content.ReadAsStringAsync(),
             StringComparison.Ordinal);
 
-        var summaryResponse = await sessionClient.GetAsync("/admin/native-eth-address-pool");
+        var summaryResponse = await sessionClient.GetAsync("/api/admin/native-eth-address-pool");
         summaryResponse.EnsureSuccessStatusCode();
         var summary = await summaryResponse.Content
             .ReadFromJsonAsync<AdminNativeEthAddressPoolSummaryResponse>();
@@ -2078,7 +2078,7 @@ public sealed class AdminAuthApiTests
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
         var response = await sessionClient.PostAsJsonAsync(
-            $"/admin/payments/{paymentId:D}/settle",
+            $"/api/admin/payments/{paymentId:D}/settle",
             new { expectedVersion = 1, reason = "Late payment verified by operator." });
 
         response.EnsureSuccessStatusCode();
@@ -2121,7 +2121,7 @@ public sealed class AdminAuthApiTests
     private static async Task<string> SignInAndGetSessionCookieAsync(HttpClient client)
     {
         var loginResponse = await client.PostAsJsonAsync(
-            "/admin/auth/login",
+            "/api/admin/auth/login",
             new
             {
                 username = "admin@example.test",
@@ -2129,7 +2129,7 @@ public sealed class AdminAuthApiTests
             });
         var loginStart = await loginResponse.Content.ReadFromJsonAsync<LoginStartResponse>();
         var mfaResponse = await client.PostAsJsonAsync(
-            "/admin/auth/mfa",
+            "/api/admin/auth/mfa",
             new
             {
                 challengeId = loginStart!.ChallengeId,
@@ -2302,7 +2302,7 @@ public sealed class AdminAuthApiTests
     {
         using var client = CreateHttpsClient(factory);
         client.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
-        var response = await client.GetAsync("/admin/csrf");
+        var response = await client.GetAsync("/api/admin/csrf");
         response.EnsureSuccessStatusCode();
         var csrfResponse = await response.Content.ReadFromJsonAsync<CsrfResponse>();
         Assert.True(response.Headers.TryGetValues("Set-Cookie", out var cookieHeaders));

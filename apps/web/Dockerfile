@@ -7,7 +7,13 @@ COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
-ARG NEXT_PUBLIC_PAYAFFE_API_BASE_URL=http://localhost:8080
+# Deliberately without a default. Next.js compiles NEXT_PUBLIC_* into the
+# browser bundle, so anything defaulted here would be baked into the published
+# image and pin it to one installation. Left unset, the bundle calls /api on
+# whatever origin served the page, which is the same-origin topology a reverse
+# proxy in front of both hosts produces. Pass it only for the other topology,
+# where the API answers at a different origin.
+ARG NEXT_PUBLIC_PAYAFFE_API_BASE_URL
 ARG NEXT_PUBLIC_GLITCHTIP_DSN
 ARG NEXT_PUBLIC_DEPLOYMENT_ENVIRONMENT=production
 ARG NEXT_PUBLIC_RELEASE

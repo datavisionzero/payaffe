@@ -21,24 +21,61 @@ baseline and is not hardened as one.
 Both define the same services, and everything below applies to either unless it
 says otherwise.
 
-### The web image is built, not configured
+### One origin, and a proxy in front
 
-Next.js inlines `NEXT_PUBLIC_*` into the browser bundle at build time, and the
-payer page and Admin UI call the API cross-origin. The published
-`payaffe-web` image is therefore built with `http://localhost:8080` as its API
-address, and no environment variable set at run time can change it.
+The deployment file expects a reverse proxy in front of both hosts, serving the
+payer page, the Admin UI, and the API from one address. Everything the API
+answers is under two prefixes, so the routing is two rules:
 
-An installation reached at its own hostname builds that image itself:
+| Path       | Goes to      |
+| ---------- | ------------ |
+| `/api/`    | `api:8080`   |
+| `/health/` | `api:8080`   |
+| everything else | `web:3000` |
+
+Caddy, as a whole configuration:
+
+```caddyfile
+pay.example.com {
+    handle /api/* {
+        reverse_proxy api:8080
+    }
+    handle /health/* {
+        reverse_proxy api:8080
+    }
+    handle {
+        reverse_proxy web:3000
+    }
+}
+```
+
+nginx wants the same three locations, with `proxy_set_header Host $host` and
+`X-Forwarded-Proto $scheme` so that the API sees the public scheme.
+
+This is why the API paths carry the `/api` prefix at all. The Admin UI is a
+page at `/admin` and the admin API used to be at `/admin/...`, which cannot be
+split by any proxy rule; moving the API under `/api/admin` and `/api/payer` is
+what makes one origin possible. The Integration API stays where it was, at
+`/api/v1`, because that one is a published contract
+([ADR 0011](../adr/0011-the-integration-api-versions-in-the-path.md)).
+
+The payoff is that the published `payaffe-web` image works at any address. Next
+.js compiles `NEXT_PUBLIC_*` into the browser bundle, so an image built with an
+API address in it would be pinned to one installation; the published one is
+built without, and the bundle calls `/api` on whatever origin served the page.
+
+An installation that really does answer the API at a different origin sets
+`PAYAFFE_WEB_PUBLIC_ORIGIN` for CORS and builds its own web image with the
+address compiled in:
 
 ```sh
 docker build -f apps/web/Dockerfile \
-  --build-arg NEXT_PUBLIC_PAYAFFE_API_BASE_URL=https://pay.example.com \
+  --build-arg NEXT_PUBLIC_PAYAFFE_API_BASE_URL=https://api.example.com \
   --build-arg NEXT_PUBLIC_RELEASE=0.1.0 \
   -t payaffe-web:local .
 ```
 
-and sets `PAYAFFE_WEB_IMAGE=payaffe-web:local` in `.env`. The other four images
-are configured entirely through the environment and need no such step.
+and sets `PAYAFFE_WEB_IMAGE=payaffe-web:local` in `.env`.
 
 ## Services
 
@@ -369,10 +406,10 @@ derivation can reuse addresses. Back up the external watch-only wallet export
 separately from the product database.
 
 Native ETH addresses are imported through the authenticated
-`POST /admin/native-eth-address-pool/import` operation as an `addresses` JSON
+`POST /api/admin/native-eth-address-pool/import` operation as an `addresses` JSON
 array. The mutation requires CSRF evidence and recent Step-up authentication,
 rejects malformed or duplicate addresses atomically, and records an Audit Log
-entry. `GET /admin/native-eth-address-pool` reports unused, assigned, and
+entry. `GET /api/admin/native-eth-address-pool` reports unused, assigned, and
 retired counts plus the configured low-capacity state. Assigned addresses are
 never returned to the unused pool.
 

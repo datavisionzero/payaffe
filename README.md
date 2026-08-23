@@ -75,11 +75,11 @@ Migrations are a deliberate step and never a startup side effect
 which is why they run first and under their own profile. Upgrading is the same
 three commands: `pull`, migrate, `up`.
 
-One caveat, stated up front rather than discovered: the published web image has
-its API address compiled in, because the browser bundle is built, not
-configured. It is built for `localhost`, so an installation reached at its own
-hostname has to build that one image itself. The `web` service in
-[deploy/compose.yaml](deploy/compose.yaml) says how.
+Put a reverse proxy in front of it to terminate TLS and serve everything from
+one address. It needs two rules: `/api/` and `/health/` go to the API host,
+everything else to the web host. Both published ports bind to `127.0.0.1` for
+exactly that reason. A complete Caddy configuration is in
+[docs/operations/docker-compose.md](docs/operations/docker-compose.md).
 
 Then create the first admin. There is no first-run registration page, on purpose
 ([ADR 0020](docs/adr/0020-the-first-admin-is-created-by-a-local-command.md)) —

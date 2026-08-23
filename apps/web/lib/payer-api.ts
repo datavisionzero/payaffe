@@ -5,7 +5,7 @@ export type PayerPayment = components["schemas"]["PaymentResponse"];
 export { ApiError as PayerApiError };
 
 export async function getPayerPayment(payerPageId: string): Promise<PayerPayment> {
-  const { data, error, response } = await webApi.GET("/payer/payments/{payerPageId}", {
+  const { data, error, response } = await webApi.GET("/api/payer/payments/{payerPageId}", {
     params: { path: { payerPageId } }
   });
   if (!data) {
@@ -20,7 +20,7 @@ export async function selectPayerPaymentCurrency(
   supportedCurrency: string
 ): Promise<PayerPayment> {
   const { data, error, response } = await webApi.POST(
-    "/payer/payments/{payerPageId}/currency-selection",
+    "/api/payer/payments/{payerPageId}/currency-selection",
     {
       params: { path: { payerPageId } },
       body: { supportedCurrency }

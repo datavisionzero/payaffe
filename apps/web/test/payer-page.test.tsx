@@ -43,8 +43,8 @@ const selectedPayment = {
 };
 
 const server = setupServer(
-  http.get("/payer/payments/fixed-payer-page-id", () => HttpResponse.json(pendingPayment)),
-  http.post("/payer/payments/fixed-payer-page-id/currency-selection", () =>
+  http.get("/api/payer/payments/fixed-payer-page-id", () => HttpResponse.json(pendingPayment)),
+  http.post("/api/payer/payments/fixed-payer-page-id/currency-selection", () =>
     HttpResponse.json(selectedPayment)
   )
 );
@@ -85,7 +85,7 @@ describe("PayerPage", () => {
     ["settled", "An Admin has resolved this Payment."]
   ])("renders the %s state", async (status, description) => {
     server.use(
-      http.get("/payer/payments/fixed-payer-page-id", () =>
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
         HttpResponse.json({ ...selectedPayment, status })
       )
     );
@@ -96,7 +96,7 @@ describe("PayerPage", () => {
 
   it("shows the Return URL only after completion without redirecting", async () => {
     server.use(
-      http.get("/payer/payments/fixed-payer-page-id", () =>
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
         HttpResponse.json({
           ...selectedPayment,
           status: "completed",
@@ -114,7 +114,7 @@ describe("PayerPage", () => {
 
   it("renders a safe error with correlation ID when selection fails", async () => {
     server.use(
-      http.post("/payer/payments/fixed-payer-page-id/currency-selection", () =>
+      http.post("/api/payer/payments/fixed-payer-page-id/currency-selection", () =>
         HttpResponse.json(
           {
             title: "Provider details that should not be rendered.",

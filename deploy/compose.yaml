@@ -32,7 +32,10 @@ name: payaffe
 # differs.
 x-backend-environment: &backend-environment
   ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
-  Payments__PayerPageBaseUrl: ${PAYAFFE_PAYER_PAGE_BASE_URL:?Set PAYAFFE_PAYER_PAGE_BASE_URL in .env}
+  # One public address for the whole installation, because the reverse proxy
+  # serves both hosts from it. The payer page and the origin the API accepts
+  # browser calls from are derived from it, so they cannot disagree.
+  Payments__PayerPageBaseUrl: ${PAYAFFE_PUBLIC_URL:?Set PAYAFFE_PUBLIC_URL in .env}/pay
   Admin__TotpSecrets__first-admin: ${PAYAFFE_ADMIN_TOTP_SECRET_FIRST_ADMIN:-}
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}
   Webhooks__EndpointSecrets__partner-v2: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2:-}
@@ -130,7 +133,9 @@ services:
       # requests only. Running both would poll every provider twice; the leases
       # make it safe, not useful.
       Workers__RunInApiHost: ${PAYAFFE_RUN_WORKERS_IN_API_HOST:-false}
-      Web__AllowedOrigins__0: ${PAYAFFE_WEB_PUBLIC_ORIGIN:?Set PAYAFFE_WEB_PUBLIC_ORIGIN in .env}
+      # Same-origin needs no CORS, but naming the origin costs nothing and is
+      # what the split-origin topology needs.
+      Web__AllowedOrigins__0: ${PAYAFFE_WEB_PUBLIC_ORIGIN:-${PAYAFFE_PUBLIC_URL}}
       Admin__Authentication__RateLimitPermitLimit: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_PERMIT_LIMIT:-30}
       Admin__Authentication__RateLimitWindow: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_WINDOW:-00:05:00}
       IntegrationApi__RateLimit__PermitLimit: ${PAYAFFE_INTEGRATION_API_RATE_LIMIT_PERMIT_LIMIT:-120}
@@ -193,25 +198,19 @@ services:
       retries: 3
       start_period: 30s
 
-  # Read this before pointing an installation at a hostname of its own.
+  # The published image carries no API address. Next.js compiles NEXT_PUBLIC_*
+  # into the browser bundle, so an image built with one would be pinned to a
+  # single installation; without one, the bundle calls /api on whatever origin
+  # served the page. That works because the reverse proxy in front serves both
+  # hosts from one address, which is the topology this file assumes:
   #
-  # The published web image has its API address compiled in, because Next.js
-  # inlines NEXT_PUBLIC_* into the browser bundle at build time and the browser
-  # calls the API cross-origin. The image on ghcr.io is therefore built with
-  # the default http://localhost:8080, and no environment variable set here can
-  # change it.
+  #   /api/ and /health/  ->  api:8080
+  #   everything else     ->  web:3000
   #
-  # So this service is correct for an installation reached at localhost, and
-  # for nothing else yet. An installation on its own hostname has to build the
-  # web image itself, from a checkout, with its own address:
-  #
-  #   docker build -f apps/web/Dockerfile \
-  #     --build-arg NEXT_PUBLIC_PAYAFFE_API_BASE_URL=https://pay.example.com/api \
-  #     --build-arg NEXT_PUBLIC_RELEASE=0.1.0 \
-  #     -t payaffe-web:local .
-  #
-  # and set PAYAFFE_WEB_IMAGE=payaffe-web:local. Making one published image
-  # serve any address is an open decision, not a missing line in this file.
+  # An installation whose API really does answer at a different origin builds
+  # its own web image with that address compiled in and names it in
+  # PAYAFFE_WEB_IMAGE. docs/operations/docker-compose.md has both, including a
+  # complete Caddy configuration.
   web:
     image: ${PAYAFFE_WEB_IMAGE:-ghcr.io/datavisionzero/payaffe-web:${PAYAFFE_VERSION:-latest}}
     restart: unless-stopped

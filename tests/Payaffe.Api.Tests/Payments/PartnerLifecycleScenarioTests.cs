@@ -68,7 +68,7 @@ public sealed class PartnerLifecycleScenarioTests
         using var payerClient = factory.CreateClient();
         payerClient.DefaultRequestHeaders.Add("Idempotency-Key", "select-btc");
         var selectionResponse = await payerClient.PostAsJsonAsync(
-            $"/payer/payments/{payerPageId}/currency-selection",
+            $"/api/payer/payments/{payerPageId}/currency-selection",
             new { supportedCurrency = "BTC" });
         selectionResponse.EnsureSuccessStatusCode();
 

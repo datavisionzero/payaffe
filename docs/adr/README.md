@@ -54,3 +54,4 @@ material value to understanding the decision.
 - [0021 – Secrets live in the environment, never in the repository](./0021-secrets-live-in-the-environment-never-in-the-repository.md)
 - [0022 – The backend owns every protected mutation](./0022-the-backend-owns-every-protected-mutation.md)
 - [0023 – MCP is narrower than the Admin UI, and stays local](./0023-mcp-is-narrower-than-the-admin-ui-and-stays-local.md)
+- [0024 – The browser API lives under /api, on one origin](./0024-the-browser-api-lives-under-api-on-one-origin.md)

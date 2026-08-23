@@ -28,7 +28,7 @@ address
 The import should reject invalid addresses and duplicate addresses.
 
 The protected backend operation is
-`POST /admin/native-eth-address-pool/import` with this shape:
+`POST /api/admin/native-eth-address-pool/import` with this shape:
 
 ```json
 {
@@ -41,7 +41,7 @@ The protected backend operation is
 
 It requires an authenticated Admin session, CSRF evidence, and recent Step-up
 authentication. Imports are atomic and audited. Capacity is available through
-`GET /admin/native-eth-address-pool`; the low-capacity threshold is configured
+`GET /api/admin/native-eth-address-pool`; the low-capacity threshold is configured
 with `PAYAFFE_NATIVE_ETH_LOW_CAPACITY_THRESHOLD`.
 
 ## Recommended Provisioning Workflow

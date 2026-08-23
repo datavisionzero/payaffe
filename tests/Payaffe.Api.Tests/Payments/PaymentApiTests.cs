@@ -211,7 +211,7 @@ public sealed class PaymentApiTests
         var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
         using var publicClient = factory.CreateClient();
 
-        var response = await publicClient.GetAsync($"/payer/payments/{ExtractPayerPageId(createdPayment!.PayerPageUrl)}");
+        var response = await publicClient.GetAsync($"/api/payer/payments/{ExtractPayerPageId(createdPayment!.PayerPageUrl)}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var payment = await response.Content.ReadFromJsonAsync<PaymentApiResponse>();
@@ -231,7 +231,7 @@ public sealed class PaymentApiTests
         using var publicClient = factory.CreateClient();
 
         var response = await publicClient.PostAsJsonAsync(
-            $"/payer/payments/{ExtractPayerPageId(createdPayment!.PayerPageUrl)}/currency-selection",
+            $"/api/payer/payments/{ExtractPayerPageId(createdPayment!.PayerPageUrl)}/currency-selection",
             new
             {
                 supportedCurrency = "btc",

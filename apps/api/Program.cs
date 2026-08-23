@@ -304,7 +304,7 @@ integrationApi.MapGet("/payments/{paymentId:guid}", GetPaymentAsync)
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status429TooManyRequests, "application/problem+json");
 
-var payerApi = app.MapGroup("/payer");
+var payerApi = app.MapGroup("/api/payer");
 
 payerApi.MapGet("/payments/{payerPageId}", GetPayerPaymentAsync)
     .WithName("GetPayerPayment")
@@ -320,7 +320,7 @@ payerApi.MapPost("/payments/{payerPageId}/currency-selection", SelectPayerPaymen
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json");
 
-var adminApi = app.MapGroup("/admin");
+var adminApi = app.MapGroup("/api/admin");
 
 adminApi.MapGet("/csrf", GetAdminCsrfAsync)
     .WithName("GetAdminCsrf")
@@ -566,8 +566,8 @@ static bool IsIntegrationApiPath(string? relativePath)
 static bool IsWebApiPath(string? relativePath)
 {
     return relativePath is not null &&
-        (relativePath.StartsWith("payer/", StringComparison.Ordinal) ||
-            relativePath.StartsWith("admin/", StringComparison.Ordinal));
+        (relativePath.StartsWith("api/payer/", StringComparison.Ordinal) ||
+            relativePath.StartsWith("api/admin/", StringComparison.Ordinal));
 }
 
 static string GetIntegrationApiRateLimitPartitionKey(HttpContext httpContext)
@@ -894,7 +894,7 @@ static async Task<IResult> CreateAdminIntegrationApiCredentialAsync(
     {
         AdminIntegrationApiCredentialCreateResultKind.Created =>
             Results.Created(
-                $"/admin/integration-api-credentials/{result.Credential!.Id:D}",
+                $"/api/admin/integration-api-credentials/{result.Credential!.Id:D}",
                 new AdminIntegrationApiCredentialSecretHttpResponse(
                     result.Credential,
                     result.Token!)),
@@ -1028,7 +1028,7 @@ static async Task<IResult> CreateAdminWebhookEndpointAsync(
         cancellationToken);
     return result.Kind == AdminWebhookEndpointResultKind.Success
         ? Results.Created(
-            $"/admin/webhook-endpoints/{result.Endpoint!.Id:D}",
+            $"/api/admin/webhook-endpoints/{result.Endpoint!.Id:D}",
             new AdminWebhookEndpointHttpResponse(result.Endpoint))
         : MapWebhookEndpointFailure(httpContext, result);
 }
@@ -1200,7 +1200,7 @@ static async Task<IResult> ImportAdminNativeEthAddressPoolAsync(
     return result.Kind switch
     {
         AdminNativeEthAddressPoolImportResultKind.Success => Results.Created(
-            $"/admin/native-eth-address-pool/imports/{result.ImportId:D}",
+            $"/api/admin/native-eth-address-pool/imports/{result.ImportId:D}",
             new AdminNativeEthAddressPoolImportHttpResponse(
                 result.ImportId!.Value,
                 result.ImportedCount,

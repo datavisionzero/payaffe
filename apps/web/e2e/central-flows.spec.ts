@@ -22,7 +22,7 @@ const payment = {
 };
 
 test("Payer sees completion and chooses the Return URL", async ({ page }) => {
-  await page.route("**/payer/payments/payer-123", (route) =>
+  await page.route("**/api/payer/payments/payer-123", (route) =>
     route.fulfill({ json: payment })
   );
 
@@ -45,10 +45,10 @@ test("Admin signs in and performs a CSRF-protected credential write", async ({ p
   let authenticated = false;
   let csrfHeader: string | undefined;
 
-  await page.route("**/admin/**", async (route) => {
+  await page.route("**/api/admin/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path === "/admin/session") {
+    if (path === "/api/admin/session") {
       return authenticated
         ? route.fulfill({
             json: {
@@ -66,7 +66,7 @@ test("Admin signs in and performs a CSRF-protected credential write", async ({ p
             json: { title: "Authentication is invalid.", code: "admin_session.invalid" }
           });
     }
-    if (path === "/admin/auth/login") {
+    if (path === "/api/admin/auth/login") {
       return route.fulfill({
         json: {
           status: "mfa_required",
@@ -74,14 +74,14 @@ test("Admin signs in and performs a CSRF-protected credential write", async ({ p
         }
       });
     }
-    if (path === "/admin/auth/mfa") {
+    if (path === "/api/admin/auth/mfa") {
       authenticated = true;
       return route.fulfill({ json: { status: "authenticated" } });
     }
-    if (path === "/admin/csrf") {
+    if (path === "/api/admin/csrf") {
       return route.fulfill({ json: { csrfToken: "csrf-token" } });
     }
-    if (path === "/admin/integration-api-credentials" && request.method() === "POST") {
+    if (path === "/api/admin/integration-api-credentials" && request.method() === "POST") {
       csrfHeader = request.headers()["x-csrf-token"];
       return route.fulfill({
         status: 201,
@@ -101,14 +101,14 @@ test("Admin signs in and performs a CSRF-protected credential write", async ({ p
     }
 
     const emptyResponses: Record<string, unknown> = {
-      "/admin/payments": { payments: [] },
-      "/admin/audit-log": { entries: [] },
-      "/admin/webhook-deliveries": { deliveries: [] },
-      "/admin/reorg-alerts": { alerts: [] },
-      "/admin/integration-api-credentials": { credentials: [] },
-      "/admin/webhook-endpoints": { endpoints: [] },
-      "/admin/observation-health": { currencies: [] },
-      "/admin/native-eth-address-pool": {
+      "/api/admin/payments": { payments: [] },
+      "/api/admin/audit-log": { entries: [] },
+      "/api/admin/webhook-deliveries": { deliveries: [] },
+      "/api/admin/reorg-alerts": { alerts: [] },
+      "/api/admin/integration-api-credentials": { credentials: [] },
+      "/api/admin/webhook-endpoints": { endpoints: [] },
+      "/api/admin/observation-health": { currencies: [] },
+      "/api/admin/native-eth-address-pool": {
         unusedCount: 0,
         assignedCount: 0,
         retiredCount: 0,

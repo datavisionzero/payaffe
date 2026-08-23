@@ -108,12 +108,12 @@ let settlementRequest:
 let mfaRequestBody: { challengeId?: string; totpCode?: string; recoveryCode?: string } | null = null;
 
 const server = setupServer(
-  http.get("/admin/session", () =>
+  http.get("/api/admin/session", () =>
     authenticated
       ? HttpResponse.json({ ...session, stepUpAuthenticatedAt })
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 })
   ),
-  http.post("/admin/auth/login", async ({ request }) => {
+  http.post("/api/admin/auth/login", async ({ request }) => {
     const body = (await request.json()) as { username?: string; password?: string };
     if (body.username === "admin@example.test" && body.password === "correct-password") {
       return HttpResponse.json({
@@ -124,7 +124,7 @@ const server = setupServer(
 
     return HttpResponse.json({ title: "Authentication is invalid.", code: "admin_login.invalid" }, { status: 401 });
   }),
-  http.post("/admin/auth/mfa", async ({ request }) => {
+  http.post("/api/admin/auth/mfa", async ({ request }) => {
     const body = (await request.json()) as { challengeId?: string; totpCode?: string; recoveryCode?: string };
     mfaRequestBody = body;
     if (
@@ -138,7 +138,7 @@ const server = setupServer(
 
     return HttpResponse.json({ title: "Authentication is invalid.", code: "admin_mfa.invalid" }, { status: 401 });
   }),
-  http.post("/admin/auth/step-up", async ({ request }) => {
+  http.post("/api/admin/auth/step-up", async ({ request }) => {
     stepUpCsrfHeader = request.headers.get("X-CSRF-TOKEN");
     const body = (await request.json()) as { totpCode?: string };
     if (authenticated && body.totpCode === "123456") {
@@ -152,39 +152,39 @@ const server = setupServer(
 
     return HttpResponse.json({ title: "Authentication is invalid.", code: "admin_step_up.invalid" }, { status: 401 });
   }),
-  http.get("/admin/payments", () =>
+  http.get("/api/admin/payments", () =>
     authenticated
       ? HttpResponse.json(payments)
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 })
   ),
-  http.get("/admin/payments/03a26b78-c1f3-4230-99d7-9852cedcc181", () =>
+  http.get("/api/admin/payments/03a26b78-c1f3-4230-99d7-9852cedcc181", () =>
     authenticated
       ? HttpResponse.json(paymentDetail)
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 })
   ),
-  http.get("/admin/audit-log", () =>
+  http.get("/api/admin/audit-log", () =>
     authenticated
       ? HttpResponse.json(auditLog)
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 })
   ),
-  http.get("/admin/audit-log/02ba688c-2a8d-4a20-b783-41a0c2e6a6fa", () =>
+  http.get("/api/admin/audit-log/02ba688c-2a8d-4a20-b783-41a0c2e6a6fa", () =>
     authenticated
       ? HttpResponse.json(auditLogDetail)
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 })
   ),
-  http.get("/admin/webhook-deliveries", () =>
+  http.get("/api/admin/webhook-deliveries", () =>
     authenticated
       ? HttpResponse.json(webhookDeliveries)
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 })
   ),
-  http.post("/admin/webhook-deliveries/4c5b4f2a-df57-4804-8a6f-dce55b2e680a/resend", ({ request }) => {
+  http.post("/api/admin/webhook-deliveries/4c5b4f2a-df57-4804-8a6f-dce55b2e680a/resend", ({ request }) => {
     webhookResendCsrfHeader = request.headers.get("X-CSRF-TOKEN");
     webhookResendEventId = "4c5b4f2a-df57-4804-8a6f-dce55b2e680a";
     return authenticated
       ? HttpResponse.json({ status: "resent", deliveryStatus: "delivered" })
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 });
   }),
-  http.post("/admin/audit-log/export", ({ request }) => {
+  http.post("/api/admin/audit-log/export", ({ request }) => {
     auditExportCsrfHeader = request.headers.get("X-CSRF-TOKEN");
     return authenticated
       ? HttpResponse.json({
@@ -193,7 +193,7 @@ const server = setupServer(
       })
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 });
   }),
-  http.post("/admin/auth/recovery-codes", ({ request }) => {
+  http.post("/api/admin/auth/recovery-codes", ({ request }) => {
     recoveryCodesCsrfHeader = request.headers.get("X-CSRF-TOKEN");
     return authenticated
       ? HttpResponse.json({
@@ -202,7 +202,7 @@ const server = setupServer(
       })
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 });
   }),
-  http.get("/admin/observation-health", () =>
+  http.get("/api/admin/observation-health", () =>
     authenticated
       ? HttpResponse.json({
           currencies: [
@@ -218,10 +218,10 @@ const server = setupServer(
         })
       : HttpResponse.json({ title: "Authentication is invalid.", code: "admin_session.invalid" }, { status: 401 })
   ),
-  http.get("/admin/reorg-alerts", () =>
+  http.get("/api/admin/reorg-alerts", () =>
     authenticated ? HttpResponse.json({ alerts: [] }) : HttpResponse.json({}, { status: 401 })
   ),
-  http.get("/admin/integration-api-credentials", () =>
+  http.get("/api/admin/integration-api-credentials", () =>
     authenticated
       ? HttpResponse.json({
           credentials: [
@@ -238,7 +238,7 @@ const server = setupServer(
         })
       : HttpResponse.json({}, { status: 401 })
   ),
-  http.post("/admin/integration-api-credentials", async ({ request }) => {
+  http.post("/api/admin/integration-api-credentials", async ({ request }) => {
     credentialCreateCsrfHeader = request.headers.get("X-CSRF-TOKEN");
     const body = (await request.json()) as { name?: string };
     return HttpResponse.json(
@@ -257,10 +257,10 @@ const server = setupServer(
       { status: 201 }
     );
   }),
-  http.get("/admin/webhook-endpoints", () =>
+  http.get("/api/admin/webhook-endpoints", () =>
     authenticated ? HttpResponse.json({ endpoints: [] }) : HttpResponse.json({}, { status: 401 })
   ),
-  http.post("/admin/webhook-endpoints", ({ request }) => {
+  http.post("/api/admin/webhook-endpoints", ({ request }) => {
     webhookCreateCsrfHeader = request.headers.get("X-CSRF-TOKEN");
     return HttpResponse.json(
       {
@@ -279,7 +279,7 @@ const server = setupServer(
       { status: 201 }
     );
   }),
-  http.get("/admin/native-eth-address-pool", () =>
+  http.get("/api/admin/native-eth-address-pool", () =>
     authenticated
       ? HttpResponse.json({
           unusedCount: 8,
@@ -290,8 +290,8 @@ const server = setupServer(
         })
       : HttpResponse.json({}, { status: 401 })
   ),
-  http.get("/admin/csrf", () => HttpResponse.json({ csrfToken: "csrf-token" })),
-  http.post("/admin/auth/logout", ({ request }) => {
+  http.get("/api/admin/csrf", () => HttpResponse.json({ csrfToken: "csrf-token" })),
+  http.post("/api/admin/auth/logout", ({ request }) => {
     logoutCsrfHeader = request.headers.get("X-CSRF-TOKEN");
     authenticated = false;
     return HttpResponse.json({ status: "logged_out" });
@@ -488,7 +488,7 @@ describe("AdminPage", () => {
   it("settles an eligible Payment with its concurrency version and CSRF", async () => {
     authenticated = true;
     server.use(
-      http.get("/admin/payments/03a26b78-c1f3-4230-99d7-9852cedcc181", () =>
+      http.get("/api/admin/payments/03a26b78-c1f3-4230-99d7-9852cedcc181", () =>
         HttpResponse.json({
           ...paymentDetail,
           status: "observed",
@@ -496,7 +496,7 @@ describe("AdminPage", () => {
         })
       ),
       http.post(
-        "/admin/payments/03a26b78-c1f3-4230-99d7-9852cedcc181/settle",
+        "/api/admin/payments/03a26b78-c1f3-4230-99d7-9852cedcc181/settle",
         async ({ request }) => {
           settlementRequest = {
             csrf: request.headers.get("X-CSRF-TOKEN"),

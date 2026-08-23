@@ -69,7 +69,7 @@ export type SettlementForm = z.infer<typeof settlementFormSchema>;
 export type AddressPoolImportFormInput = z.input<typeof addressPoolImportFormSchema>;
 
 export async function startAdminLogin(command: AdminLoginForm): Promise<AdminLoginStart> {
-  const { data, error, response } = await webApi.POST("/admin/auth/login", { body: command });
+  const { data, error, response } = await webApi.POST("/api/admin/auth/login", { body: command });
   return requireData(data, error, response);
 }
 
@@ -77,14 +77,14 @@ export async function completeAdminMfa(
   challengeId: string,
   command: AdminMfaCompleteCommand
 ): Promise<void> {
-  const { data, error, response } = await webApi.POST("/admin/auth/mfa", {
+  const { data, error, response } = await webApi.POST("/api/admin/auth/mfa", {
     body: { challengeId, totpCode: null, recoveryCode: null, ...command }
   });
   requireData(data, error, response);
 }
 
 export async function getAdminSession(): Promise<AdminSession | null> {
-  const { data, error, response } = await webApi.GET("/admin/session");
+  const { data, error, response } = await webApi.GET("/api/admin/session");
   if (response.status === 401) {
     return null;
   }
@@ -92,14 +92,14 @@ export async function getAdminSession(): Promise<AdminSession | null> {
 }
 
 export async function listAdminPayments(): Promise<AdminPaymentSummary[]> {
-  const { data, error, response } = await webApi.GET("/admin/payments", {
+  const { data, error, response } = await webApi.GET("/api/admin/payments", {
     params: { query: { limit: 25 } }
   });
   return requireData(data, error, response).payments;
 }
 
 export async function getAdminPayment(paymentId: string): Promise<AdminPaymentDetail> {
-  const { data, error, response } = await webApi.GET("/admin/payments/{paymentId}", {
+  const { data, error, response } = await webApi.GET("/api/admin/payments/{paymentId}", {
     params: { path: { paymentId } }
   });
   return requireData(data, error, response);
@@ -110,7 +110,7 @@ export async function settleAdminPayment(
   expectedVersion: number | string,
   reason: string
 ): Promise<AdminPaymentDetail> {
-  const { data, error, response } = await webApi.POST("/admin/payments/{paymentId}/settle", {
+  const { data, error, response } = await webApi.POST("/api/admin/payments/{paymentId}/settle", {
     params: { path: { paymentId } },
     headers: await adminMutationHeaders(),
     body: { expectedVersion, reason }
@@ -119,7 +119,7 @@ export async function settleAdminPayment(
 }
 
 export async function stepUpAdmin(command: AdminMfaForm): Promise<void> {
-  const { data, error, response } = await webApi.POST("/admin/auth/step-up", {
+  const { data, error, response } = await webApi.POST("/api/admin/auth/step-up", {
     headers: await adminMutationHeaders(),
     body: command
   });
@@ -127,21 +127,21 @@ export async function stepUpAdmin(command: AdminMfaForm): Promise<void> {
 }
 
 export async function listAdminAuditLog(): Promise<AdminAuditLogEntry[]> {
-  const { data, error, response } = await webApi.GET("/admin/audit-log", {
+  const { data, error, response } = await webApi.GET("/api/admin/audit-log", {
     params: { query: { limit: 25 } }
   });
   return requireData(data, error, response).entries;
 }
 
 export async function getAdminAuditLogEntry(eventId: string): Promise<AdminAuditLogEntryDetail> {
-  const { data, error, response } = await webApi.GET("/admin/audit-log/{eventId}", {
+  const { data, error, response } = await webApi.GET("/api/admin/audit-log/{eventId}", {
     params: { path: { eventId } }
   });
   return requireData(data, error, response);
 }
 
 export async function exportAdminAuditLog(): Promise<AdminAuditLogExport> {
-  const { data, error, response } = await webApi.POST("/admin/audit-log/export", {
+  const { data, error, response } = await webApi.POST("/api/admin/audit-log/export", {
     headers: await adminMutationHeaders(),
     body: { limit: 100 }
   });
@@ -149,7 +149,7 @@ export async function exportAdminAuditLog(): Promise<AdminAuditLogExport> {
 }
 
 export async function listAdminWebhookDeliveries(): Promise<AdminWebhookDelivery[]> {
-  const { data, error, response } = await webApi.GET("/admin/webhook-deliveries", {
+  const { data, error, response } = await webApi.GET("/api/admin/webhook-deliveries", {
     params: { query: { limit: 25 } }
   });
   return requireData(data, error, response).deliveries;
@@ -159,7 +159,7 @@ export async function resendAdminWebhookDelivery(
   eventId: string
 ): Promise<AdminWebhookDeliveryResend> {
   const { data, error, response } = await webApi.POST(
-    "/admin/webhook-deliveries/{eventId}/resend",
+    "/api/admin/webhook-deliveries/{eventId}/resend",
     {
       params: { path: { eventId } },
       headers: await adminMutationHeaders()
@@ -169,21 +169,21 @@ export async function resendAdminWebhookDelivery(
 }
 
 export async function generateAdminRecoveryCodes(): Promise<AdminRecoveryCodes> {
-  const { data, error, response } = await webApi.POST("/admin/auth/recovery-codes", {
+  const { data, error, response } = await webApi.POST("/api/admin/auth/recovery-codes", {
     headers: await adminMutationHeaders()
   });
   return requireData(data, error, response);
 }
 
 export async function listAdminIntegrationApiCredentials(): Promise<AdminIntegrationApiCredential[]> {
-  const { data, error, response } = await webApi.GET("/admin/integration-api-credentials");
+  const { data, error, response } = await webApi.GET("/api/admin/integration-api-credentials");
   return requireData(data, error, response).credentials;
 }
 
 export async function createAdminIntegrationApiCredential(
   name: string
 ): Promise<AdminIntegrationApiCredentialSecret> {
-  const { data, error, response } = await webApi.POST("/admin/integration-api-credentials", {
+  const { data, error, response } = await webApi.POST("/api/admin/integration-api-credentials", {
     headers: await adminMutationHeaders(),
     body: { name }
   });
@@ -194,7 +194,7 @@ export async function rotateAdminIntegrationApiCredential(
   credential: AdminIntegrationApiCredential
 ): Promise<AdminIntegrationApiCredentialSecret> {
   const { data, error, response } = await webApi.POST(
-    "/admin/integration-api-credentials/{credentialId}/rotate",
+    "/api/admin/integration-api-credentials/{credentialId}/rotate",
     {
       params: { path: { credentialId: credential.id } },
       headers: await adminMutationHeaders(),
@@ -208,7 +208,7 @@ export async function disableAdminIntegrationApiCredential(
   credential: AdminIntegrationApiCredential
 ): Promise<AdminIntegrationApiCredential> {
   const { data, error, response } = await webApi.POST(
-    "/admin/integration-api-credentials/{credentialId}/disable",
+    "/api/admin/integration-api-credentials/{credentialId}/disable",
     {
       params: { path: { credentialId: credential.id } },
       headers: await adminMutationHeaders(),
@@ -219,7 +219,7 @@ export async function disableAdminIntegrationApiCredential(
 }
 
 export async function listAdminWebhookEndpoints(): Promise<AdminWebhookEndpoint[]> {
-  const { data, error, response } = await webApi.GET("/admin/webhook-endpoints", {
+  const { data, error, response } = await webApi.GET("/api/admin/webhook-endpoints", {
     params: { query: {} }
   });
   return requireData(data, error, response).endpoints;
@@ -228,7 +228,7 @@ export async function listAdminWebhookEndpoints(): Promise<AdminWebhookEndpoint[
 export async function createAdminWebhookEndpoint(
   command: WebhookEndpointForm
 ): Promise<AdminWebhookEndpoint> {
-  const { data, error, response } = await webApi.POST("/admin/webhook-endpoints", {
+  const { data, error, response } = await webApi.POST("/api/admin/webhook-endpoints", {
     headers: await adminMutationHeaders(),
     body: command
   });
@@ -240,7 +240,7 @@ export async function updateAdminWebhookEndpoint(
   command: Pick<WebhookEndpointForm, "url" | "eventTypes">
 ): Promise<AdminWebhookEndpoint> {
   const { data, error, response } = await webApi.POST(
-    "/admin/webhook-endpoints/{endpointId}/update",
+    "/api/admin/webhook-endpoints/{endpointId}/update",
     {
       params: { path: { endpointId: endpoint.id } },
       headers: await adminMutationHeaders(),
@@ -255,7 +255,7 @@ export async function rotateAdminWebhookEndpointSecret(
   secretReference: string
 ): Promise<AdminWebhookEndpoint> {
   const { data, error, response } = await webApi.POST(
-    "/admin/webhook-endpoints/{endpointId}/rotate-secret",
+    "/api/admin/webhook-endpoints/{endpointId}/rotate-secret",
     {
       params: { path: { endpointId: endpoint.id } },
       headers: await adminMutationHeaders(),
@@ -269,7 +269,7 @@ export async function disableAdminWebhookEndpoint(
   endpoint: AdminWebhookEndpoint
 ): Promise<AdminWebhookEndpoint> {
   const { data, error, response } = await webApi.POST(
-    "/admin/webhook-endpoints/{endpointId}/disable",
+    "/api/admin/webhook-endpoints/{endpointId}/disable",
     {
       params: { path: { endpointId: endpoint.id } },
       headers: await adminMutationHeaders(),
@@ -280,14 +280,14 @@ export async function disableAdminWebhookEndpoint(
 }
 
 export async function getAdminNativeEthAddressPool(): Promise<AdminNativeEthAddressPool> {
-  const { data, error, response } = await webApi.GET("/admin/native-eth-address-pool");
+  const { data, error, response } = await webApi.GET("/api/admin/native-eth-address-pool");
   return requireData(data, error, response);
 }
 
 export async function importAdminNativeEthAddressPool(
   addresses: string[]
 ): Promise<AdminNativeEthAddressPoolImport> {
-  const { data, error, response } = await webApi.POST("/admin/native-eth-address-pool/import", {
+  const { data, error, response } = await webApi.POST("/api/admin/native-eth-address-pool/import", {
     headers: await adminMutationHeaders(),
     body: { addresses }
   });
@@ -295,19 +295,19 @@ export async function importAdminNativeEthAddressPool(
 }
 
 export async function getAdminObservationHealth(): Promise<AdminObservationHealth[]> {
-  const { data, error, response } = await webApi.GET("/admin/observation-health");
+  const { data, error, response } = await webApi.GET("/api/admin/observation-health");
   return requireData(data, error, response).currencies;
 }
 
 export async function listAdminReorgAlerts(): Promise<AdminReorgAlert[]> {
-  const { data, error, response } = await webApi.GET("/admin/reorg-alerts", {
+  const { data, error, response } = await webApi.GET("/api/admin/reorg-alerts", {
     params: { query: { limit: 25 } }
   });
   return requireData(data, error, response).alerts;
 }
 
 export async function logoutAdmin(): Promise<void> {
-  const { data, error, response } = await webApi.POST("/admin/auth/logout", {
+  const { data, error, response } = await webApi.POST("/api/admin/auth/logout", {
     headers: await adminMutationHeaders()
   });
   requireData(data, error, response);
