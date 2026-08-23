@@ -401,6 +401,48 @@ describe("AdminPage", () => {
     });
   });
 
+  it("signs in without a second step when the account has no second factor", async () => {
+    // What an installation looks like right after `bootstrap-admin`: a password
+    // and nothing else (ADR 0028). The MFA form must not appear at all.
+    server.use(
+      http.post("/api/admin/auth/login", () => {
+        authenticated = true;
+        return HttpResponse.json({ status: "authenticated", challengeId: null });
+      }),
+      http.get("/api/admin/session", () =>
+        authenticated
+          ? HttpResponse.json({
+              ...session,
+              mfaAuthenticatedAt: null,
+              stepUpAuthenticatedAt: null
+            })
+          : HttpResponse.json(
+              { title: "Authentication is invalid.", code: "admin_session.invalid" },
+              { status: 401 }
+            )
+      )
+    );
+
+    renderAdminPage();
+
+    expect(await screen.findByRole("heading", { name: "Admin sign-in" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "admin@example.test" }
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct-password" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("heading", { name: "Current session" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Multi-factor authentication" })
+    ).not.toBeInTheDocument();
+
+    // Says what is true rather than leaving the field blank.
+    expect(screen.getAllByText("No second factor")).toHaveLength(2);
+  });
+
   it("can complete MFA with a recovery code", async () => {
     renderAdminPage();
 

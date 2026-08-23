@@ -673,9 +673,9 @@ export interface components {
             adminAccountId: string;
             username: string;
             /** Format: date-time */
-            mfaAuthenticatedAt: string;
+            mfaAuthenticatedAt: null | string;
             /** Format: date-time */
-            stepUpAuthenticatedAt: string;
+            stepUpAuthenticatedAt: null | string;
             /** Format: date-time */
             expiresAt: string;
             /** Format: date-time */
@@ -687,7 +687,7 @@ export interface components {
         AdminStepUpHttpResponse: {
             status: string;
             /** Format: date-time */
-            stepUpAuthenticatedAt: string;
+            stepUpAuthenticatedAt: null | string;
             /** Format: date-time */
             idleExpiresAt: string;
         };

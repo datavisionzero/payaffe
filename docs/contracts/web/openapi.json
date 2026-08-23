@@ -2651,11 +2651,17 @@
             "type": "string"
           },
           "mfaAuthenticatedAt": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "date-time"
           },
           "stepUpAuthenticatedAt": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "date-time"
           },
           "expiresAt": {
@@ -2694,7 +2700,10 @@
             "type": "string"
           },
           "stepUpAuthenticatedAt": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "date-time"
           },
           "idleExpiresAt": {

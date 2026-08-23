@@ -4,7 +4,6 @@
 x-backend-environment: &backend-environment
   ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
   Payments__PayerPageBaseUrl: ${PAYAFFE_PAYER_PAGE_BASE_URL:-http://localhost:3000/pay}
-  Admin__TotpSecrets__first-admin: ${PAYAFFE_ADMIN_TOTP_SECRET_FIRST_ADMIN:-}
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}
   Webhooks__EndpointSecrets__partner-v2: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2:-}
   ExchangeRates__Enabled: ${PAYAFFE_EXCHANGE_RATES_ENABLED:-true}
@@ -71,7 +70,6 @@ services:
         condition: service_healthy
     environment:
       ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
-      Admin__TotpSecrets__first-admin: ${PAYAFFE_ADMIN_TOTP_SECRET_FIRST_ADMIN:-}
     profiles:
       - operations
 

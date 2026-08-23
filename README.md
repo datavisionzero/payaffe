@@ -90,17 +90,15 @@ exactly that reason. A complete Caddy configuration is in
 
 Then create the first admin. There is no first-run registration page, on purpose
 ([ADR 0020](docs/adr/0020-the-first-admin-is-created-by-a-local-command.md)) —
-you generate a TOTP secret, put it in `.env`, and run an interactive command
-that prompts for the password and a current code:
+one command, which prompts for a password:
 
 ```sh
-openssl rand 20 | base32 | tr -d '\n'   # into PAYAFFE_ADMIN_TOTP_SECRET_FIRST_ADMIN
-
 docker compose --profile operations run --rm migrations \
-  bootstrap-admin \
-  --username admin@example.test \
-  --totp-secret-reference configuration:Admin:TotpSecrets:first-admin
+  bootstrap-admin --username admin@example.test
 ```
+
+The account signs in with that password. Adding a second factor is the admin's
+own, later ([ADR 0028](docs/adr/0028-the-second-factor-is-optional-and-enrolled-later.md)).
 
 It prints recovery codes exactly once. The full procedure, including what must
 never reach your shell history, is in

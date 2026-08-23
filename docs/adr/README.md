@@ -58,3 +58,4 @@ material value to understanding the decision.
 - [0025 – Logs are delivered to logaffe, and only logs](./0025-logs-are-delivered-to-logaffe.md)
 - [0026 – An error is an entry, and there is no error tracker](./0026-an-error-is-an-entry-and-there-is-no-error-tracker.md)
 - [0027 – Migrations apply on startup](./0027-migrations-apply-on-startup.md)
+- [0028 – The second factor is optional, and enrolled later](./0028-the-second-factor-is-optional-and-enrolled-later.md)

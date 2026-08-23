@@ -11,21 +11,21 @@ public sealed record AdminBootstrapResult(
     public static AdminBootstrapResult InvalidInput() =>
         new(AdminBootstrapStatus.InvalidInput, null, []);
 
-    public static AdminBootstrapResult TotpUnavailable() =>
-        new(AdminBootstrapStatus.TotpUnavailable, null, []);
-
-    public static AdminBootstrapResult TotpInvalid() =>
-        new(AdminBootstrapStatus.TotpInvalid, null, []);
-
     public static AdminBootstrapResult AlreadyBootstrapped() =>
         new(AdminBootstrapStatus.AlreadyBootstrapped, null, []);
 }
 
+/// <summary>
+/// The outcomes creating the first Admin Account can have.
+/// </summary>
+/// <remarks>
+/// `TotpUnavailable` and `TotpInvalid` are gone with ADR 0028. They were the
+/// two ways this command could fail after prompting for a password and before
+/// producing anything, which is what made it the step people gave up on.
+/// </remarks>
 public enum AdminBootstrapStatus
 {
     Created,
     InvalidInput,
-    TotpUnavailable,
-    TotpInvalid,
     AlreadyBootstrapped,
 }

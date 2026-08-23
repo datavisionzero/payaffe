@@ -53,6 +53,39 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task RecordPasswordOnlyAuthenticationAsync(
+        Guid adminAccountId,
+        DateTimeOffset occurredAt,
+        AdminSessionDraft session,
+        AdminAuditEntry auditEntry,
+        CancellationToken cancellationToken)
+    {
+        var adminAccount = await dbContext.AdminAccounts.SingleAsync(
+            account => account.Id == adminAccountId,
+            cancellationToken);
+        adminAccount.FailedPasswordAttemptCount = 0;
+        adminAccount.LockedUntil = null;
+        adminAccount.LastPasswordVerifiedAt = occurredAt;
+        adminAccount.UpdatedAt = occurredAt;
+
+        // No challenge row: there is no second step to remember the state of.
+        dbContext.AdminSessions.Add(new AdminSessionRecord
+        {
+            Id = session.Id,
+            AdminAccountId = session.AdminAccountId,
+            TokenHash = session.TokenHash,
+            CreatedAt = session.CreatedAt,
+            LastSeenAt = session.LastSeenAt,
+            ExpiresAt = session.ExpiresAt,
+            IdleExpiresAt = session.IdleExpiresAt,
+            MfaAuthenticatedAt = session.MfaAuthenticatedAt,
+            StepUpAuthenticatedAt = session.StepUpAuthenticatedAt,
+        });
+
+        AddAuditEntry(auditEntry);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task RecordFailedPasswordVerificationAsync(
         Guid? adminAccountId,
         DateTimeOffset occurredAt,

@@ -167,7 +167,6 @@ them:
 - `PAYAFFE_REORG_MONITORING_WORKER_POLL_INTERVAL`
 - `PAYAFFE_REORG_MONITORING_WORKER_MAX_TRANSACTIONS_PER_POLL`
 - `PAYAFFE_REORG_MONITORING_WORKER_LEASE_DURATION`
-- `PAYAFFE_ADMIN_TOTP_SECRET_FIRST_ADMIN`
 - `PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1`
 - `PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2`
 - `PAYAFFE_EXCHANGE_RATES_ENABLED`
@@ -335,37 +334,27 @@ artifacts.
 ## First Admin Account
 
 Apply migrations before bootstrapping the first Admin Account. Generate a
-random Base32 TOTP secret without writing it to shell history:
-
-```sh
-openssl rand 20 | base32 | tr -d '\n'
-```
-
-Add that value only to the non-versioned `.env` file as
-`PAYAFFE_ADMIN_TOTP_SECRET_FIRST_ADMIN`. Treat it as a production secret and
-restrict the file to the deployment operator. Add the secret to an
-authenticator app using the installation name and the intended Admin username.
-
-Run the interactive operations command:
+one command:
 
 ```sh
 docker compose --profile operations run --rm migrations \
-  bootstrap-admin \
-  --username admin@example.test \
-  --totp-secret-reference configuration:Admin:TotpSecrets:first-admin
+  bootstrap-admin --username admin@example.test
 ```
 
-The command prompts without echo for the password, password confirmation, and
-current six-digit TOTP code. It refuses redirected input and output, creates
-the first Admin Account only while no Admin Account exists, and prints
-Recovery Codes exactly once. Store those codes in a protected operator
-location before closing the terminal.
+It prompts without echo for the password and its confirmation, refuses
+redirected input and output, creates the first Admin Account only while no
+Admin Account exists, and prints Recovery Codes exactly once. Store those codes
+somewhere that is not this host before closing the terminal.
 
-Do not put the password, current TOTP code, Recovery Codes, or database
-connection string in the command, shell history, Compose file, logs, or
-support artifacts. Normal API and Web startup do not create Admin Accounts.
-After bootstrap, keep `PAYAFFE_ADMIN_TOTP_SECRET_FIRST_ADMIN` available to the
-API because Admin login and Step-up resolve the stored reference at runtime.
+The account has no second factor, and that is the decision rather than an
+omission ([ADR 0028](../adr/0028-the-second-factor-is-optional-and-enrolled-later.md)):
+requiring one before an installation had a single account meant an operator had
+to agree a secret between a secret store, an authenticator app and this command
+before anything existed to attach it to. It signs in on its password until an
+admin enrols one.
+
+Do not put the password, the Recovery Codes, or the database connection string
+in the command, shell history, Compose file, logs, or support artifacts.
 Running the bootstrap command again is not an Admin lockout-recovery path and
 is refused.
 

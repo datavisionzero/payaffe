@@ -8,6 +8,6 @@ public sealed record AdminSessionReadModel(
     string TotpSecretReference,
     DateTimeOffset ExpiresAt,
     DateTimeOffset IdleExpiresAt,
-    DateTimeOffset MfaAuthenticatedAt,
-    DateTimeOffset StepUpAuthenticatedAt,
+    DateTimeOffset? MfaAuthenticatedAt,
+    DateTimeOffset? StepUpAuthenticatedAt,
     DateTimeOffset? RevokedAt);

@@ -126,10 +126,20 @@ function AdminLoginPanel() {
   });
   const loginMutation = useMutation({
     mutationFn: startAdminLogin,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
+      loginForm.reset({ username: loginForm.getValues("username"), password: "" });
+
+      // An account with no second factor is signed in already; the response
+      // carried the session cookie and there is no second step to show
+      // (ADR 0028). Refreshing the session query is what moves the UI on.
+      if (result.status === "authenticated") {
+        setChallengeId(null);
+        await queryClient.invalidateQueries({ queryKey: ["admin-session"] });
+        return;
+      }
+
       setChallengeId(result.challengeId);
       setMfaMode("totp");
-      loginForm.reset({ username: loginForm.getValues("username"), password: "" });
       mfaForm.reset({ totpCode: "" });
       recoveryCodeForm.reset({ recoveryCode: "" });
     }
@@ -346,8 +356,25 @@ function AdminSessionPanel({ session }: { session: AdminSession }) {
           <dl className="mt-5 grid gap-4 sm:grid-cols-2">
             <InfoItem label={t("username")} value={session.username} />
             <InfoItem label={t("status")} value={t("authenticated")} />
-            <InfoItem label={t("mfaAuthenticatedAt")} value={formatDateTime(session.mfaAuthenticatedAt)} />
-            <InfoItem label={t("stepUpAuthenticatedAt")} value={formatDateTime(session.stepUpAuthenticatedAt)} />
+            {/* Null means this account has no second factor enrolled, not that
+                something is missing (ADR 0028) — so it says so rather than
+                showing an empty field. */}
+            <InfoItem
+              label={t("mfaAuthenticatedAt")}
+              value={
+                session.mfaAuthenticatedAt === null
+                  ? t("secondFactorNotEnrolled")
+                  : formatDateTime(session.mfaAuthenticatedAt)
+              }
+            />
+            <InfoItem
+              label={t("stepUpAuthenticatedAt")}
+              value={
+                session.stepUpAuthenticatedAt === null
+                  ? t("secondFactorNotEnrolled")
+                  : formatDateTime(session.stepUpAuthenticatedAt)
+              }
+            />
             <InfoItem label={t("idleExpiresAt")} value={formatDateTime(session.idleExpiresAt)} />
             <InfoItem label={t("expiresAt")} value={formatDateTime(session.expiresAt)} />
           </dl>

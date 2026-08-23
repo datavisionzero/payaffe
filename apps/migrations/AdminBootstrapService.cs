@@ -12,8 +12,6 @@ namespace Payaffe.Migrations;
 public sealed class AdminBootstrapService(
     PayaffeDbContext dbContext,
     IAdminPasswordHasher passwordHasher,
-    IAdminTotpSecretResolver totpSecretResolver,
-    IAdminTotpVerifier totpVerifier,
     IClock clock,
     IOptions<AdminAuthenticationOptions> options)
 {
@@ -33,9 +31,7 @@ public sealed class AdminBootstrapService(
             : request.CorrelationId.Trim();
 
         if (string.IsNullOrWhiteSpace(username) ||
-            string.IsNullOrEmpty(request.Password) ||
-            string.IsNullOrWhiteSpace(request.TotpSecretReference) ||
-            string.IsNullOrWhiteSpace(request.TotpCode))
+            string.IsNullOrEmpty(request.Password))
         {
             await RecordFailureAsync(
                 occurredAt,
@@ -43,33 +39,6 @@ public sealed class AdminBootstrapService(
                 "admin_bootstrap.invalid_input",
                 cancellationToken);
             return AdminBootstrapResult.InvalidInput();
-        }
-
-        var totpSecret = await totpSecretResolver.ResolveSecretAsync(
-            request.TotpSecretReference,
-            cancellationToken);
-        if (totpSecret is null)
-        {
-            await RecordFailureAsync(
-                occurredAt,
-                correlationId,
-                "admin_bootstrap.totp_unavailable",
-                cancellationToken);
-            return AdminBootstrapResult.TotpUnavailable();
-        }
-
-        if (!totpVerifier.VerifyCode(
-                totpSecret,
-                request.TotpCode,
-                occurredAt,
-                _options.TotpAllowedTimeStepSkew))
-        {
-            await RecordFailureAsync(
-                occurredAt,
-                correlationId,
-                "admin_bootstrap.totp_invalid",
-                cancellationToken);
-            return AdminBootstrapResult.TotpInvalid();
         }
 
         var accountId = Guid.NewGuid();
@@ -104,7 +73,9 @@ public sealed class AdminBootstrapService(
             Username = username,
             NormalizedUsername = normalizedUsername,
             PasswordHash = passwordHasher.HashPassword(request.Password),
-            TotpSecretReference = request.TotpSecretReference.Trim(),
+            // No second factor yet. Enrolling one is the admin's own, later
+            // (ADR 0028); until then this account signs in on its password.
+            TotpSecretReference = null,
             Status = "active",
             FailedPasswordAttemptCount = 0,
             CreatedAt = occurredAt,

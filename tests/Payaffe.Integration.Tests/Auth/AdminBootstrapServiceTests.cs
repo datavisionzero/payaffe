@@ -35,7 +35,8 @@ public sealed class AdminBootstrapServiceTests(PostgreSqlFixture postgres) : ICl
         var account = await dbContext.AdminAccounts.SingleAsync();
         Assert.Equal("admin@example.test", account.Username);
         Assert.Equal("ADMIN@EXAMPLE.TEST", account.NormalizedUsername);
-        Assert.Equal(TotpSecretReference, account.TotpSecretReference);
+        // No second factor at creation; enrolling one is the admin's own (ADR 0028).
+        Assert.Null(account.TotpSecretReference);
         Assert.NotEqual("correct horse battery staple", account.PasswordHash);
 
         var passwordHasher = scope.ServiceProvider.GetRequiredService<IAdminPasswordHasher>();
@@ -116,13 +117,32 @@ public sealed class AdminBootstrapServiceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal(3, await dbContext.AdminRecoveryCodes.CountAsync());
     }
 
+    /// <summary>
+    /// The first admin has no second factor, and that is the decision rather
+    /// than an omission (ADR 0028). Enrolling one is the admin's own, later.
+    /// </summary>
+    [Fact]
+    public async Task First_admin_is_created_without_a_second_factor()
+    {
+        var connectionString = await postgres.CreateDatabaseAsync();
+        using var services = await CreateServicesAsync(connectionString);
+        using var scope = services.CreateScope();
+
+        var result = await scope.ServiceProvider
+            .GetRequiredService<AdminBootstrapService>()
+            .BootstrapAsync(CreateRequest("correlation-no-mfa"), CancellationToken.None);
+
+        Assert.Equal(AdminBootstrapStatus.Created, result.Status);
+
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var account = await dbContext.AdminAccounts.SingleAsync();
+        Assert.Null(account.TotpSecretReference);
+    }
+
     [Theory]
-    [InlineData("configuration:Admin:TotpSecrets:missing", "287082", AdminBootstrapStatus.TotpUnavailable)]
-    [InlineData(TotpSecretReference, "000000", AdminBootstrapStatus.TotpInvalid)]
-    public async Task Invalid_totp_configuration_does_not_create_admin(
-        string secretReference,
-        string totpCode,
-        AdminBootstrapStatus expectedStatus)
+    [InlineData("", "correct horse battery staple")]
+    [InlineData("admin@example.test", "")]
+    public async Task Incomplete_input_creates_nothing(string username, string password)
     {
         var connectionString = await postgres.CreateDatabaseAsync();
         using var services = await CreateServicesAsync(connectionString);
@@ -130,14 +150,14 @@ public sealed class AdminBootstrapServiceTests(PostgreSqlFixture postgres) : ICl
 
         var request = CreateRequest("correlation-invalid") with
         {
-            TotpSecretReference = secretReference,
-            TotpCode = totpCode,
+            Username = username,
+            Password = password,
         };
         var result = await scope.ServiceProvider
             .GetRequiredService<AdminBootstrapService>()
             .BootstrapAsync(request, CancellationToken.None);
 
-        Assert.Equal(expectedStatus, result.Status);
+        Assert.Equal(AdminBootstrapStatus.InvalidInput, result.Status);
         var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
         Assert.Empty(await dbContext.AdminAccounts.ToArrayAsync());
         var audit = await dbContext.AuditLogEntries.SingleAsync();
@@ -148,8 +168,6 @@ public sealed class AdminBootstrapServiceTests(PostgreSqlFixture postgres) : ICl
         new(
             "admin@example.test",
             "correct horse battery staple",
-            TotpSecretReference,
-            "287082",
             correlationId);
 
     private static async Task<ServiceProvider> CreateServicesAsync(string connectionString)

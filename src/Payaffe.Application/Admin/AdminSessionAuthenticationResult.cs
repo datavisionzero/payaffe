@@ -15,8 +15,8 @@ public sealed record AdminSessionPrincipal(
     Guid AdminAccountId,
     string Username,
     Guid SessionId,
-    DateTimeOffset MfaAuthenticatedAt,
-    DateTimeOffset StepUpAuthenticatedAt,
+    DateTimeOffset? MfaAuthenticatedAt,
+    DateTimeOffset? StepUpAuthenticatedAt,
     DateTimeOffset ExpiresAt,
     DateTimeOffset IdleExpiresAt);
 

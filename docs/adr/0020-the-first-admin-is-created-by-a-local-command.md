@@ -1,5 +1,9 @@
 # The First Admin Is Created by a Local Command
 
+**Amended by [ADR 0028](./0028-the-second-factor-is-optional-and-enrolled-later.md).**
+The command no longer takes a TOTP secret reference or a code; it asks for a
+password. Everything else below stands.
+
 The operator runs an operations command that creates the first Admin Account. No HTTP surface creates one, no MCP tool creates one, and no host
 creates one while starting.
 

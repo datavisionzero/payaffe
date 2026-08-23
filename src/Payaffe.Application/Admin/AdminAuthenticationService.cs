@@ -92,17 +92,45 @@ public sealed class AdminAuthenticationService(
             return AdminLoginStartResult.InvalidCredentials();
         }
 
+        // No second factor enrolled: the password was the whole sign-in
+        // (ADR 0028). This used to be refused as invalid credentials, which
+        // made an account without TOTP unusable rather than optional.
+        //
+        // The session is the same one the second step would have issued, with
+        // one difference that matters: MfaAuthenticatedAt stays null, so
+        // anything that asks whether this session cleared a second factor gets
+        // an honest no.
         if (string.IsNullOrWhiteSpace(adminAccount.TotpSecretReference))
         {
-            await RecordFailureAsync(
-                adminAccount,
+            var passwordOnlyToken = sessionTokenService.GenerateToken();
+            var passwordOnlySession = CreateSessionDraft(
+                adminAccount.Id,
+                passwordOnlyToken,
+                occurredAt) with
+            {
+                MfaAuthenticatedAt = null,
+                StepUpAuthenticatedAt = null,
+            };
+
+            await store.RecordPasswordOnlyAuthenticationAsync(
+                adminAccount.Id,
                 occurredAt,
-                command,
-                "admin_login.mfa_not_configured",
-                adminAccount.FailedPasswordAttemptCount,
-                adminAccount.LockedUntil,
+                passwordOnlySession,
+                CreateAuditEntry(
+                    "admin.login_complete",
+                    occurredAt,
+                    command,
+                    outcome: "success",
+                    actorType: "product_user",
+                    actorId: adminAccount.Id.ToString("D"),
+                    reasonCode: "admin_login.password_only",
+                    subjectId: passwordOnlySession.Id.ToString("D"),
+                    subjectType: "admin_session"),
                 cancellationToken);
-            return AdminLoginStartResult.InvalidCredentials();
+
+            return AdminLoginStartResult.Authenticated(
+                passwordOnlyToken,
+                passwordOnlySession.ExpiresAt);
         }
 
         var loginChallenge = new AdminLoginChallengeDraft(
@@ -356,18 +384,26 @@ public sealed class AdminAuthenticationService(
             return AdminStepUpResult.Invalid();
         }
 
-        if (string.IsNullOrWhiteSpace(command.TotpCode))
+        // An account with no second factor has nothing to step up with, and
+        // refusing here would make the sensitive operations unreachable for it
+        // rather than protected (ADR 0028). An account that did enrol keeps
+        // step-up in full: opting in has to be worth something.
+        var hasEnrolledSecondFactor = !string.IsNullOrWhiteSpace(session.TotpSecretReference);
+        if (hasEnrolledSecondFactor)
         {
-            await RecordStepUpFailureAsync(session, occurredAt, command, "admin_step_up.invalid", cancellationToken);
-            return AdminStepUpResult.Invalid();
-        }
+            if (string.IsNullOrWhiteSpace(command.TotpCode))
+            {
+                await RecordStepUpFailureAsync(session, occurredAt, command, "admin_step_up.invalid", cancellationToken);
+                return AdminStepUpResult.Invalid();
+            }
 
-        var secret = await totpSecretResolver.ResolveSecretAsync(session.TotpSecretReference, cancellationToken);
-        if (secret is null ||
-            !totpVerifier.VerifyCode(secret, command.TotpCode, occurredAt, _options.TotpAllowedTimeStepSkew))
-        {
-            await RecordStepUpFailureAsync(session, occurredAt, command, "admin_step_up.invalid", cancellationToken);
-            return AdminStepUpResult.Invalid();
+            var secret = await totpSecretResolver.ResolveSecretAsync(session.TotpSecretReference, cancellationToken);
+            if (secret is null ||
+                !totpVerifier.VerifyCode(secret, command.TotpCode, occurredAt, _options.TotpAllowedTimeStepSkew))
+            {
+                await RecordStepUpFailureAsync(session, occurredAt, command, "admin_step_up.invalid", cancellationToken);
+                return AdminStepUpResult.Invalid();
+            }
         }
 
         var refreshedIdleExpiresAt = Min(
@@ -575,7 +611,10 @@ public sealed class AdminAuthenticationService(
         string actorType,
         string actorId,
         string reasonCode,
-        string subjectId)
+        string subjectId,
+        // A password-only sign-in ends at a session rather than at the account,
+        // so it names one — the same subject the second step would have named.
+        string subjectType = "admin_account")
     {
         return new AdminAuditEntry(
             Guid.NewGuid(),
@@ -589,7 +628,7 @@ public sealed class AdminAuthenticationService(
             command.UserAgent,
             command.CorrelationId,
             reasonCode,
-            "admin_account",
+            subjectType,
             subjectId);
     }
 

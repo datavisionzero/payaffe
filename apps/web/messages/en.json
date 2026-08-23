@@ -72,6 +72,7 @@
     "authenticated": "Authenticated",
     "mfaAuthenticatedAt": "MFA completed",
     "stepUpAuthenticatedAt": "Step-up completed",
+    "secondFactorNotEnrolled": "No second factor",
     "idleExpiresAt": "Idle expiration",
     "expiresAt": "Absolute expiration",
     "adminTools": "Admin tools",

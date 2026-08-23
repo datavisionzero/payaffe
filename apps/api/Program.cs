@@ -853,6 +853,11 @@ static async Task<IResult> StartAdminLoginAsync(
     {
         AdminLoginStartResultKind.MfaRequired =>
             Results.Ok(new AdminLoginStartHttpResponse("mfa_required", result.ChallengeId)),
+        // Signed in on the password alone, because the account has no second
+        // factor enrolled (ADR 0028). The cookie is the same one the second
+        // step would have set — the caller is authenticated from here.
+        AdminLoginStartResultKind.Authenticated =>
+            CompleteAdminLoginWithSessionCookie(httpContext, result),
         AdminLoginStartResultKind.InvalidCredentials =>
             IntegrationApiProblem.Create(
                 httpContext,
@@ -1655,22 +1660,37 @@ static async Task<IResult> CompleteAdminMfaAsync(
     };
 }
 
-static IResult CompleteAdminMfaWithSessionCookie(
+static IResult CompleteAdminLoginWithSessionCookie(
     HttpContext httpContext,
-    AdminMfaCompleteResult result)
+    AdminLoginStartResult result)
+{
+    AppendAdminSessionCookie(httpContext, result.SessionToken!, result.SessionExpiresAt!.Value);
+    return Results.Ok(new AdminLoginStartHttpResponse("authenticated", ChallengeId: null));
+}
+
+static void AppendAdminSessionCookie(
+    HttpContext httpContext,
+    string sessionToken,
+    DateTimeOffset expiresAt)
 {
     httpContext.Response.Cookies.Append(
         AdminSessionCookieName,
-        result.SessionToken!,
+        sessionToken,
         new CookieOptions
         {
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.Lax,
             Path = "/",
-            Expires = result.ExpiresAt,
+            Expires = expiresAt,
         });
+}
 
+static IResult CompleteAdminMfaWithSessionCookie(
+    HttpContext httpContext,
+    AdminMfaCompleteResult result)
+{
+    AppendAdminSessionCookie(httpContext, result.SessionToken!, result.ExpiresAt!.Value);
     return Results.Ok(new AdminMfaCompleteHttpResponse("authenticated"));
 }
 
@@ -2101,7 +2121,12 @@ static bool HasRecentStepUp(
     DateTimeOffset occurredAt,
     AdminAuthenticationOptions options)
 {
-    return principal.StepUpAuthenticatedAt.Add(options.StepUpLifetime) >= occurredAt;
+    // Null means the account has no second factor enrolled, so there is no
+    // step-up to be fresh (ADR 0028). Treating that as "not fresh" would make
+    // the sensitive operations unreachable for such an account rather than
+    // protected, which is the opposite of what a gate is for.
+    return principal.StepUpAuthenticatedAt is null
+        || principal.StepUpAuthenticatedAt.Value.Add(options.StepUpLifetime) >= occurredAt;
 }
 
 static AdminAuditEntry CreateAdminAuditEntry(
@@ -2610,7 +2635,7 @@ public sealed record AdminStepUpHttpRequest(string? TotpCode);
 
 public sealed record AdminStepUpHttpResponse(
     string Status,
-    DateTimeOffset StepUpAuthenticatedAt,
+    DateTimeOffset? StepUpAuthenticatedAt,
     DateTimeOffset IdleExpiresAt);
 
 public sealed record AdminAuditLogExportHttpRequest(int? Limit);
@@ -2676,8 +2701,8 @@ public sealed record AdminSessionHttpResponse(
     string Status,
     Guid AdminAccountId,
     string Username,
-    DateTimeOffset MfaAuthenticatedAt,
-    DateTimeOffset StepUpAuthenticatedAt,
+    DateTimeOffset? MfaAuthenticatedAt,
+    DateTimeOffset? StepUpAuthenticatedAt,
     DateTimeOffset ExpiresAt,
     DateTimeOffset IdleExpiresAt);
 
