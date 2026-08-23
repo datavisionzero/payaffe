@@ -56,16 +56,30 @@ rather than running full nodes. That trade is deliberate and is written up in
 
 ## Running it
 
+An installation is two files and a volume. Neither file needs a checkout of
+this repository — the images come from `ghcr.io/datavisionzero`:
+
 ```sh
-cp .env.example .env
-# edit .env: database password, provider keys, wallet sources
+mkdir payaffe && cd payaffe
+base=https://raw.githubusercontent.com/datavisionzero/payaffe/main/deploy
+curl -O    "$base/compose.yaml"
+curl -o .env "$base/.env.example"
+chmod 600 .env
+# edit .env: database password, public addresses, provider key, wallet sources
 docker compose --profile operations run --rm migrations
 docker compose up -d
 ```
 
 Migrations are a deliberate step and never a startup side effect
 ([ADR 0016](docs/adr/0016-migrations-are-a-step-not-a-startup-side-effect.md)),
-which is why they run first and under their own profile.
+which is why they run first and under their own profile. Upgrading is the same
+three commands: `pull`, migrate, `up`.
+
+One caveat, stated up front rather than discovered: the published web image has
+its API address compiled in, because the browser bundle is built, not
+configured. It is built for `localhost`, so an installation reached at its own
+hostname has to build that one image itself. The `web` service in
+[deploy/compose.yaml](deploy/compose.yaml) says how.
 
 Then create the first admin. There is no first-run registration page, on purpose
 ([ADR 0020](docs/adr/0020-the-first-admin-is-created-by-a-local-command.md)) —

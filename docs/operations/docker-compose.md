@@ -1,11 +1,48 @@
 # Docker Compose Operations
 
-This document describes the first concrete Docker Compose baseline for
-`payaffe`.
+This document describes the Docker Compose baseline for `payaffe`.
+
+## The two Compose files
+
+There are two, and picking the wrong one is the first mistake to avoid.
+
+[deploy/compose.yaml](../../deploy/compose.yaml) is how an installation is run.
+It pulls published images from `ghcr.io/datavisionzero`, needs no checkout of
+this repository, publishes its ports on the loopback interface for a reverse
+proxy to sit in front of, and does not expose PostgreSQL at all. Its
+[.env.example](../../deploy/.env.example) is the shorter one: it asks for what
+an installation must decide and leaves the rest at its default.
+
+The root [compose.yaml](../../compose.yaml) is how payaffe is developed. It
+builds every image from the working tree, publishes PostgreSQL so a local tool
+can reach it, and defaults its addresses to `localhost`. It is not a deployment
+baseline and is not hardened as one.
+
+Both define the same services, and everything below applies to either unless it
+says otherwise.
+
+### The web image is built, not configured
+
+Next.js inlines `NEXT_PUBLIC_*` into the browser bundle at build time, and the
+payer page and Admin UI call the API cross-origin. The published
+`payaffe-web` image is therefore built with `http://localhost:8080` as its API
+address, and no environment variable set at run time can change it.
+
+An installation reached at its own hostname builds that image itself:
+
+```sh
+docker build -f apps/web/Dockerfile \
+  --build-arg NEXT_PUBLIC_PAYAFFE_API_BASE_URL=https://pay.example.com \
+  --build-arg NEXT_PUBLIC_RELEASE=0.1.0 \
+  -t payaffe-web:local .
+```
+
+and sets `PAYAFFE_WEB_IMAGE=payaffe-web:local` in `.env`. The other four images
+are configured entirely through the environment and need no such step.
 
 ## Services
 
-The root [compose.yaml](../../compose.yaml) defines these concrete services:
+Both Compose files define these concrete services:
 
 - `db`: PostgreSQL product database.
 - `migrations`: controlled EF Core migration runner, enabled through the
@@ -32,10 +69,13 @@ processing, but every worker would poll its providers twice. Choose one host.
 
 ## Configuration
 
-Copy [.env.example](../../.env.example) to `.env` for local self-hosting and
-replace the placeholder database password before starting services.
+An installation copies [deploy/.env.example](../../deploy/.env.example) to
+`.env` beside `deploy/compose.yaml`. Working on payaffe copies the root
+[.env.example](../../.env.example) instead. Either way, replace the placeholder
+database password before starting services.
 
-The versioned example contains only local placeholders:
+Both files draw on the same set of variables, and the root example lists all of
+them:
 
 - `PAYAFFE_DB_NAME`
 - `PAYAFFE_DB_USER`
@@ -348,7 +388,14 @@ Normal `api` or `web` startup does not apply schema migrations.
 
 ## Start
 
-After migrations have been applied, start the product hosts:
+After migrations have been applied, start the product hosts. An installation
+runs the published images:
+
+```sh
+docker compose up -d
+```
+
+Working on payaffe builds them from the working tree instead:
 
 ```sh
 docker compose up --build db api worker web
@@ -357,11 +404,36 @@ docker compose up --build db api worker web
 Technical telemetry is configured through `PAYAFFE_OTLP_ENDPOINT` and
 `PAYAFFE_BACKEND_GLITCHTIP_DSN`; see [observability.md](observability.md).
 
+## Upgrading
+
+An upgrade is the same three steps as a first start, in the same order, because
+the schema and the code are deliberately separable
+([ADR 0016](../adr/0016-migrations-are-a-step-not-a-startup-side-effect.md)):
+
+```sh
+docker compose pull
+docker compose --profile operations run --rm migrations
+docker compose up -d
+```
+
+Back up the database before the migration step, not after it
+([postgresql-backup-restore.md](postgresql-backup-restore.md)). Pin
+`PAYAFFE_VERSION` to a released version rather than leaving it at `latest`, so
+that a pull upgrades when the operator decides to and not when a tag moves.
+
+## Ports
+
 The default local ports are:
 
 - `http://localhost:3000` for the web app.
 - `http://localhost:8080` for the API host.
-- `localhost:5432` for PostgreSQL.
+- `localhost:5432` for PostgreSQL, from the root Compose file only. The
+  deployment file does not publish the database at all.
+
+The deployment file binds both published ports to `127.0.0.1`, because the
+reverse proxy that terminates TLS belongs in front of them. An installation
+that really is reached directly sets `PAYAFFE_BIND_ADDRESS=0.0.0.0` and accepts
+that admin sign-in then travels in the clear.
 
 Override `PAYAFFE_WEB_PORT`, `PAYAFFE_API_PORT`, or `PAYAFFE_DB_PORT` in
 `.env` when a local port is already in use. When changing the API port for

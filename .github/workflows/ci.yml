@@ -99,3 +99,13 @@ jobs:
 
       - run: docker compose build migrations api worker web
       - run: docker build -f apps/mcp/Dockerfile -t payaffe-mcp:ci .
+
+      # The deployment file names published images, so there is nothing here to
+      # build; what can still be wrong is the file itself. Rendering it against
+      # its own example is what catches a variable the example stopped
+      # providing, which an operator would otherwise find on their first start.
+      - name: The deployment Compose file renders from its own example
+        run: |
+          cd deploy
+          sed 's/^PAYAFFE_DB_PASSWORD=$/PAYAFFE_DB_PASSWORD=ci-placeholder/' .env.example > .env
+          docker compose config --quiet

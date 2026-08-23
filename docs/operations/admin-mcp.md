@@ -53,12 +53,17 @@ dotnet run --project apps/mcp
 Or as a container, keeping stdin attached for the `stdio` transport:
 
 ```sh
-docker build -f apps/mcp/Dockerfile -t payaffe-mcp .
 docker run -i --rm \
   -e ConnectionStrings__Payaffe="Host=...;Database=payaffe;Username=...;Password=..." \
   -e Mcp__Admin__AdminAccountId="<admin account uuid>" \
-  payaffe-mcp
+  ghcr.io/datavisionzero/payaffe-mcp:0.1.0
 ```
+
+An installation started from [deploy/compose.yaml](../../deploy/compose.yaml)
+reaches its database over that project's network, so add
+`--network payaffe_default` and use `db` as the host. Build the image locally
+with `docker build -f apps/mcp/Dockerfile -t payaffe-mcp .` when running from a
+checkout instead.
 
 Point the MCP client at that command. Because the transport is `stdio`, nothing
 may write to standard output: the host logs to standard error only.
