@@ -103,9 +103,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(challenge => new { challenge.AdminAccountId, challenge.ExpiresAt })
                 .HasDatabaseName("ix_admin_login_challenges_account_expires_at");
-            entity.HasCheckConstraint(
-                "ck_admin_login_challenges_failed_attempt_count",
-                "failed_attempt_count >= 0");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_admin_login_challenges_failed_attempt_count",
+                    "failed_attempt_count >= 0");
+            });
         });
     }
 
@@ -172,12 +175,15 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(account => account.NormalizedUsername)
                 .IsUnique()
                 .HasDatabaseName("uq_admin_accounts_normalized_username");
-            entity.HasCheckConstraint(
-                "ck_admin_accounts_status",
-                "status in ('active', 'disabled')");
-            entity.HasCheckConstraint(
-                "ck_admin_accounts_failed_password_attempt_count",
-                "failed_password_attempt_count >= 0");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_admin_accounts_status",
+                    "status in ('active', 'disabled')");
+                table.HasCheckConstraint(
+                    "ck_admin_accounts_failed_password_attempt_count",
+                    "failed_password_attempt_count >= 0");
+            });
         });
     }
 
@@ -208,9 +214,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(code => new { code.AdminAccountId, code.Status })
                 .HasDatabaseName("ix_admin_recovery_codes_account_status");
-            entity.HasCheckConstraint(
-                "ck_admin_recovery_codes_status",
-                "status in ('active', 'used', 'revoked')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_admin_recovery_codes_status",
+                    "status in ('active', 'used', 'revoked')");
+            });
         });
     }
 
@@ -239,12 +248,15 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasDatabaseName("ix_audit_log_entries_occurred_at");
             entity.HasIndex(auditEntry => new { auditEntry.EventType, auditEntry.OccurredAt })
                 .HasDatabaseName("ix_audit_log_entries_event_type_occurred_at");
-            entity.HasCheckConstraint(
-                "ck_audit_log_entries_outcome",
-                "outcome in ('success', 'failure', 'denied', 'expired', 'revoked')");
-            entity.HasCheckConstraint(
-                "ck_audit_log_entries_actor_type",
-                "actor_type in ('product_user', 'system')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_audit_log_entries_outcome",
+                    "outcome in ('success', 'failure', 'denied', 'expired', 'revoked')");
+                table.HasCheckConstraint(
+                    "ck_audit_log_entries_actor_type",
+                    "actor_type in ('product_user', 'system')");
+            });
         });
     }
 
@@ -271,9 +283,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(credential => credential.TokenHash)
                 .IsUnique()
                 .HasDatabaseName("uq_integration_api_credentials_token_hash");
-            entity.HasCheckConstraint(
-                "ck_integration_api_credentials_status",
-                "status in ('active', 'disabled')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_integration_api_credentials_status",
+                    "status in ('active', 'disabled')");
+            });
         });
     }
 
@@ -320,9 +335,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(payment => payment.PayerPageId)
                 .IsUnique()
                 .HasDatabaseName("uq_payments_payer_page_id");
-            entity.HasCheckConstraint(
-                "ck_payments_status",
-                "status in ('pending_currency_selection', 'waiting_for_payment', 'observed', 'completed', 'expired', 'settled')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_payments_status",
+                    "status in ('pending_currency_selection', 'waiting_for_payment', 'observed', 'completed', 'expired', 'settled')");
+            });
         });
     }
 
@@ -345,9 +363,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasForeignKey(option => option.PaymentId)
                 .HasConstraintName("fk_payment_options_payments")
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasCheckConstraint(
-                "ck_payment_options_status",
-                "status in ('available', 'unavailable')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_payment_options_status",
+                    "status in ('available', 'unavailable')");
+            });
         });
     }
 
@@ -459,12 +480,15 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasDefaultValue(1L)
                 .IsConcurrencyToken();
 
-            entity.HasCheckConstraint(
-                "ck_rate_cache_fiat_currency",
-                "fiat_currency in ('EUR', 'USD')");
-            entity.HasCheckConstraint(
-                "ck_rate_cache_supported_currency",
-                "supported_currency in ('BTC', 'LTC', 'ETH')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_rate_cache_fiat_currency",
+                    "fiat_currency in ('EUR', 'USD')");
+                table.HasCheckConstraint(
+                    "ck_rate_cache_supported_currency",
+                    "supported_currency in ('BTC', 'LTC', 'ETH')");
+            });
         });
     }
 
@@ -515,12 +539,15 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasColumnType("bigint")
                 .HasDefaultValue(1L)
                 .IsConcurrencyToken();
-            entity.HasCheckConstraint(
-                "ck_watch_only_wallet_cursors_currency",
-                "supported_currency in ('BTC', 'LTC')");
-            entity.HasCheckConstraint(
-                "ck_watch_only_wallet_cursors_next_index",
-                "next_derivation_index >= 0");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_watch_only_wallet_cursors_currency",
+                    "supported_currency in ('BTC', 'LTC')");
+                table.HasCheckConstraint(
+                    "ck_watch_only_wallet_cursors_next_index",
+                    "next_derivation_index >= 0");
+            });
         });
     }
 
@@ -592,9 +619,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasDatabaseName("uq_native_eth_addresses_assigned_payment_id");
             entity.HasIndex(address => new { address.Status, address.CreatedAt })
                 .HasDatabaseName("ix_native_eth_addresses_status_created_at");
-            entity.HasCheckConstraint(
-                "ck_native_eth_addresses_status",
-                "status in ('unused', 'assigned', 'retired')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_native_eth_addresses_status",
+                    "status in ('unused', 'assigned', 'retired')");
+            });
         });
     }
 
@@ -631,12 +661,15 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasColumnType("bigint")
                 .HasDefaultValue(1L)
                 .IsConcurrencyToken();
-            entity.HasCheckConstraint(
-                "ck_observation_health_currency",
-                "supported_currency in ('BTC', 'LTC', 'ETH')");
-            entity.HasCheckConstraint(
-                "ck_observation_health_status",
-                "status in ('available', 'unavailable')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_observation_health_currency",
+                    "supported_currency in ('BTC', 'LTC', 'ETH')");
+                table.HasCheckConstraint(
+                    "ck_observation_health_status",
+                    "status in ('available', 'unavailable')");
+            });
         });
     }
 
@@ -676,9 +709,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasColumnType("bigint")
                 .HasDefaultValue(1L)
                 .IsConcurrencyToken();
-            entity.HasCheckConstraint(
-                "ck_background_worker_leases_failure_count",
-                "consecutive_failure_count >= 0");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_background_worker_leases_failure_count",
+                    "consecutive_failure_count >= 0");
+            });
         });
     }
 
@@ -723,9 +759,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(transaction => new { transaction.SupportedCurrency, transaction.TransactionHash })
                 .IsUnique()
                 .HasDatabaseName("uq_matching_blockchain_transactions_currency_hash");
-            entity.HasCheckConstraint(
-                "ck_matching_blockchain_transactions_confirmations",
-                "confirmations >= 0");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_matching_blockchain_transactions_confirmations",
+                    "confirmations >= 0");
+            });
         });
     }
 
@@ -770,15 +809,18 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasDatabaseName("ix_reorg_alerts_payment_id");
             entity.HasIndex(alert => alert.MatchingBlockchainTransactionId)
                 .HasDatabaseName("ix_reorg_alerts_matching_blockchain_transaction_id");
-            entity.HasCheckConstraint(
-                "ck_reorg_alerts_status",
-                "status in ('open', 'resolved')");
-            entity.HasCheckConstraint(
-                "ck_reorg_alerts_previous_confirmations",
-                "previous_confirmations >= 0");
-            entity.HasCheckConstraint(
-                "ck_reorg_alerts_new_confirmations",
-                "new_confirmations >= 0");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_reorg_alerts_status",
+                    "status in ('open', 'resolved')");
+                table.HasCheckConstraint(
+                    "ck_reorg_alerts_previous_confirmations",
+                    "previous_confirmations >= 0");
+                table.HasCheckConstraint(
+                    "ck_reorg_alerts_new_confirmations",
+                    "new_confirmations >= 0");
+            });
         });
     }
 
@@ -819,9 +861,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(webhookEvent => new { webhookEvent.Status, webhookEvent.NextAttemptAt })
                 .HasDatabaseName("ix_webhook_events_status_next_attempt_at");
-            entity.HasCheckConstraint(
-                "ck_webhook_events_status",
-                "status in ('pending', 'claimed', 'retry_pending', 'delivered', 'terminal_failed', 'cancelled')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_webhook_events_status",
+                    "status in ('pending', 'claimed', 'retry_pending', 'delivered', 'terminal_failed', 'cancelled')");
+            });
         });
     }
 
@@ -851,9 +896,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasForeignKey(endpoint => endpoint.IntegrationApiCredentialId)
                 .HasConstraintName("fk_webhook_endpoints_integration_api_credentials")
                 .OnDelete(DeleteBehavior.Restrict);
-            entity.HasCheckConstraint(
-                "ck_webhook_endpoints_status",
-                "status in ('active', 'disabled')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_webhook_endpoints_status",
+                    "status in ('active', 'disabled')");
+            });
         });
     }
 
@@ -889,9 +937,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasDatabaseName("ix_webhook_delivery_attempts_webhook_event_id");
             entity.HasIndex(attempt => attempt.WebhookEndpointId)
                 .HasDatabaseName("ix_webhook_delivery_attempts_webhook_endpoint_id");
-            entity.HasCheckConstraint(
-                "ck_webhook_delivery_attempts_result",
-                "result in ('succeeded', 'retry_pending', 'terminal_failed')");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_webhook_delivery_attempts_result",
+                    "result in ('succeeded', 'retry_pending', 'terminal_failed')");
+            });
         });
     }
 }

@@ -14,6 +14,17 @@
 
   <PropertyGroup>
     <!--
+      A warning is a defect that has not been triaged yet. Left as warnings they
+      accumulate until nobody reads the build output, and the one that mattered
+      scrolls past with the twenty that did not. Every warning is therefore an
+      error, and silencing one is a deliberate act: a targeted pragma with a
+      reason, or an entry in WarningsNotAsErrors below.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
       The product version every built artifact reports: the OpenTelemetry
       `service.version` resource attribute and the outbound provider
       `User-Agent`. Bump it in the same commit that a release tag points at, so
@@ -30,13 +41,16 @@
       the test containers package, so auditing direct references only would have
       missed it.
 
-      High and critical advisories fail the build. Lower severities stay
-      warnings so an informational advisory cannot block a security fix.
+      High and critical advisories (NU1903, NU1904) fail the build, which
+      TreatWarningsAsErrors above already arranges. Low and moderate ones
+      (NU1901, NU1902) are exempted back to warnings, because an informational
+      advisory with no fixed version available must not be able to block a
+      security fix on its way out.
     -->
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>low</NuGetAuditLevel>
-    <WarningsAsErrors>$(WarningsAsErrors);NU1903;NU1904</WarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902</WarningsNotAsErrors>
   </PropertyGroup>
 
 </Project>
