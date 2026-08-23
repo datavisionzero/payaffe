@@ -1,0 +1,30 @@
+<Project>
+
+  <PropertyGroup>
+    <!--
+      The product version every built artifact reports: the OpenTelemetry
+      `service.version` resource attribute and the outbound provider
+      `User-Agent`. Bump it in the same commit that a release tag points at, so
+      a running host never claims a version that was never released.
+    -->
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionSuffix>rc.1</VersionSuffix>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      NuGet audit covers the transitive graph, not only direct references. The
+      SSH.NET advisory that reached this repository arrived transitively through
+      the test containers package, so auditing direct references only would have
+      missed it.
+
+      High and critical advisories fail the build. Lower severities stay
+      warnings so an informational advisory cannot block a security fix.
+    -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

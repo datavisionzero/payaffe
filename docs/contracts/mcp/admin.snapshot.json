@@ -1,0 +1,901 @@
+{
+  "contractVersion": 1,
+  "server": "payaffe-admin",
+  "tools": [
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": false
+      },
+      "description": "Risky action: imports public native ETH receiving addresses into the non-reusable Address Pool. Client confirmation is required.",
+      "inputSchema": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "addresses",
+          "confirmed"
+        ],
+        "type": "object"
+      },
+      "name": "address_pool.import_native_eth",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "importId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "importedCount": {
+            "type": "integer"
+          },
+          "pool": {
+            "properties": {
+              "assignedCount": {
+                "type": "integer"
+              },
+              "isLowCapacity": {
+                "type": "boolean"
+              },
+              "lowCapacityThreshold": {
+                "type": "integer"
+              },
+              "retiredCount": {
+                "type": "integer"
+              },
+              "unusedCount": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "assignedCount",
+              "isLowCapacity",
+              "lowCapacityThreshold",
+              "retiredCount",
+              "unusedCount"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "importId",
+          "importedCount",
+          "pool",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Import Native ETH Addresses"
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": true
+      },
+      "description": "Returns native ETH Address Pool capacity without exposing any spending material.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "address_pool.summarize",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "pool": {
+            "properties": {
+              "assignedCount": {
+                "type": "integer"
+              },
+              "isLowCapacity": {
+                "type": "boolean"
+              },
+              "lowCapacityThreshold": {
+                "type": "integer"
+              },
+              "retiredCount": {
+                "type": "integer"
+              },
+              "unusedCount": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "assignedCount",
+              "isLowCapacity",
+              "lowCapacityThreshold",
+              "retiredCount",
+              "unusedCount"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "pool",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Summarize Address Pool"
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": true
+      },
+      "description": "Lists recent security Audit Log entries and audits the MCP access.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "default": 25,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "audit_log.search",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "properties": {
+                "actorId": {
+                  "type": "string"
+                },
+                "actorType": {
+                  "type": "string"
+                },
+                "eventId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "eventType": {
+                  "type": "string"
+                },
+                "occurredAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string"
+                },
+                "reasonCode": {
+                  "type": "string"
+                },
+                "subjectId": {
+                  "type": "string"
+                },
+                "subjectType": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actorId",
+                "actorType",
+                "eventId",
+                "eventType",
+                "occurredAt",
+                "outcome",
+                "reasonCode",
+                "subjectId",
+                "subjectType"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "entries",
+          "fields",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Search Audit Log"
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": true
+      },
+      "description": "Returns a safe operational configuration summary without secret values or references.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "configuration.summarize",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "lateAcceptanceWindow": {
+            "$comment": "Represents a System.TimeSpan value.",
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string"
+          },
+          "observationMode": {
+            "type": "string"
+          },
+          "paymentExpiration": {
+            "$comment": "Represents a System.TimeSpan value.",
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string"
+          },
+          "paymentTolerancePercent": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "lateAcceptanceWindow",
+          "observationMode",
+          "paymentExpiration",
+          "paymentTolerancePercent",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Summarize Configuration"
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": true
+      },
+      "description": "Inspects one Payment including operational completion and Settlement evidence.",
+      "inputSchema": {
+        "properties": {
+          "paymentId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "paymentId"
+        ],
+        "type": "object"
+      },
+      "name": "payment.inspect",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "payment": {
+            "properties": {
+              "completedAt": {
+                "format": "date-time",
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "confirmedEligibleTotal": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "createdAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "expectedCryptoAmount": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "expiresAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "externalReference": {
+                "type": "string"
+              },
+              "fiatAmountMinor": {
+                "type": "integer"
+              },
+              "fiatCurrency": {
+                "type": "string"
+              },
+              "lateAcceptanceEndsAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "observedTotal": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "payerPageId": {
+                "type": "string"
+              },
+              "paymentAddress": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "paymentId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "selectedCurrency": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "settledAt": {
+                "format": "date-time",
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "status": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "completedAt",
+              "confirmedEligibleTotal",
+              "createdAt",
+              "expectedCryptoAmount",
+              "expiresAt",
+              "externalReference",
+              "fiatAmountMinor",
+              "fiatCurrency",
+              "lateAcceptanceEndsAt",
+              "observedTotal",
+              "payerPageId",
+              "paymentAddress",
+              "paymentId",
+              "selectedCurrency",
+              "settledAt",
+              "status",
+              "updatedAt",
+              "version"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "payment",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Inspect Payment"
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": true
+      },
+      "description": "Lists recent Payments for operational review.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "default": 25,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "payment.search",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "payments": {
+            "items": {
+              "properties": {
+                "completedAt": {
+                  "format": "date-time",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "expectedCryptoAmount": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "expiresAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "externalReference": {
+                  "type": "string"
+                },
+                "fiatAmountMinor": {
+                  "type": "integer"
+                },
+                "fiatCurrency": {
+                  "type": "string"
+                },
+                "paymentAddress": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "paymentId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "selectedCurrency": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "status": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "completedAt",
+                "createdAt",
+                "expectedCryptoAmount",
+                "expiresAt",
+                "externalReference",
+                "fiatAmountMinor",
+                "fiatCurrency",
+                "paymentAddress",
+                "paymentId",
+                "selectedCurrency",
+                "status",
+                "updatedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "fields",
+          "payments",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Search Payments"
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": false
+      },
+      "description": "Risky action: manually settles an eligible observed or expired Payment. Client confirmation is required.",
+      "inputSchema": {
+        "properties": {
+          "confirmed": {
+            "type": "boolean"
+          },
+          "expectedVersion": {
+            "type": "integer"
+          },
+          "paymentId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmed",
+          "expectedVersion",
+          "paymentId",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "name": "payment.settle",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "currentStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "settledAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "currentStatus",
+          "paymentId",
+          "paymentStatus",
+          "settledAt",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Settle Payment"
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "openWorld": true,
+        "readOnly": false
+      },
+      "description": "Risky action: resends a failed Webhook Delivery to its external endpoint. Client confirmation is required.",
+      "inputSchema": {
+        "properties": {
+          "confirmed": {
+            "type": "boolean"
+          },
+          "webhookEventId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmed",
+          "webhookEventId"
+        ],
+        "type": "object"
+      },
+      "name": "webhook_delivery.resend",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "deliveryStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "deliveryStatus",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Resend Webhook Delivery"
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": true
+      },
+      "description": "Lists failed or retry-pending Webhook Deliveries.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "default": 25,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "webhook_delivery.search",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "deliveries": {
+            "items": {
+              "properties": {
+                "attemptCount": {
+                  "type": "integer"
+                },
+                "correlationId": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "eventType": {
+                  "type": "string"
+                },
+                "eventVersion": {
+                  "type": "string"
+                },
+                "lastAttemptResult": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "lastAttemptedAt": {
+                  "format": "date-time",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "lastErrorCode": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "lastHttpStatusCode": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "lastSafeErrorCode": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "nextAttemptAt": {
+                  "format": "date-time",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "occurredAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "paymentExternalReference": {
+                  "type": "string"
+                },
+                "paymentId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "webhookEventId": {
+                  "format": "uuid",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attemptCount",
+                "correlationId",
+                "createdAt",
+                "eventType",
+                "eventVersion",
+                "lastAttemptResult",
+                "lastAttemptedAt",
+                "lastErrorCode",
+                "lastHttpStatusCode",
+                "lastSafeErrorCode",
+                "nextAttemptAt",
+                "occurredAt",
+                "paymentExternalReference",
+                "paymentId",
+                "status",
+                "webhookEventId"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "deliveries",
+          "fields",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "Search Webhook Deliveries"
+    }
+  ]
+}

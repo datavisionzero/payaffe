@@ -1,0 +1,139 @@
+{
+  "title": "payaffe Operations",
+  "uid": "payaffe-operations",
+  "schemaVersion": 41,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "tags": ["payaffe"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "API request rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{http_route}}",
+          "expr": "sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=\"payaffe-api\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "API p95 duration",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=\"payaffe-api\"}[5m])))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "API 5xx rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "5xx share",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"payaffe-api\",http_response_status_code=~\"5..\"}[10m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count{service_name=\"payaffe-api\"}[10m])), 0.001)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Worker runs by outcome",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{worker_name}} {{outcome}}",
+          "expr": "sum by (worker_name, outcome) (rate(payaffe_worker_runs_total[5m]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Worker consecutive failures",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{worker_name}}",
+          "expr": "max by (worker_name) (payaffe_worker_consecutive_failures)"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Webhook Delivery attempts by result",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{result}}",
+          "expr": "sum by (result) (rate(payaffe_webhook_delivery_attempts_total[5m]))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Terminal Webhook Deliveries",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(payaffe_webhook_terminal_failures)"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Currencies without Observation",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 24 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(payaffe_observation_unavailable)"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Native ETH addresses available",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(payaffe_address_pool_available{currency=\"ETH\"})"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Open Reorg Alerts",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 24 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(payaffe_reorg_alerts_open)"
+        }
+      ]
+    }
+  ]
+}

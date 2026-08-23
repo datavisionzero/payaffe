@@ -1,0 +1,23 @@
+{
+  "event_id": "00000000-0000-0000-0000-000000000000",
+  "event_type": "payment.completed",
+  "event_version": "1",
+  "occurred_at": "2026-07-04T12:00:00+00:00",
+  "correlation_id": "00000000-0000-0000-0000-000000000000",
+  "resource": {
+    "type": "payment",
+    "id": "00000000-0000-0000-0000-000000000000"
+  },
+  "payment": {
+    "payment_id": "00000000-0000-0000-0000-000000000000",
+    "external_reference": "order-123",
+    "status": "completed",
+    "fiat_currency": "EUR",
+    "fiat_amount_minor": 1999,
+    "selected_currency": "BTC",
+    "expected_crypto_amount": "0.00039980",
+    "payer_page_id": "fixed-payer-page-id",
+    "expires_at": "2026-07-04T13:00:00+00:00",
+    "completed_at": "2026-07-04T12:00:00+00:00"
+  }
+}

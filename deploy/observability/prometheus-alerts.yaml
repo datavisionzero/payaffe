@@ -1,0 +1,118 @@
+# Minimum alert rules for a `payaffe` installation.
+#
+# The `up` and `http_server_*` series come from the OpenTelemetry exporter and
+# the host or collector scraping it. The `payaffe_*` series are the product
+# metrics published by the API and worker hosts.
+#
+# Thresholds match the shipped defaults. An installation with a different
+# Address Pool size or Webhook retry policy should adjust them and record the
+# deviation in its own operations context.
+groups:
+  - name: payaffe-availability
+    rules:
+      - alert: PayaffeApiUnavailable
+        expr: sum(up{service_name="payaffe-api"}) < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "payaffe API has no healthy instance"
+          runbook: "docs/operations/incident-response.md"
+
+      - alert: PayaffeWorkerUnavailable
+        expr: sum(up{service_name="payaffe-worker"}) < 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "payaffe has no running worker host"
+          description: >-
+            Payment expiration, Blockchain Observation, Reorg Monitoring, Rate
+            Cache refresh, and Webhook Delivery all stop while no worker runs.
+          runbook: "docs/operations/incident-response.md"
+
+      - alert: PayaffeNoTelemetry
+        expr: absent(payaffe_worker_runs_total)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "payaffe stopped reporting worker telemetry"
+          runbook: "docs/operations/observability.md"
+
+  - name: payaffe-api
+    rules:
+      - alert: PayaffeApiHighErrorRate
+        expr: >-
+          sum(rate(http_server_request_duration_seconds_count{service_name="payaffe-api",http_response_status_code=~"5.."}[10m]))
+          / clamp_min(sum(rate(http_server_request_duration_seconds_count{service_name="payaffe-api"}[10m])), 0.001)
+          > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "payaffe API 5xx rate exceeds five percent"
+          runbook: "docs/operations/incident-response.md"
+
+  - name: payaffe-workers
+    rules:
+      - alert: PayaffeWorkerFailingRepeatedly
+        expr: max by (worker_name) (payaffe_worker_consecutive_failures) >= 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "payaffe worker {{ $labels.worker_name }} failed five runs in a row"
+          description: >-
+            The worker keeps releasing its lease with a failure. Check
+            app.background_worker_leases for the last safe error code.
+          runbook: "docs/operations/incident-response.md"
+
+      - alert: PayaffeTerminalWebhookDelivery
+        expr: payaffe_webhook_terminal_failures > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Terminal Webhook Delivery requires operator review"
+          description: >-
+            Resend from the Admin UI or the Admin MCP after the receiving
+            endpoint is healthy again.
+          runbook: "docs/operations/incident-response.md"
+
+  - name: payaffe-payments
+    rules:
+      - alert: PayaffeObservationUnavailable
+        expr: max by (currency) (payaffe_observation_unavailable) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Blockchain Observation for {{ $labels.currency }} is unavailable"
+          description: >-
+            Payments in that currency cannot be detected while this lasts.
+          runbook: "docs/operations/incident-response.md"
+
+      - alert: PayaffeEthAddressPoolLow
+        expr: payaffe_address_pool_available{currency="ETH"} < 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Native ETH Address Pool is below the low-capacity threshold"
+          description: >-
+            Import more addresses before the pool empties; a Payment cannot
+            select native ETH without a free address.
+          runbook: "docs/operations/ethereum-address-pool.md"
+
+      - alert: PayaffeOpenReorgAlert
+        expr: payaffe_reorg_alerts_open > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A blockchain Reorg Alert requires operator review"
+          description: >-
+            A completed Payment lost confirmations. Completed Payments stay
+            final, so the alert needs a manual decision.
+          runbook: "docs/operations/incident-response.md"

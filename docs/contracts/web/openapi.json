@@ -1,0 +1,3272 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "payaffe Web API",
+    "version": "web"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/"
+    }
+  ],
+  "paths": {
+    "/payer/payments/{payerPageId}": {
+      "get": {
+        "tags": [
+          "Payer"
+        ],
+        "operationId": "GetPayerPayment",
+        "parameters": [
+          {
+            "name": "payerPageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payer/payments/{payerPageId}/currency-selection": {
+      "post": {
+        "tags": [
+          "Payer"
+        ],
+        "operationId": "SelectPayerPaymentCurrency",
+        "parameters": [
+          {
+            "name": "payerPageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SelectPayerPaymentCurrencyHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/csrf": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "GetAdminCsrf",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCsrfHttpResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/session": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "GetAdminSession",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSessionHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/payments": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ListAdminPayments",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentsHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/payments/{paymentId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "GetAdminPayment",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailReadModel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/payments/{paymentId}/settle": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "SettleAdminPayment",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminPaymentSettlementHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailReadModel"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/reorg-alerts": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ListAdminReorgAlerts",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReorgAlertsHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/observation-health": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "GetAdminObservationHealth",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminObservationHealthHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/audit-log": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ListAdminAuditLog",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAuditLogHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/audit-log/{eventId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "GetAdminAuditLogEntry",
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAuditLogEntryDetailReadModel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-deliveries": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ListAdminWebhookDeliveries",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWebhookDeliveriesHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/integration-api-credentials": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ListAdminIntegrationApiCredentials",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminIntegrationApiCredentialsHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "CreateAdminIntegrationApiCredential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminIntegrationApiCredentialCreateHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminIntegrationApiCredentialSecretHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/integration-api-credentials/{credentialId}/rotate": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "RotateAdminIntegrationApiCredential",
+        "parameters": [
+          {
+            "name": "credentialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminIntegrationApiCredentialMutationHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminIntegrationApiCredentialSecretHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/integration-api-credentials/{credentialId}/disable": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "DisableAdminIntegrationApiCredential",
+        "parameters": [
+          {
+            "name": "credentialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminIntegrationApiCredentialMutationHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminIntegrationApiCredentialHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-endpoints": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ListAdminWebhookEndpoints",
+        "parameters": [
+          {
+            "name": "integrationApiCredentialId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWebhookEndpointsHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "CreateAdminWebhookEndpoint",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminWebhookEndpointCreateHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWebhookEndpointHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-endpoints/{endpointId}/update": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "UpdateAdminWebhookEndpoint",
+        "parameters": [
+          {
+            "name": "endpointId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminWebhookEndpointUpdateHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWebhookEndpointHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-endpoints/{endpointId}/rotate-secret": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "RotateAdminWebhookEndpointSecret",
+        "parameters": [
+          {
+            "name": "endpointId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminWebhookEndpointSecretRotationHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWebhookEndpointHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-endpoints/{endpointId}/disable": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "DisableAdminWebhookEndpoint",
+        "parameters": [
+          {
+            "name": "endpointId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminIntegrationApiCredentialMutationHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWebhookEndpointHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/native-eth-address-pool": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "GetAdminNativeEthAddressPool",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNativeEthAddressPoolSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/native-eth-address-pool/import": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ImportAdminNativeEthAddressPool",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminNativeEthAddressPoolImportHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNativeEthAddressPoolImportHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/audit-log/export": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ExportAdminAuditLog",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminAuditLogExportHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAuditLogExportHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-deliveries/{eventId}/resend": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ResendAdminWebhookDelivery",
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWebhookDeliveryResendHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/login": {
+      "post": {
+        "tags": [
+          "Admin Authentication"
+        ],
+        "operationId": "StartAdminLogin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminLoginStartHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLoginStartHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/mfa": {
+      "post": {
+        "tags": [
+          "Admin Authentication"
+        ],
+        "operationId": "CompleteAdminMfa",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminMfaCompleteHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMfaCompleteHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/step-up": {
+      "post": {
+        "tags": [
+          "Admin Authentication"
+        ],
+        "operationId": "StepUpAdmin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminStepUpHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStepUpHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/recovery-codes": {
+      "post": {
+        "tags": [
+          "Admin Authentication"
+        ],
+        "operationId": "GenerateAdminRecoveryCodes",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRecoveryCodesHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/logout": {
+      "post": {
+        "tags": [
+          "Admin Authentication"
+        ],
+        "operationId": "LogoutAdmin",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLogoutHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminAuditLogEntryDetailReadModel": {
+        "required": [
+          "eventId",
+          "occurredAt",
+          "eventType",
+          "outcome",
+          "actorType",
+          "actorId",
+          "sourceService",
+          "sourceIp",
+          "userAgent",
+          "correlationId",
+          "reasonCode",
+          "subjectType",
+          "subjectId"
+        ],
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "actorType": {
+            "type": "string"
+          },
+          "actorId": {
+            "type": "string"
+          },
+          "sourceService": {
+            "type": "string"
+          },
+          "sourceIp": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "userAgent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": "string"
+          },
+          "subjectType": {
+            "type": "string"
+          },
+          "subjectId": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminAuditLogEntryReadModel": {
+        "required": [
+          "eventId",
+          "occurredAt",
+          "eventType",
+          "outcome",
+          "actorType",
+          "actorId",
+          "reasonCode",
+          "subjectType",
+          "subjectId"
+        ],
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "actorType": {
+            "type": "string"
+          },
+          "actorId": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": "string"
+          },
+          "subjectType": {
+            "type": "string"
+          },
+          "subjectId": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminAuditLogExportHttpRequest": {
+        "required": [
+          "limit"
+        ],
+        "type": "object",
+        "properties": {
+          "limit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "AdminAuditLogExportHttpResponse": {
+        "required": [
+          "exportedAt",
+          "entries"
+        ],
+        "type": "object",
+        "properties": {
+          "exportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminAuditLogEntryDetailReadModel"
+            }
+          }
+        }
+      },
+      "AdminAuditLogHttpResponse": {
+        "required": [
+          "entries"
+        ],
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminAuditLogEntryReadModel"
+            }
+          }
+        }
+      },
+      "AdminCsrfHttpResponse": {
+        "required": [
+          "csrfToken"
+        ],
+        "type": "object",
+        "properties": {
+          "csrfToken": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminIntegrationApiCredentialCreateHttpRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AdminIntegrationApiCredentialHttpResponse": {
+        "required": [
+          "credential"
+        ],
+        "type": "object",
+        "properties": {
+          "credential": {
+            "$ref": "#/components/schemas/AdminIntegrationApiCredentialReadModel"
+          }
+        }
+      },
+      "AdminIntegrationApiCredentialMutationHttpRequest": {
+        "required": [
+          "expectedVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AdminIntegrationApiCredentialReadModel": {
+        "required": [
+          "id",
+          "name",
+          "status",
+          "createdAt",
+          "lastUsedAt",
+          "updatedAt",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AdminIntegrationApiCredentialSecretHttpResponse": {
+        "required": [
+          "credential",
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "credential": {
+            "$ref": "#/components/schemas/AdminIntegrationApiCredentialReadModel"
+          },
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminIntegrationApiCredentialsHttpResponse": {
+        "required": [
+          "credentials"
+        ],
+        "type": "object",
+        "properties": {
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminIntegrationApiCredentialReadModel"
+            }
+          }
+        }
+      },
+      "AdminLoginStartHttpRequest": {
+        "required": [
+          "username",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AdminLoginStartHttpResponse": {
+        "required": [
+          "status",
+          "challengeId"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "challengeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "AdminLogoutHttpResponse": {
+        "required": [
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminMfaCompleteHttpRequest": {
+        "required": [
+          "challengeId",
+          "totpCode",
+          "recoveryCode"
+        ],
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "totpCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recoveryCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AdminMfaCompleteHttpResponse": {
+        "required": [
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminNativeEthAddressPoolImportHttpRequest": {
+        "required": [
+          "addresses"
+        ],
+        "type": "object",
+        "properties": {
+          "addresses": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AdminNativeEthAddressPoolImportHttpResponse": {
+        "required": [
+          "importId",
+          "importedCount",
+          "summary"
+        ],
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "importedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AdminNativeEthAddressPoolSummary"
+          }
+        }
+      },
+      "AdminNativeEthAddressPoolSummary": {
+        "required": [
+          "unusedCount",
+          "assignedCount",
+          "retiredCount",
+          "lowCapacityThreshold",
+          "isLowCapacity"
+        ],
+        "type": "object",
+        "properties": {
+          "unusedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "assignedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "retiredCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "lowCapacityThreshold": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isLowCapacity": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AdminObservationHealthHttpResponse": {
+        "required": [
+          "currencies"
+        ],
+        "type": "object",
+        "properties": {
+          "currencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObservationHealthReadModel"
+            }
+          }
+        }
+      },
+      "AdminPaymentDetailReadModel": {
+        "required": [
+          "paymentId",
+          "externalReference",
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "status",
+          "payerPageId",
+          "expiresAt",
+          "lateAcceptanceEndsAt",
+          "selectedCurrency",
+          "expectedCryptoAmount",
+          "paymentAddress",
+          "observedTotal",
+          "confirmedEligibleTotal",
+          "completedAt",
+          "createdAt",
+          "updatedAt",
+          "settledAt",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalReference": {
+            "type": "string"
+          },
+          "fiatCurrency": {
+            "type": "string"
+          },
+          "fiatAmountMinor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "payerPageId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lateAcceptanceEndsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "selectedCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expectedCryptoAmount": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "observedTotal": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "confirmedEligibleTotal": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "settledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AdminPaymentSettlementHttpRequest": {
+        "required": [
+          "expectedVersion",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AdminPaymentsHttpResponse": {
+        "required": [
+          "payments"
+        ],
+        "type": "object",
+        "properties": {
+          "payments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminPaymentSummaryReadModel"
+            }
+          }
+        }
+      },
+      "AdminPaymentSummaryReadModel": {
+        "required": [
+          "paymentId",
+          "externalReference",
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "status",
+          "selectedCurrency",
+          "expectedCryptoAmount",
+          "paymentAddress",
+          "expiresAt",
+          "completedAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalReference": {
+            "type": "string"
+          },
+          "fiatCurrency": {
+            "type": "string"
+          },
+          "fiatAmountMinor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "selectedCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expectedCryptoAmount": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminRecoveryCodesHttpResponse": {
+        "required": [
+          "generatedAt",
+          "recoveryCodes"
+        ],
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recoveryCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AdminReorgAlertReadModel": {
+        "required": [
+          "id",
+          "paymentId",
+          "supportedCurrency",
+          "transactionHash",
+          "previousConfirmations",
+          "newConfirmations",
+          "previousBlockHash",
+          "newBlockHash",
+          "previousBlockHeight",
+          "newBlockHeight",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "transactionHash": {
+            "type": "string"
+          },
+          "previousConfirmations": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "newConfirmations": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "previousBlockHash": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "newBlockHash": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "previousBlockHeight": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "newBlockHeight": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AdminReorgAlertsHttpResponse": {
+        "required": [
+          "alerts"
+        ],
+        "type": "object",
+        "properties": {
+          "alerts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminReorgAlertReadModel"
+            }
+          }
+        }
+      },
+      "AdminSessionHttpResponse": {
+        "required": [
+          "status",
+          "adminAccountId",
+          "username",
+          "mfaAuthenticatedAt",
+          "stepUpAuthenticatedAt",
+          "expiresAt",
+          "idleExpiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "adminAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "mfaAuthenticatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stepUpAuthenticatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idleExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminStepUpHttpRequest": {
+        "required": [
+          "totpCode"
+        ],
+        "type": "object",
+        "properties": {
+          "totpCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AdminStepUpHttpResponse": {
+        "required": [
+          "status",
+          "stepUpAuthenticatedAt",
+          "idleExpiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "stepUpAuthenticatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idleExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminWebhookDeliveriesHttpResponse": {
+        "required": [
+          "deliveries"
+        ],
+        "type": "object",
+        "properties": {
+          "deliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminWebhookDeliveryReadModel"
+            }
+          }
+        }
+      },
+      "AdminWebhookDeliveryReadModel": {
+        "required": [
+          "webhookEventId",
+          "paymentId",
+          "paymentExternalReference",
+          "eventType",
+          "eventVersion",
+          "status",
+          "attemptCount",
+          "lastErrorCode",
+          "nextAttemptAt",
+          "occurredAt",
+          "createdAt",
+          "lastAttemptedAt",
+          "lastAttemptResult",
+          "lastHttpStatusCode",
+          "lastSafeErrorCode",
+          "correlationId"
+        ],
+        "type": "object",
+        "properties": {
+          "webhookEventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentExternalReference": {
+            "type": "string"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "eventVersion": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "attemptCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "lastErrorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nextAttemptAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastAttemptedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastAttemptResult": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastHttpStatusCode": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "lastSafeErrorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminWebhookDeliveryResendHttpResponse": {
+        "required": [
+          "status",
+          "deliveryStatus"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "deliveryStatus": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminWebhookEndpointCreateHttpRequest": {
+        "required": [
+          "integrationApiCredentialId",
+          "url",
+          "secretReference",
+          "eventTypes"
+        ],
+        "type": "object",
+        "properties": {
+          "integrationApiCredentialId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "secretReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "eventTypes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AdminWebhookEndpointHttpResponse": {
+        "required": [
+          "endpoint"
+        ],
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "$ref": "#/components/schemas/AdminWebhookEndpointReadModel"
+          }
+        }
+      },
+      "AdminWebhookEndpointReadModel": {
+        "required": [
+          "id",
+          "integrationApiCredentialId",
+          "url",
+          "secretReference",
+          "status",
+          "eventTypes",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "integrationApiCredentialId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "url": {
+            "type": "string"
+          },
+          "secretReference": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AdminWebhookEndpointSecretRotationHttpRequest": {
+        "required": [
+          "expectedVersion",
+          "secretReference"
+        ],
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "secretReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AdminWebhookEndpointsHttpResponse": {
+        "required": [
+          "endpoints"
+        ],
+        "type": "object",
+        "properties": {
+          "endpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminWebhookEndpointReadModel"
+            }
+          }
+        }
+      },
+      "AdminWebhookEndpointUpdateHttpRequest": {
+        "required": [
+          "expectedVersion",
+          "url",
+          "eventTypes"
+        ],
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "eventTypes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "IntegrationApiProblemResponse": {
+        "required": [
+          "code",
+          "correlationId"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "correlationId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ObservationHealthReadModel": {
+        "required": [
+          "supportedCurrency",
+          "providerName",
+          "status",
+          "lastSuccessfulAt",
+          "lastFailedAt",
+          "lastSafeErrorCode"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "providerName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "lastSuccessfulAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastFailedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastSafeErrorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PaymentOptionResponse": {
+        "required": [
+          "supportedCurrency",
+          "status",
+          "unavailableReasonCode"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "unavailableReasonCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PaymentResponse": {
+        "required": [
+          "paymentId",
+          "status",
+          "payerPageUrl",
+          "expiresAt",
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "externalReference",
+          "selectedCurrency",
+          "expectedCryptoAmount",
+          "paymentAddress",
+          "observedTotal",
+          "completedAt",
+          "settledAt",
+          "returnUrl",
+          "paymentOptions"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "payerPageUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fiatCurrency": {
+            "type": "string"
+          },
+          "fiatAmountMinor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "externalReference": {
+            "type": "string"
+          },
+          "selectedCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expectedCryptoAmount": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "observedTotal": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "settledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "returnUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentOptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentOptionResponse"
+            }
+          }
+        }
+      },
+      "SelectPayerPaymentCurrencyHttpRequest": {
+        "required": [
+          "supportedCurrency"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Payer"
+    },
+    {
+      "name": "Admin"
+    },
+    {
+      "name": "Admin Authentication"
+    }
+  ]
+}

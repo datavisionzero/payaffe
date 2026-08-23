@@ -1,0 +1,16 @@
+{
+  "name": "payaffe",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "web:dev": "pnpm --filter @payaffe/web dev",
+    "web:build": "pnpm --filter @payaffe/web build",
+    "web:test": "pnpm --filter @payaffe/web test",
+    "web:typecheck": "pnpm --filter @payaffe/web typecheck",
+    "web:e2e": "pnpm --filter @payaffe/web e2e",
+    "web:check": "pnpm --filter @payaffe/web api:generate && git diff --exit-code -- apps/web/lib/api/generated.ts && pnpm --filter @payaffe/web test && pnpm --filter @payaffe/web typecheck && pnpm --filter @payaffe/web e2e && pnpm --filter @payaffe/web build"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,470 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "payaffe Integration API",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/"
+    }
+  ],
+  "paths": {
+    "/api/v1/payments": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "operationId": "CreatePayment",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreatePaymentHttpRequest"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/payments/{paymentId}": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "operationId": "GetPayment",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreatePaymentHttpRequest": {
+        "required": [
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "externalReference"
+        ],
+        "type": "object",
+        "properties": {
+          "fiatCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fiatAmountMinor": {
+            "maximum": 9223372036854776000,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "externalReference": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PaymentContextHttpRequest"
+              }
+            ]
+          },
+          "returnUrl": {
+            "maxLength": 2048,
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uri"
+          }
+        }
+      },
+      "IntegrationApiProblemResponse": {
+        "required": [
+          "code",
+          "correlationId"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "correlationId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "PaymentContextHttpRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "customerNumber": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cartName": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "note": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PaymentOptionResponse": {
+        "required": [
+          "supportedCurrency",
+          "status",
+          "unavailableReasonCode"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "unavailableReasonCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PaymentResponse": {
+        "required": [
+          "paymentId",
+          "status",
+          "payerPageUrl",
+          "expiresAt",
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "externalReference",
+          "selectedCurrency",
+          "expectedCryptoAmount",
+          "paymentAddress",
+          "observedTotal",
+          "completedAt",
+          "settledAt",
+          "returnUrl",
+          "paymentOptions"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "payerPageUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fiatCurrency": {
+            "type": "string"
+          },
+          "fiatAmountMinor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "externalReference": {
+            "type": "string"
+          },
+          "selectedCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expectedCryptoAmount": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "observedTotal": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "settledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "returnUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentOptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentOptionResponse"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Payments"
+    }
+  ]
+}

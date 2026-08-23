@@ -1,0 +1,46 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+
+namespace Payaffe.Infrastructure.Payments;
+
+public sealed class BlockchainObservationOptionsValidator(IConfiguration configuration)
+    : IValidateOptions<BlockchainObservationOptions>
+{
+    public ValidateOptionsResult Validate(string? name, BlockchainObservationOptions options)
+    {
+        var mode = BlockchainObservationOptions.NormalizeMode(options.Mode);
+        return mode switch
+        {
+            "none" => ValidateOptionsResult.Success,
+            "blockchair" => ValidateProviderApiKey("Blockchair", options.Blockchair.ApiKeyReference),
+            "nownodes" => ValidateProviderApiKey("NOWNodes", options.Nownodes.ApiKeyReference),
+            _ => ValidateOptionsResult.Fail(
+                "BlockchainObservation:Mode must be one of: none, blockchair, nownodes."),
+        };
+    }
+
+    private ValidateOptionsResult ValidateProviderApiKey(
+        string providerName,
+        string? apiKeyReference)
+    {
+        if (string.IsNullOrWhiteSpace(apiKeyReference))
+        {
+            return ValidateOptionsResult.Fail(
+                $"BlockchainObservation:{providerName}:ApiKeyReference is required when {providerName} mode is selected.");
+        }
+
+        var configurationKey = ConfigurationBlockchainObservationSecretResolver.GetConfigurationKey(apiKeyReference);
+        if (configurationKey is null)
+        {
+            return ValidateOptionsResult.Fail(
+                $"BlockchainObservation:{providerName}:ApiKeyReference must use configuration:BlockchainObservation:ProviderSecrets:<name>.");
+        }
+
+        var secret = configuration[configurationKey];
+        return string.IsNullOrWhiteSpace(secret)
+            ? ValidateOptionsResult.Fail(
+                $"BlockchainObservation:{providerName}:ApiKeyReference points to a missing or blank provider secret.")
+            : ValidateOptionsResult.Success;
+    }
+
+}

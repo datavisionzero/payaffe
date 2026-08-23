@@ -1,0 +1,11 @@
+packages:
+  - "apps/web"
+peerDependencyRules:
+  allowedVersions:
+    "openapi-typescript>typescript": "6"
+allowBuilds:
+  '@parcel/watcher': true
+  '@sentry/cli': false
+  '@swc/core': true
+  msw: true
+  sharp: true

@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # So that a run can be started without inventing a commit to carry it.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The backend, in one job rather than two. The integration tests start
+  # PostgreSQL through Testcontainers and need the Docker daemon a hosted runner
+  # already has; splitting them off would mean restoring and building the
+  # solution twice to save nothing, because the slow half has to run either way.
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - run: dotnet restore Payaffe.sln
+      - run: dotnet build Payaffe.sln --configuration Release --no-restore
+      - run: dotnet test Payaffe.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      - name: Keep the results of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: "**/TestResults/*.trx"
+          if-no-files-found: warn
+          retention-days: 14
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # After setup-node, not before: Corepack installs its shims into the Node
+      # that is on PATH, and enabling it first would put them in the one
+      # setup-node then replaces. The pnpm version comes from `packageManager`
+      # in package.json, so it is the lockfile's own.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      # The generated client is committed, and this is what keeps it honest:
+      # regenerate it from the checked-in contract and fail if the result
+      # differs from what the commit carries. A frontend whose idea of the API
+      # has drifted from the API is the failure this catches (ADR 0022).
+      - name: The committed API client is the one the contract generates
+        run: |
+          pnpm --filter @payaffe/web api:generate
+          git diff --exit-code -- apps/web/lib/api/generated.ts
+
+      - run: pnpm --filter @payaffe/web test
+      - run: pnpm --filter @payaffe/web typecheck
+
+      - name: Install the browser Playwright drives
+        run: pnpm --filter @payaffe/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @payaffe/web e2e
+
+      - run: pnpm --filter @payaffe/web build
+
+  # Not a build for its own sake: an operator's first contact with this project
+  # is `docker compose up`, so the compose file and every image it names have to
+  # be buildable from a clean checkout. The MCP host has no compose service
+  # (ADR 0023) and is built directly.
+  deployment:
+    name: Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      - name: The example environment is a usable one
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+      - run: docker compose build migrations api worker web
+      - run: docker build -f apps/mcp/Dockerfile -t payaffe-mcp:ci .
