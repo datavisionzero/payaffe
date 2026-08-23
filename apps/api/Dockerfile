@@ -1,7 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY Payaffe.slnx global.json ./
+# Directory.Build.props carries the target framework and Directory.Packages.props
+# every package version, so restore fails without them: a csproj on its own no
+# longer names a framework to restore for.
+COPY Payaffe.slnx global.json Directory.Build.props Directory.Packages.props ./
 COPY apps/api/Payaffe.Api.csproj apps/api/
 COPY src/Payaffe.Application/Payaffe.Application.csproj src/Payaffe.Application/
 COPY src/Payaffe.Domain/Payaffe.Domain.csproj src/Payaffe.Domain/
