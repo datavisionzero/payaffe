@@ -16,9 +16,9 @@ public sealed class AdminSessionRecord
 
     public DateTimeOffset IdleExpiresAt { get; set; }
 
-    public DateTimeOffset MfaAuthenticatedAt { get; set; }
+    public DateTimeOffset? MfaAuthenticatedAt { get; set; }
 
-    public DateTimeOffset StepUpAuthenticatedAt { get; set; }
+    public DateTimeOffset? StepUpAuthenticatedAt { get; set; }
 
     public DateTimeOffset? RevokedAt { get; set; }
 

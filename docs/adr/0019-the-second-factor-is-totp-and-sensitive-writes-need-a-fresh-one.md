@@ -1,5 +1,9 @@
 # The Second Factor Is TOTP, and Sensitive Writes Need a Fresh One
 
+**Amended by [ADR 0028](./0028-the-second-factor-is-optional-and-enrolled-later.md).**
+A second factor is optional. What follows describes it for an account that has
+one, which is still exactly how it behaves.
+
 Signing in is a password and a TOTP code. Both are required; there is no
 password-only admin. WebAuthn is the stronger factor and was not chosen, because
 TOTP needs nothing from the operator's environment — no domain that resolves the

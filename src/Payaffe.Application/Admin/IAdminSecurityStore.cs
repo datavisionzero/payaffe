@@ -13,6 +13,24 @@ public interface IAdminSecurityStore
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// A sign-in that is finished once the password is verified, because the
+    /// account has no second factor enrolled (ADR 0028).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately its own method rather than a nullable challenge on
+    /// <see cref="RecordSuccessfulPasswordVerificationAsync"/>: the two write
+    /// different rows and mean different things, and a store method that
+    /// sometimes issues a session and sometimes does not is one a reader has to
+    /// trace to understand.
+    /// </remarks>
+    Task RecordPasswordOnlyAuthenticationAsync(
+        Guid adminAccountId,
+        DateTimeOffset occurredAt,
+        AdminSessionDraft session,
+        AdminAuditEntry auditEntry,
+        CancellationToken cancellationToken);
+
     Task RecordFailedPasswordVerificationAsync(
         Guid? adminAccountId,
         DateTimeOffset occurredAt,

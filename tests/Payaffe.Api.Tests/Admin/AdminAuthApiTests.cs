@@ -52,6 +52,62 @@ public sealed class AdminAuthApiTests
         Assert.Equal("admin_login.password_verified", auditEntry.ReasonCode);
     }
 
+    /// <summary>
+    /// The sign-in an installation has right after `bootstrap-admin`: no second
+    /// factor enrolled, so the password is the whole thing (ADR 0028).
+    /// </summary>
+    [Fact]
+    public async Task Login_start_authenticates_an_account_without_a_second_factor()
+    {
+        await using var factory = new PaymentApiFactory();
+        var adminAccountId = await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecretReference: null);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new
+            {
+                username = "admin@example.test",
+                password = "correct-password",
+            });
+
+        response.EnsureSuccessStatusCode();
+        var loginStart = await response.Content.ReadFromJsonAsync<LoginStartResponse>();
+        Assert.Equal("authenticated", loginStart!.Status);
+        Assert.Null(loginStart.ChallengeId);
+
+        // The session cookie is the point: the caller is signed in, with no
+        // second step to come.
+        Assert.Contains(
+            response.Headers.GetValues("Set-Cookie"),
+            cookie => cookie.StartsWith("__Host-payaffe-admin=", StringComparison.Ordinal));
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(adminAccountId.ToString("D"), body, StringComparison.OrdinalIgnoreCase);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+
+        // No challenge row: there was no second step to remember.
+        Assert.Empty(dbContext.AdminLoginChallenges);
+        var session = Assert.Single(dbContext.AdminSessions);
+        Assert.Equal(adminAccountId, session.AdminAccountId);
+
+        // Honest about what it cleared: a password sign-in did not pass MFA,
+        // and the security store says so rather than recording a time.
+        Assert.Null(session.MfaAuthenticatedAt);
+        Assert.Null(session.StepUpAuthenticatedAt);
+
+        var auditEntry = Assert.Single(dbContext.AuditLogEntries);
+        Assert.Equal("admin.login_complete", auditEntry.EventType);
+        Assert.Equal("success", auditEntry.Outcome);
+        Assert.Equal("admin_login.password_only", auditEntry.ReasonCode);
+        Assert.Equal("admin_session", auditEntry.SubjectType);
+    }
+
     [Fact]
     public async Task Login_start_returns_generic_error_and_audits_failure_for_invalid_password()
     {
@@ -2317,7 +2373,8 @@ public sealed class AdminAuthApiTests
         return client;
     }
 
-    private sealed record LoginStartResponse(string Status, Guid ChallengeId);
+    // Nullable since ADR 0028: a password-only sign-in returns no challenge.
+    private sealed record LoginStartResponse(string Status, Guid? ChallengeId);
 
     private sealed record CsrfResponse(string CsrfToken);
 
