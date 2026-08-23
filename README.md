@@ -16,9 +16,11 @@ deliberately is not.
 
 ## Status
 
-**Pre-release.** The product is built and version-stamped `1.0.0-rc.1`, but
-there has not been a release, there are no tags yet, and no container images are
-published. Everything below runs from a checkout.
+**Pre-release.** The product is built and version-stamped `0.1.0`. The `0.x`
+is deliberate: the Integration API and the webhook contract are versioned and
+snapshotted, but they have not yet been depended on by anyone, and `1.0.0` is
+reserved for the point where breaking them would cost something. Everything
+below runs from a checkout.
 
 What works end to end: payment creation over the Integration API with
 idempotency, the payer page with currency selection and rate locking, address

@@ -26,7 +26,7 @@ builder.Services.AddOptions<AdminMcpOptions>()
 builder.Services.AddSingleton<AdminMcpRateLimiter>();
 
 builder.Services
-    .AddMcpServer(options => options.ServerInfo = new() { Name = "payaffe-admin", Version = "1.0.0" })
+    .AddMcpServer(options => options.ServerInfo = new() { Name = "payaffe-admin", Version = ProductVersion.Value })
     .WithStdioServerTransport()
     .WithTools<AdminMcpTools>();
 

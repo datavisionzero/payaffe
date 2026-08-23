@@ -10,7 +10,7 @@ public static class ProductVersion
 {
     /// <summary>
     /// The version without the build metadata that source-link appends, for
-    /// example <c>1.0.0-rc.1</c> rather than <c>1.0.0-rc.1+abc123</c>.
+    /// example <c>0.1.0</c> rather than <c>0.1.0+abc123</c>.
     /// </summary>
     public static string Value { get; } = Resolve();
 
