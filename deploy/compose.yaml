@@ -71,6 +71,11 @@ x-backend-environment: &backend-environment
   # a provider observation record (ADR 0021).
   BlockchainObservation__ProviderSecrets__blockchair: ${PAYAFFE_BLOCKCHAIR_API_KEY:-}
   BlockchainObservation__ProviderSecrets__nownodes: ${PAYAFFE_NOWNODES_API_KEY:-}
+  # Where log entries go (ADR 0025). Both together or neither: a half
+  # configuration is refused at startup rather than losing logs quietly. The
+  # token is a secret and it also names the logaffe project entries land in.
+  Observability__Logaffe__Url: ${PAYAFFE_LOGAFFE_URL:-}
+  Observability__Logaffe__IngestToken: ${PAYAFFE_LOGAFFE_TOKEN:-}
   Observability__OtlpEndpoint: ${PAYAFFE_OTLP_ENDPOINT:-}
   Observability__DeploymentEnvironment: ${PAYAFFE_DEPLOYMENT_ENVIRONMENT:-production}
   # Left empty on purpose: a host then reports the version stamped into its own

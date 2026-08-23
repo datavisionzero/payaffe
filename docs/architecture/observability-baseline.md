@@ -6,10 +6,16 @@ This document records the baseline for technical observability.
 
 `payaffe` provides observability through external self-hosted services:
 
-- Grafana LGTM Stack for logs, dashboards, traces, and metrics.
+- logaffe for logs.
+- Grafana LGTM Stack for dashboards, traces, and metrics.
 - GlitchTip for error reporting and exception monitoring.
 
-The Grafana LGTM Stack target includes Loki for logs, Grafana for dashboards, Tempo for traces, and Mimir for metrics.
+Three targets, because no one of them takes what the others do. logaffe accepts
+log entries and neither spans nor time series; the LGTM stack takes those but is
+a larger thing to run than a single operator needs for reading a log; GlitchTip
+groups errors across releases, which neither of the others attempts. The Grafana
+LGTM Stack target here is Grafana for dashboards, Tempo for traces, and Mimir
+for metrics. Loki is not part of it, because logaffe is where logs go.
 
 An operator running several applications may point all of them at one
 observability stack rather than running one per application. A dedicated stack
@@ -19,10 +25,13 @@ deviation.
 ## Telemetry Standard
 
 Technical telemetry is instrumented with OpenTelemetry.
-Logs, traces, and metrics should be exported through OTLP to Grafana Alloy as
-the central collector or gateway. From there, signals are routed into the
-Grafana LGTM Stack. The OpenTelemetry Collector remains allowed as a documented
+Traces and metrics should be exported through OTLP to Grafana Alloy as the
+central collector or gateway. From there, signals are routed into the Grafana
+LGTM Stack. The OpenTelemetry Collector remains allowed as a documented
 deviation when a product or operational context specifically needs it.
+
+Logs do not travel this path. They are delivered to a logaffe installation
+through its `ILogger` provider ([ADR 0025](../adr/0025-logs-are-delivered-to-logaffe.md)).
 
 Structured logs must be correlatable with traces and metrics. At minimum, these technical fields are expected:
 
@@ -39,15 +48,17 @@ HTTP, database, worker, blockchain observation, webhook, and external provider c
 
 Error tracking is provided separately through GlitchTip with Sentry-compatible SDKs. GlitchTip is not the general OTLP receiver for technical logs, traces, and metrics.
 
-For .NET, `Microsoft.Extensions.Logging`, `Activity`, and `Meter` remain the preferred local APIs. Export is handled through the OpenTelemetry .NET SDK.
+For .NET, `Microsoft.Extensions.Logging`, `Activity`, and `Meter` remain the preferred local APIs. Trace and metric export is handled through the OpenTelemetry .NET SDK.
 
-Serilog may be used in .NET hosts as the structured logging implementation and is useful for production hosts when it improves bootstrap logging, structured JSON output, enrichment, and request logging. Application code still depends only on `ILogger<T>` from `Microsoft.Extensions.Logging`. Serilog sinks to specific vendor systems are not the standard path; OpenTelemetry/OTLP or structured output collected by Grafana Alloy remain preferred.
+Log delivery is handled by `Logaffe.Extensions.Logging`, an `ILoggerProvider` that is additive: the console provider stays, and application code still depends only on `ILogger<T>`. It reads `Activity.Current`, so an entry carries the trace and span of the request it belongs to and correlates with what OTLP exported without the application passing anything.
+
+Serilog may be used in .NET hosts as the structured logging implementation when it improves bootstrap logging, structured JSON output, enrichment, or request logging. `Logaffe.Serilog` is the delivery path in that case. Application code still depends only on `ILogger<T>`.
 
 For Next.js and Node.js, server-side logs are structured and connected through OpenTelemetry where stable. Browser-side error reporting primarily uses the GlitchTip or Sentry-compatible SDK; broader browser telemetry needs a separate privacy and sampling decision.
 
 ## Local Log Output For Operators
 
-Operators without their own Grafana LGTM Stack still need usable technical logs. Applications therefore emit structured logs at least to `stdout`/`stderr`, preferably as JSON and suitable for Docker, systemd, or simple log collectors.
+Operators without a logaffe installation still need usable technical logs. Applications therefore emit structured logs at least to `stdout`/`stderr`, preferably as JSON and suitable for Docker, systemd, or simple log collectors.
 
 Optional rolling file logs are allowed for self-hosted installations when they are configurable and include rotation, retention, size limits, and safe file permissions. File logs are an operator fallback, not a replacement for central observability.
 
@@ -62,7 +73,8 @@ the product or operations context.
 Production hosts should provide these minimum signals:
 
 - structured logs on `stdout`/`stderr`,
-- OTLP export for logs, traces, and metrics,
+- log delivery to a logaffe installation,
+- OTLP export for traces and metrics,
 - error reports to GlitchTip or a Sentry-compatible target.
 
 Host-local agents are not mandatory by default. They may be used when

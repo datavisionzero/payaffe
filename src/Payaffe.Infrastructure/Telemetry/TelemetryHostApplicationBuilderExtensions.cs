@@ -4,7 +4,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Npgsql;
-using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -15,8 +14,11 @@ public static class TelemetryHostApplicationBuilderExtensions
 {
     /// <summary>
     /// Wires the shared observability baseline for a `payaffe` host: structured
-    /// JSON logs on the console, plus OTLP export of logs, traces, and metrics
-    /// when a collector endpoint is configured.
+    /// JSON logs on the console always, delivery of those entries to a logaffe
+    /// installation when one is configured, OTLP export of traces and metrics
+    /// when a collector endpoint is configured, and GlitchTip error reports when
+    /// a DSN is configured. Each channel carries what the others cannot, and all
+    /// three are optional (ADR 0025).
     /// </summary>
     /// <param name="serviceName">Value for the <c>service.name</c> resource attribute.</param>
     /// <param name="logToStandardError">
@@ -64,16 +66,29 @@ public static class TelemetryHostApplicationBuilderExtensions
                 console => console.LogToStandardErrorThreshold = LogLevel.Trace);
         }
 
-        builder.Logging.AddOpenTelemetry(logging =>
+        // Log entries go to a logaffe installation (ADR 0025). It is additive:
+        // the console provider above stays, and it is what makes a lost
+        // delivery affordable, because the client holds a bounded in-memory
+        // queue and promises nothing about arrival.
+        var logaffe = ResolveLogaffe(options.Logaffe);
+        if (logaffe is not null)
         {
-            logging.IncludeFormattedMessage = true;
-            logging.IncludeScopes = true;
-            logging.SetResourceBuilder(resource);
-            if (otlpEndpoint is not null)
+            builder.Logging.AddLogaffe(logaffeOptions =>
             {
-                logging.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint);
-            }
-        });
+                logaffeOptions.Installation = logaffe.Value.Installation;
+                logaffeOptions.IngestToken = logaffe.Value.IngestToken;
+                // The same value as the `service.instance.id` resource
+                // attribute, so an entry and a span agree on which replica
+                // produced them.
+                logaffeOptions.Instance = Environment.MachineName;
+                logaffeOptions.IncludeScopes = true;
+                // Never stdout. The Admin MCP host speaks its protocol there,
+                // and a delivery failure must not be able to corrupt it.
+                logaffeOptions.OnFailure = (message, exception) =>
+                    Console.Error.WriteLine(
+                        exception is null ? message : $"{message} {exception}");
+            });
+        }
 
         if (!string.IsNullOrWhiteSpace(options.GlitchTipDsn))
         {
@@ -130,6 +145,43 @@ public static class TelemetryHostApplicationBuilderExtensions
             : options.OtlpEndpoint;
 
         return Uri.TryCreate(configured, UriKind.Absolute, out var endpoint) ? endpoint : null;
+    }
+
+    /// <summary>
+    /// Resolves logaffe delivery, or <c>null</c> when the installation does not
+    /// use it. A half-configured installation is a startup failure rather than a
+    /// silent one: unlike a wrong OTLP endpoint, which shows up as an empty
+    /// dashboard, missing logs are noticed when somebody needs them.
+    /// </summary>
+    private static (Uri Installation, string IngestToken)? ResolveLogaffe(LogaffeOptions options)
+    {
+        if (options.IsUnconfigured)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.Url))
+        {
+            throw new InvalidOperationException(
+                "Observability:Logaffe:IngestToken is set without Observability:Logaffe:Url. " +
+                "Set the address of the logaffe installation, or clear both to keep logs on stdout.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.IngestToken))
+        {
+            throw new InvalidOperationException(
+                "Observability:Logaffe:Url is set without Observability:Logaffe:IngestToken. " +
+                "The token is what names the project entries land in, so delivery is refused without it.");
+        }
+
+        if (!Uri.TryCreate(options.Url, UriKind.Absolute, out var installation) ||
+            (installation.Scheme != Uri.UriSchemeHttp && installation.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                $"Observability:Logaffe:Url is not an absolute http or https address: '{options.Url}'.");
+        }
+
+        return (installation, options.IngestToken);
     }
 
     private static string ResolveServiceVersion(TelemetryOptions options)

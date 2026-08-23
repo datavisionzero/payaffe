@@ -160,6 +160,8 @@ them:
 - `PAYAFFE_EXCHANGE_RATES_REQUEST_TIMEOUT`
 - `PAYAFFE_COINGECKO_API_KEY`
 - `PAYAFFE_RUN_WORKERS_IN_API_HOST`
+- `PAYAFFE_LOGAFFE_URL`
+- `PAYAFFE_LOGAFFE_TOKEN`
 - `PAYAFFE_OTLP_ENDPOINT`
 - `PAYAFFE_OPERATIONAL_METRICS_SNAPSHOT_INTERVAL`
 - `PAYAFFE_BACKEND_GLITCHTIP_DSN`
@@ -438,7 +440,9 @@ Working on payaffe builds them from the working tree instead:
 docker compose up --build db api worker web
 ```
 
-Technical telemetry is configured through `PAYAFFE_OTLP_ENDPOINT` and
+Logs are delivered to a logaffe installation through `PAYAFFE_LOGAFFE_URL` and
+`PAYAFFE_LOGAFFE_TOKEN`, which are set together or not at all. Traces and
+metrics use `PAYAFFE_OTLP_ENDPOINT` and error reports
 `PAYAFFE_BACKEND_GLITCHTIP_DSN`; see [observability.md](observability.md).
 
 ## Upgrading

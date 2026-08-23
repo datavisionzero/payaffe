@@ -70,9 +70,13 @@
 
   <ItemGroup Label="Observability">
     <!--
-      OpenTelemetry over OTLP is the telemetry standard; Sentry.Extensions.Logging
-      is what talks to a GlitchTip endpoint, which is Sentry-compatible.
+      Three channels, and each carries what the others cannot. Logs go to a
+      logaffe installation through its ILogger provider (ADR 0025);
+      OpenTelemetry over OTLP carries traces and metrics, which logaffe does not
+      take; Sentry.Extensions.Logging talks to a GlitchTip endpoint, which is
+      Sentry-compatible, for error reports.
     -->
+    <PackageVersion Include="Logaffe.Extensions.Logging" Version="0.5.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />

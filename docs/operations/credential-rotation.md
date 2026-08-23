@@ -1,7 +1,8 @@
 # Credential Rotation And Revocation
 
 Raw bearer tokens, Webhook secrets, provider API keys, TOTP secrets, Recovery
-Codes, database passwords, and GlitchTip DSNs must never appear in Git, in logs,
+Codes, database passwords, logaffe ingest tokens, and GlitchTip DSNs must never
+appear in Git, in logs,
 in Audit Log details, in support messages, or in contract snapshots. The product
 stores verifiers and restricted references, not secret values, and rotation has
 to keep it that way.
@@ -89,6 +90,12 @@ Admin MCP consumers. All four read the same connection string.
 
 Rotate the OTLP endpoint credentials and the GlitchTip DSN in restricted
 configuration and verify export with a synthetic safe event.
+
+Rotate the logaffe ingest token at the logaffe installation, then update
+`PAYAFFE_LOGAFFE_TOKEN` and restart the API, worker, and Admin MCP hosts. The
+old token stops being accepted as soon as logaffe revokes it, and entries
+produced in between are lost rather than queued — the console log of each host
+still has them, which is why the loss is tolerable.
 
 ## Record Keeping
 

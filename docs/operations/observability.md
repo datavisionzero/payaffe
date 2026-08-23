@@ -2,8 +2,9 @@
 
 `payaffe` follows the shared observability baseline in
 [../architecture/observability-baseline.md](../architecture/observability-baseline.md):
-structured logs on stdout, OpenTelemetry for traces and metrics, OTLP export to
-a collector, and GlitchTip for error reports.
+structured logs on stdout delivered to a logaffe installation, OpenTelemetry
+for traces and metrics with OTLP export to a collector, and GlitchTip for error
+reports.
 
 ## What Every Host Emits
 
@@ -11,6 +12,9 @@ The API, worker, and Admin MCP hosts share one telemetry setup.
 
 - Structured JSON logs with scopes on stdout. The Admin MCP host writes its log
   lines to stderr instead, because stdout carries the MCP protocol.
+- Those same entries delivered to a logaffe installation when one is configured
+  ([ADR 0025](../adr/0025-logs-are-delivered-to-logaffe.md)). Delivery is
+  additive and never replaces the console output.
 - Resource attributes `service.name` (`payaffe-api`, `payaffe-worker`,
   `payaffe-mcp`), `service.namespace` (`payaffe`), `service.version`,
   `service.instance.id`, and `deployment.environment`.
@@ -48,7 +52,9 @@ stays visible even when the lease holder is the unhealthy instance.
 
 | Environment variable | Configuration key | Effect |
 | --- | --- | --- |
-| `PAYAFFE_OTLP_ENDPOINT` | `Observability:OtlpEndpoint` | OTLP receiver, normally Grafana Alloy, for example `http://alloy:4317`. Empty disables export and keeps structured logs. |
+| `PAYAFFE_LOGAFFE_URL` | `Observability:Logaffe:Url` | Scheme and host of the logaffe installation, for example `https://logs.example.com`. The ingest path is appended by the client and is not a setting. Empty keeps logs on stdout only. |
+| `PAYAFFE_LOGAFFE_TOKEN` | `Observability:Logaffe:IngestToken` | Ingest token. A secret, and also what names the logaffe project entries land in. |
+| `PAYAFFE_OTLP_ENDPOINT` | `Observability:OtlpEndpoint` | OTLP receiver for traces and metrics, normally Grafana Alloy, for example `http://alloy:4317`. Logs do not travel this path. Empty disables export. |
 | `PAYAFFE_DEPLOYMENT_ENVIRONMENT` | `Observability:DeploymentEnvironment` | `deployment.environment` resource attribute. |
 | `PAYAFFE_RELEASE` | `Observability:ServiceVersion` | `service.version` resource attribute. |
 | `PAYAFFE_BACKEND_GLITCHTIP_DSN` | `Observability:GlitchTipDsn` | Sentry-compatible DSN for backend error reports. Empty disables error reporting. |
@@ -56,6 +62,28 @@ stays visible even when the lease holder is the unhealthy instance.
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` is accepted as an alternative to
 `PAYAFFE_OTLP_ENDPOINT` for operators who already set the conventional variable.
+
+### Log delivery
+
+`PAYAFFE_LOGAFFE_URL` and `PAYAFFE_LOGAFFE_TOKEN` go together. Setting one
+without the other fails startup with a message naming the missing key, rather
+than starting a host whose logs go nowhere — a wrong OTLP endpoint shows up as
+an empty dashboard, but missing logs are discovered at the moment somebody needs
+them.
+
+Delivery is fire-and-forget: a bounded in-memory queue that drops its oldest
+entries when full, no durable buffer, and no retry that outlives the process. It
+never blocks or throws into the host. A failed delivery is reported on stderr,
+and the console log is still complete, which is what makes the loss affordable.
+
+The logger category arrives as `SourceContext`, and the trace and span come from
+the current `Activity`, so an entry in logaffe correlates with the span the same
+request produced in Tempo. The instance identifier is the same value as the
+`service.instance.id` resource attribute.
+
+Issue one ingest token per installation and treat it like the GlitchTip DSN
+below. Rotating it is a logaffe-side operation followed by a restart of the API,
+worker, and MCP hosts.
 
 A GlitchTip DSN is a secret. Rotate it if it is exposed; see
 [credential-rotation.md](credential-rotation.md).

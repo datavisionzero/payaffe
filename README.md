@@ -105,7 +105,7 @@ backup, and rotation procedures are in [docs/operations/](docs/operations/).
 ## Development
 
 ```sh
-dotnet test Payaffe.slnx          # 279 tests; integration tests need Docker
+dotnet test Payaffe.slnx          # 286 tests; integration tests need Docker
 pnpm install
 pnpm web:check                   # generate, test, typecheck, e2e, build
 ```

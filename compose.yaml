@@ -34,6 +34,11 @@ x-backend-environment: &backend-environment
   BlockchainObservation__Nownodes__EthBaseUrl: ${PAYAFFE_BLOCKCHAIN_OBSERVATION_NOWNODES_ETH_BASE_URL:-https://eth-blockbook.nownodes.io}
   BlockchainObservation__Nownodes__ApiKeyReference: ${PAYAFFE_BLOCKCHAIN_OBSERVATION_NOWNODES_API_KEY_REFERENCE:-}
   BlockchainObservation__Nownodes__MaxTransactionsPerAddressPoll: ${PAYAFFE_BLOCKCHAIN_OBSERVATION_NOWNODES_MAX_TRANSACTIONS_PER_ADDRESS_POLL:-10}
+  # Where log entries go (ADR 0025). Both together or neither: a half
+  # configuration is refused at startup rather than losing logs quietly. The
+  # token is a secret and it also names the logaffe project entries land in.
+  Observability__Logaffe__Url: ${PAYAFFE_LOGAFFE_URL:-}
+  Observability__Logaffe__IngestToken: ${PAYAFFE_LOGAFFE_TOKEN:-}
   Observability__OtlpEndpoint: ${PAYAFFE_OTLP_ENDPOINT:-}
   Observability__DeploymentEnvironment: ${PAYAFFE_DEPLOYMENT_ENVIRONMENT:-production}
   Observability__ServiceVersion: ${PAYAFFE_RELEASE:-}

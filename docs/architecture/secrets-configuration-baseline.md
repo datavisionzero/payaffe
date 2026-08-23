@@ -30,6 +30,7 @@ It does not choose a mandatory central secret store.
 - Webhook Endpoint secrets,
 - Hosted Blockchain API provider keys,
 - Exchange Rate Source API keys,
+- logaffe ingest tokens,
 - GlitchTip or Sentry-compatible DSNs when an installation treats them as
   sensitive,
 - OTLP exporter credentials or headers,
@@ -104,6 +105,7 @@ Optional integrations may be disabled when their secrets are missing:
 
 - Hosted Blockchain API provider mode that requires a provider key,
 - CoinGecko or another Exchange Rate Source mode that requires an API key,
+- log delivery to logaffe,
 - GlitchTip or OTLP export,
 - SMTP if email is added later.
 

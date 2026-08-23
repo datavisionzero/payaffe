@@ -64,7 +64,7 @@ The product exposes:
 - Keep payment detection, settlement, webhook delivery, and audit behavior explainable.
 - Do not introduce key custody unless a future ADR explicitly changes the non-custodial product boundary.
 - Treat payment state transitions, underpayment settlement, webhook credentials, bearer tokens, and admin MCP actions as security- and audit-relevant.
-- Technical telemetry follows OpenTelemetry/OTLP, with optional Serilog behind `ILogger<T>` for .NET hosts, Grafana Alloy as the preferred collector, Grafana LGTM Stack for logs, dashboards, traces, and metrics, and GlitchTip for error tracking.
+- Logs go to a logaffe installation through `Logaffe.Extensions.Logging`, additive to the console provider ([ADR 0025](docs/adr/0025-logs-are-delivered-to-logaffe.md)). Traces and metrics follow OpenTelemetry/OTLP, with Grafana Alloy as the preferred collector and the Grafana LGTM Stack behind it, and GlitchTip handles error tracking.
 
 ## Architecture Baselines
 
