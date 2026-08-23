@@ -1,5 +1,9 @@
 # Migrations Are a Step, Not a Startup Side Effect
 
+**Superseded by [ADR 0027](./0027-migrations-apply-on-startup.md).** The hosts
+now apply the schema while they start. What follows is the decision as it stood,
+kept because ADR 0027 is an answer to it.
+
 Schema changes are applied by the `migrations` service, run deliberately. The
 `api`, `worker`, `mcp`, and `web` hosts never apply a migration while starting
 up, even though EF Core makes doing so a single line.

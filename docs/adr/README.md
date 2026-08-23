@@ -46,7 +46,7 @@ material value to understanding the decision.
 - [0013 – A payment change and the events it causes share one transaction](./0013-a-payment-change-and-the-events-it-causes-share-one-transaction.md)
 - [0014 – Durable work runs on PostgreSQL, not on a queue](./0014-durable-work-runs-on-postgresql-not-on-a-queue.md)
 - [0015 – The schema is split by what it would cost to leak](./0015-the-schema-is-split-by-what-it-would-cost-to-leak.md)
-- [0016 – Migrations are a step, not a startup side effect](./0016-migrations-are-a-step-not-a-startup-side-effect.md)
+- [0016 – Migrations are a step, not a startup side effect](./0016-migrations-are-a-step-not-a-startup-side-effect.md) — superseded by 0027
 - [0017 – One installation serves one shop](./0017-one-installation-serves-one-shop.md)
 - [0018 – Every admin is fully privileged](./0018-every-admin-is-fully-privileged.md)
 - [0019 – The second factor is TOTP, and sensitive writes need a fresh one](./0019-the-second-factor-is-totp-and-sensitive-writes-need-a-fresh-one.md)
@@ -57,3 +57,4 @@ material value to understanding the decision.
 - [0024 – The browser API lives under /api, on one origin](./0024-the-browser-api-lives-under-api-on-one-origin.md)
 - [0025 – Logs are delivered to logaffe, and only logs](./0025-logs-are-delivered-to-logaffe.md)
 - [0026 – An error is an entry, and there is no error tracker](./0026-an-error-is-an-entry-and-there-is-no-error-tracker.md)
+- [0027 – Migrations apply on startup](./0027-migrations-apply-on-startup.md)

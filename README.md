@@ -70,14 +70,14 @@ curl -O    "$base/compose.yaml"
 curl -o .env "$base/.env.example"
 chmod 600 .env
 # edit .env: database password, public addresses, provider key, wallet sources
-docker compose --profile operations run --rm migrations
 docker compose up -d
 ```
 
-Migrations are a deliberate step and never a startup side effect
-([ADR 0016](docs/adr/0016-migrations-are-a-step-not-a-startup-side-effect.md)),
-which is why they run first and under their own profile. Upgrading is the same
-three commands: `pull`, migrate, `up`.
+The hosts bring the schema up to date as they start
+([ADR 0027](docs/adr/0027-migrations-apply-on-startup.md)), so there is no
+migration step to run and no order to remember. Upgrading is `pull` and `up`.
+Back up the database before an upgrade: there is no downgrade, so that artifact
+is the rollback.
 
 Put a reverse proxy in front of it to terminate TLS and serve everything from
 one address. It needs two rules: `/api/` and `/health/` go to the API host,

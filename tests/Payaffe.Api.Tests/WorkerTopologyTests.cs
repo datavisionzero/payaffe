@@ -1,4 +1,5 @@
 using Payaffe.Infrastructure.Payments;
+using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Telemetry;
 using Payaffe.Infrastructure.Webhooks;
 using Microsoft.AspNetCore.Hosting;
@@ -33,14 +34,19 @@ public sealed class WorkerTopologyTests
     }
 
     /// <summary>
-    /// The framework registers hosted services of its own, such as data
-    /// protection, which the process topology decision does not cover.
+    /// The scheduled workers, and only those. The framework registers hosted
+    /// services of its own, such as data protection, which the process
+    /// topology decision does not cover — and so does the startup schema
+    /// migration (ADR 0027), which runs in either topology because both hosts
+    /// need the schema. Deriving from
+    /// <see cref="SchemaGatedBackgroundService"/> is what makes something a
+    /// scheduled worker, so that is what this asks.
     /// </summary>
     private static IHostedService[] ProductHostedServices(WebApplicationFactory<Program> factory)
     {
         return [.. factory.Services
             .GetServices<IHostedService>()
-            .Where(service => service.GetType().Assembly == typeof(PaymentLifecycleHostedService).Assembly)];
+            .Where(service => service is SchemaGatedBackgroundService)];
     }
 
     private static WebApplicationFactory<Program> CreateFactory(bool? runWorkersInApiHost)

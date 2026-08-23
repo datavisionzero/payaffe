@@ -185,7 +185,8 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
                 PollInterval = TimeSpan.FromHours(1),
                 MaxEventsPerPoll = 5,
             }),
-            NullLogger<WebhookDeliveryHostedService>.Instance);
+            NullLogger<WebhookDeliveryHostedService>.Instance,
+            SchemaMigrationState.AlreadyApplied());
 
         try
         {

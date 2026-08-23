@@ -19,11 +19,12 @@ namespace Payaffe.Infrastructure.Telemetry;
 public sealed class OperationalMetricsHostedService(
     IServiceScopeFactory scopeFactory,
     IOptions<OperationalMetricsOptions> options,
-    ILogger<OperationalMetricsHostedService> logger) : BackgroundService
+    ILogger<OperationalMetricsHostedService> logger,
+    SchemaMigrationState schemaMigration) : SchemaGatedBackgroundService(schemaMigration)
 {
     private readonly OperationalMetricsOptions _options = options.Value;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)
         {

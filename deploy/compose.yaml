@@ -2,13 +2,12 @@
 # checkout and no build. Download this file and the `.env.example` beside it,
 # copy the example to `.env`, fill in the values it asks for, and start.
 #
-#   docker compose --profile operations run --rm migrations
 #   docker compose up -d
 #
-# Upgrading is `docker compose pull`, then the migration step again, then
-# `docker compose up -d`. Migrations are a deliberate step and never a startup
-# side effect (ADR 0016), so an upgrade can be stopped between the schema and
-# the code.
+# Upgrading is `docker compose pull` and `docker compose up -d`. The hosts apply
+# the schema as they start (ADR 0027); while they do, they answer /health/live
+# and report /health/ready as 503. Back up the database before an upgrade —
+# there is no downgrade, so that artifact is the rollback.
 #
 # The root compose.yaml is the other file and is not this one: it builds every
 # image from the working tree and is for developing payaffe, not for running it.
@@ -105,14 +104,14 @@ services:
       retries: 5
       start_period: 10s
 
-  # Run before every `up`, including the first one and every upgrade:
+  # Not part of an upgrade any more: the hosts apply the schema themselves as
+  # they start (ADR 0027). This runs the same code, and stays for the operator
+  # who wants the schema applied before anything else is started:
   #
   #   docker compose --profile operations run --rm migrations
   #
-  # The `operations` profile keeps it out of `docker compose up`, so applying a
-  # schema is always something somebody decided to do (ADR 0016). The same
-  # image carries `bootstrap-admin`, which creates the first admin account
-  # (ADR 0020).
+  # The same image carries `bootstrap-admin`, which creates the first admin
+  # account (ADR 0020) and is the reason this service is still here at all.
   migrations:
     image: ghcr.io/datavisionzero/payaffe-migrations:${PAYAFFE_VERSION:-latest}
     depends_on:

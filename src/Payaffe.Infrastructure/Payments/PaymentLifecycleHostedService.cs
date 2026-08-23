@@ -1,6 +1,7 @@
 using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
+using Payaffe.Infrastructure.Persistence;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -10,7 +11,8 @@ namespace Payaffe.Infrastructure.Payments;
 public sealed class PaymentLifecycleHostedService(
     IServiceScopeFactory scopeFactory,
     IOptions<PaymentLifecycleWorkerOptions> options,
-    ILogger<PaymentLifecycleHostedService> logger) : BackgroundService
+    ILogger<PaymentLifecycleHostedService> logger,
+    SchemaMigrationState schemaMigration) : SchemaGatedBackgroundService(schemaMigration)
 {
     private readonly PaymentLifecycleWorkerOptions _options = options.Value;
     private readonly int _expirationBatchSize = Math.Max(1, options.Value.ExpirationBatchSize);
@@ -18,7 +20,7 @@ public sealed class PaymentLifecycleHostedService(
         ? options.Value.PollInterval
         : TimeSpan.FromMinutes(1);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)
         {
