@@ -21,7 +21,10 @@ is deliberate: the Integration API and the webhook contract are versioned and
 snapshotted, but they have not yet been depended on by anyone, and `1.0.0` is
 reserved for the point where breaking them would cost something. Pin
 `PAYAFFE_VERSION` to a version rather than leaving it at `latest`, and read the
-release notes before moving it.
+release notes before moving it. A `main` tag is published too and is not for
+installations — it is the trunk, and it exists so a staging environment can
+follow it; see
+[docs/operations/docker-compose.md](docs/operations/docker-compose.md).
 
 What works end to end: payment creation over the Integration API with
 idempotency, the payer page with currency selection and rate locking, address

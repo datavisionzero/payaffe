@@ -10,13 +10,19 @@ on:
 permissions:
   contents: read
 
-# Per branch, and superseded runs are cancelled. This workflow publishes
-# nothing, so there is no registry tag to move and no reason to let an outdated
-# run finish: pushing three times to a pull request should cost one run, not
-# three. Releases serialise separately in release.yml, which does publish.
+# Per branch. Superseded runs are cancelled everywhere except on the trunk,
+# because pushing three times to a pull request should cost one run rather than
+# three — and a pull request run publishes nothing, so there is no registry tag
+# an outdated one could move.
+#
+# The trunk is the exception, and not cancelling there is the whole point: a
+# green push to `main` moves `:main`, so a cancelled run would leave that tag
+# on an older commit with nothing saying so. Keeping the group per ref makes
+# two quick trunk pushes serialise instead of racing to move the same tag,
+# which is what release.yml does for `:latest` for the same reason.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # The backend, in one job rather than two. The integration tests start
@@ -109,3 +115,55 @@ jobs:
           cd deploy
           sed 's/^PAYAFFE_DB_PASSWORD=$/PAYAFFE_DB_PASSWORD=ci-placeholder/' .env.example > .env
           docker compose config --quiet
+
+  # What a staging installation follows. Every green trunk push moves `:main`;
+  # only a release tag moves `:latest`, and that is release.yml's job. The two
+  # never touch the same tag, so an installation that never asked for the trunk
+  # cannot be dragged onto it by an ordinary `docker compose pull`.
+  #
+  # It needs all three jobs above, which is the point: `:main` is only ever
+  # moved by a commit whose tests passed.
+  trunk-images:
+    name: Trunk images
+    needs: [backend, frontend, deployment]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # Same shape as the release matrix: a failure names the image that failed,
+      # and four published images with one missing are easier to finish than to
+      # diagnose.
+      fail-fast: false
+      matrix:
+        image: [api, worker, web, migrations, mcp]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Sign in to the registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # amd64 only, unlike a release. A release ships both architectures because
+      # an operator may be on either (release.yml says why); `:main` is followed
+      # by our own staging installation, which is x86. Emulating arm64 for five
+      # images on every trunk push would spend minutes per push on an image
+      # nothing pulls.
+      - name: Build and publish
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.image }}/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/datavisionzero/payaffe-${{ matrix.image }}:main
+          # A scope of its own rather than the release's. They build different
+          # platform sets, and one `mode=max` export overwriting the other's
+          # manifest is a slow, confusing way to lose a cache.
+          cache-from: type=gha,scope=trunk-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=trunk-${{ matrix.image }}
