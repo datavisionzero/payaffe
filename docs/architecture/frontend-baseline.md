@@ -203,7 +203,7 @@ Required baseline:
 
 ## Frontend Observability
 
-Unexpected client-side errors are reported to GlitchTip or a Sentry-compatible
+Unexpected client-side errors are reported to the product's own API and logged there, rather than to a third-party
 target when configured.
 
 Reports include release or version, deployment environment, and correlation

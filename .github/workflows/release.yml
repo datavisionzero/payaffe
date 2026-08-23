@@ -156,17 +156,16 @@ jobs:
             echo "TAGS"
           } >> "$GITHUB_OUTPUT"
 
-      # The web image is the only one that needs its version passed in: the .NET
-      # hosts read it from the assembly Directory.Build.props stamped, and the
-      # version job has already refused any tag those two disagree about.
+      # No build arguments. The .NET hosts report the version Directory.Build.props
+      # stamped into them, and the web bundle carries neither a version nor an
+      # API address on purpose -- both would pin the published image to one
+      # installation (ADR 0024).
       - name: Build and publish
         uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/${{ matrix.image }}/Dockerfile
           push: true
-          build-args: |
-            NEXT_PUBLIC_RELEASE=${{ needs.version.outputs.version }}
           tags: ${{ steps.tags.outputs.value }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}

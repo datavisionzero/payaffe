@@ -1,5 +1,11 @@
 # Logs Are Delivered to logaffe, and Only Logs
 
+> **Amended by [ADR 0026](./0026-an-error-is-an-entry-and-there-is-no-error-tracker.md).**
+> GlitchTip was kept by this decision and has since been removed: logaffe gained
+> an alert condition for a project's error rate, which was the one capability it
+> was still being run for. Errors are entries and go to logaffe with the rest.
+> Everything below about the split between logs, traces, and metrics still holds.
+
 Every host writes structured JSON to its console, and from there its log entries
 go to a [logaffe](https://github.com/datavisionzero/logaffe) installation
 through `Logaffe.Extensions.Logging`, an `ILoggerProvider` on nuget.org. Traces

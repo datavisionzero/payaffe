@@ -34,7 +34,7 @@
 - Blockchain Observation must isolate provider-specific API behavior from the common payment lifecycle so new supported providers can be added through software updates.
 - The MVP is non-custodial: it must not store spending keys and must not perform refunds, sweeps, or withdrawals.
 - Durable background work should start with .NET worker processes and PostgreSQL-backed jobs or outbox tables.
-- Observability should use external self-hosted services according to [observability-baseline.md](observability-baseline.md): logaffe for logs, delivered through its `ILogger` provider; OpenTelemetry/OTLP as the telemetry standard for traces and metrics, with Grafana Alloy as the preferred collector and the Grafana LGTM Stack for dashboards, traces, and metrics; plus GlitchTip for error reporting. Production setups document telemetry retention, sampling, minimum dashboards, and minimum alerts as described there.
+- Observability should use external self-hosted services according to [observability-baseline.md](observability-baseline.md): logaffe for logs, delivered through its `ILogger` provider; OpenTelemetry/OTLP as the telemetry standard for traces and metrics, with Grafana Alloy as the preferred collector and the Grafana LGTM Stack for dashboards, traces, and metrics. There is no separate error-tracking service: an error is a log entry (ADR 0026). Production setups document telemetry retention, sampling, minimum dashboards, and minimum alerts as described there.
 - Health and readiness endpoints, secret configuration, controlled migration
   runs, and PostgreSQL backups follow
   [deployment-operations-baseline.md](deployment-operations-baseline.md) and

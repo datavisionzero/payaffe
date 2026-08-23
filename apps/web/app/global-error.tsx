@@ -1,6 +1,6 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
+import { reportClientError } from "@/lib/client-errors";
 import { useEffect } from "react";
 
 export default function GlobalError({
@@ -10,8 +10,10 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // React routes a render error here rather than to `window.onerror`, so this
+  // is the only path that catches one.
   useEffect(() => {
-    Sentry.captureException(error);
+    reportClientError(error);
   }, [error]);
 
   return (

@@ -112,8 +112,8 @@ explains why the obvious alternative was not.
 - Docker Compose for deployment, with the service count treated as a budget.
 - Blockchair or NOWNodes for blockchain observation, one selected at a time.
 - CoinGecko for exchange rates, with a cache and a bounded stale window.
-- logaffe for logs, OpenTelemetry over OTLP for traces and metrics, GlitchTip
-  for errors.
+- logaffe for logs, errors included; OpenTelemetry over OTLP for traces and
+  metrics.
 - MIT licensed, developed in the open on GitHub.
 
 ## Operating an installation

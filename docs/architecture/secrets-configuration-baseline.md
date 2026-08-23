@@ -31,8 +31,6 @@ It does not choose a mandatory central secret store.
 - Hosted Blockchain API provider keys,
 - Exchange Rate Source API keys,
 - logaffe ingest tokens,
-- GlitchTip or Sentry-compatible DSNs when an installation treats them as
-  sensitive,
 - OTLP exporter credentials or headers,
 - SMTP credentials if email is added later,
 - Registry credentials, deploy keys, SSH keys, or CI/CD credentials.
@@ -106,7 +104,7 @@ Optional integrations may be disabled when their secrets are missing:
 - Hosted Blockchain API provider mode that requires a provider key,
 - CoinGecko or another Exchange Rate Source mode that requires an API key,
 - log delivery to logaffe,
-- GlitchTip or OTLP export,
+- OTLP export,
 - SMTP if email is added later.
 
 Disabled optional integrations must be visible through configuration
@@ -178,7 +176,6 @@ Secret raw values must not appear in:
 - technical logs,
 - traces,
 - metrics,
-- GlitchTip or error reports,
 - health or readiness responses,
 - Audit Log entries,
 - Payment Event History,

@@ -10,8 +10,9 @@ public sealed class TelemetryOptions
 {
     /// <summary>
     /// OTLP endpoint of the collector, normally Grafana Alloy. Carries traces
-    /// and metrics only; logs go to logaffe (ADR 0025). When this is empty no
-    /// exporter is registered and traces and metrics stay local.
+    /// and metrics only; logs, errors included, go to logaffe (ADR 0025,
+    /// ADR 0026). When this is empty no exporter is registered and traces and
+    /// metrics stay local.
     /// </summary>
     public string? OtlpEndpoint { get; set; }
 
@@ -23,13 +24,6 @@ public sealed class TelemetryOptions
     /// the host assembly's informational version.
     /// </summary>
     public string? ServiceVersion { get; set; }
-
-    /// <summary>
-    /// Sentry-compatible DSN for GlitchTip error reporting. GlitchTip receives
-    /// error reports only; logs go to logaffe and traces and metrics go through
-    /// OTLP.
-    /// </summary>
-    public string? GlitchTipDsn { get; set; }
 
     /// <summary>Where log entries are delivered.</summary>
     public LogaffeOptions Logaffe { get; set; } = new();

@@ -123,7 +123,6 @@ them:
 - `PAYAFFE_API_PUBLIC_URL`
 - `PAYAFFE_WEB_PUBLIC_ORIGIN`
 - `PAYAFFE_PAYER_PAGE_BASE_URL`
-- `PAYAFFE_WEB_GLITCHTIP_DSN`
 - `PAYAFFE_DEPLOYMENT_ENVIRONMENT`
 - `PAYAFFE_RELEASE`
 - `PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE`
@@ -167,16 +166,14 @@ them:
 - `PAYAFFE_LOGAFFE_TOKEN`
 - `PAYAFFE_OTLP_ENDPOINT`
 - `PAYAFFE_OPERATIONAL_METRICS_SNAPSHOT_INTERVAL`
-- `PAYAFFE_BACKEND_GLITCHTIP_DSN`
 - `PAYAFFE_WORKER_HEALTH_PROBE_INTERVAL`
 - `PAYAFFE_WORKER_HEALTH_MAX_AGE`
 
-Production secrets must not be committed. The web image receives the public
-browser API base URL and optional GlitchTip-compatible browser reporting
-configuration through build arguments. `PAYAFFE_WEB_GLITCHTIP_DSN` is optional;
-when empty, browser error reporting stays disabled. Reports use
-`PAYAFFE_DEPLOYMENT_ENVIRONMENT` and `PAYAFFE_RELEASE` when configured and are
-scrubbed of request bodies, cookies, headers, user data, and URL query strings.
+Production secrets must not be committed. The web image takes one build
+argument, the public browser API base URL, and only for the cross-origin
+topology; it carries nothing installation-specific otherwise. Browser errors are
+posted to this installation's own API and scrubbed there
+([ADR 0026](../adr/0026-an-error-is-an-entry-and-there-is-no-error-tracker.md)).
 The API uses `PAYAFFE_WEB_PUBLIC_ORIGIN` as the allowed browser origin for
 credentials-enabled Admin and Payer browser API calls.
 Blockchain Observation mode configuration uses
@@ -445,8 +442,7 @@ docker compose up --build db api worker web
 
 Logs are delivered to a logaffe installation through `PAYAFFE_LOGAFFE_URL` and
 `PAYAFFE_LOGAFFE_TOKEN`, which are set together or not at all. Traces and
-metrics use `PAYAFFE_OTLP_ENDPOINT` and error reports
-`PAYAFFE_BACKEND_GLITCHTIP_DSN`; see [observability.md](observability.md).
+metrics use `PAYAFFE_OTLP_ENDPOINT`; see [observability.md](observability.md).
 
 ## Upgrading
 

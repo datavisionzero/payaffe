@@ -1,8 +1,8 @@
 # Credential Rotation And Revocation
 
 Raw bearer tokens, Webhook secrets, provider API keys, TOTP secrets, Recovery
-Codes, database passwords, logaffe ingest tokens, and GlitchTip DSNs must never
-appear in Git, in logs,
+Codes, database passwords, and logaffe ingest tokens must never appear in Git,
+in logs,
 in Audit Log details, in support messages, or in contract snapshots. The product
 stores verifiers and restricted references, not secret values, and rotation has
 to keep it that way.
@@ -88,8 +88,8 @@ Rotate the PostgreSQL password with an operator-approved database procedure,
 then update `PAYAFFE_DB_PASSWORD` and restart the migrations, API, worker, and
 Admin MCP consumers. All four read the same connection string.
 
-Rotate the OTLP endpoint credentials and the GlitchTip DSN in restricted
-configuration and verify export with a synthetic safe event.
+Rotate the OTLP endpoint credentials in restricted configuration and verify
+export with a synthetic safe event.
 
 Rotate the logaffe ingest token at the logaffe installation, then update
 `PAYAFFE_LOGAFFE_TOKEN` and restart the API, worker, and Admin MCP hosts. The

@@ -2,9 +2,10 @@
 
 `payaffe` follows the shared observability baseline in
 [../architecture/observability-baseline.md](../architecture/observability-baseline.md):
-structured logs on stdout delivered to a logaffe installation, OpenTelemetry
-for traces and metrics with OTLP export to a collector, and GlitchTip for error
-reports.
+structured logs on stdout delivered to a logaffe installation, and OpenTelemetry
+for traces and metrics with OTLP export to a collector. There is no separate
+error-tracking service: an error is a log entry
+([ADR 0026](../adr/0026-an-error-is-an-entry-and-there-is-no-error-tracker.md)).
 
 ## What Every Host Emits
 
@@ -60,7 +61,6 @@ stays visible even when the lease holder is the unhealthy instance.
 | `PAYAFFE_OTLP_ENDPOINT` | `Observability:OtlpEndpoint` | OTLP receiver for traces and metrics, normally Grafana Alloy, for example `http://alloy:4317`. Logs do not travel this path. Empty disables export. |
 | `PAYAFFE_DEPLOYMENT_ENVIRONMENT` | `Observability:DeploymentEnvironment` | `deployment.environment` resource attribute. |
 | `PAYAFFE_RELEASE` | `Observability:ServiceVersion` | `service.version` resource attribute. |
-| `PAYAFFE_BACKEND_GLITCHTIP_DSN` | `Observability:GlitchTipDsn` | Sentry-compatible DSN for backend error reports. Empty disables error reporting. |
 | `PAYAFFE_OPERATIONAL_METRICS_SNAPSHOT_INTERVAL` | `Observability:OperationalMetrics:SnapshotInterval` | Between 5 seconds and 15 minutes. |
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` is accepted as an alternative to
@@ -123,12 +123,10 @@ the current `Activity`, so an entry in logaffe correlates with the span the same
 request produced in Tempo. The instance identifier is the same value as the
 `service.instance.id` resource attribute.
 
-Issue one ingest token per installation and treat it like the GlitchTip DSN
-below. Rotating it is a logaffe-side operation followed by a restart of the API,
+Issue one ingest token per installation and treat it as a production secret.
+Rotating it is a logaffe-side operation followed by a restart of the API,
 worker, and MCP hosts.
 
-A GlitchTip DSN is a secret. Rotate it if it is exposed; see
-[credential-rotation.md](credential-rotation.md).
 
 ## Dashboard And Alerts
 
@@ -174,5 +172,5 @@ docker compose exec -T db psql --username "$PAYAFFE_DB_USER" --dbname "$PAYAFFE_
    `payaffe.webhook.delivery.attempts` increments with `result=succeeded`.
 5. Trigger and acknowledge one test alert.
 
-Record the installation-specific dashboard, alert, and GlitchTip URLs outside
+Record the installation-specific dashboard, alert, and logaffe URLs outside
 this repository.

@@ -42,7 +42,6 @@ x-backend-environment: &backend-environment
   Observability__OtlpEndpoint: ${PAYAFFE_OTLP_ENDPOINT:-}
   Observability__DeploymentEnvironment: ${PAYAFFE_DEPLOYMENT_ENVIRONMENT:-production}
   Observability__ServiceVersion: ${PAYAFFE_RELEASE:-}
-  Observability__GlitchTipDsn: ${PAYAFFE_BACKEND_GLITCHTIP_DSN:-}
   Observability__OperationalMetrics__SnapshotInterval: ${PAYAFFE_OPERATIONAL_METRICS_SNAPSHOT_INTERVAL:-00:00:30}
 
 services:
@@ -162,9 +161,6 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_PAYAFFE_API_BASE_URL: ${PAYAFFE_API_PUBLIC_URL:-http://localhost:8080}
-        NEXT_PUBLIC_GLITCHTIP_DSN: ${PAYAFFE_WEB_GLITCHTIP_DSN:-}
-        NEXT_PUBLIC_DEPLOYMENT_ENVIRONMENT: ${PAYAFFE_DEPLOYMENT_ENVIRONMENT:-production}
-        NEXT_PUBLIC_RELEASE: ${PAYAFFE_RELEASE:-}
     depends_on:
       api:
         condition: service_started

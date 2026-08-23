@@ -110,7 +110,7 @@ placeholders or local-only non-production defaults.
 
 Start-critical production configuration must fail fast or fail readiness when
 missing or invalid. Optional integrations, such as Hosted Blockchain API keys,
-Exchange Rate Source keys, OTLP export, or GlitchTip, may be disabled when
+Exchange Rate Source keys, OTLP export, or log delivery, may be disabled when
 their configuration is missing, but the disabled state must be visible without
 leaking secret values.
 
@@ -196,7 +196,7 @@ suitable for Docker and centralized collectors.
 
 Technical observability follows
 [observability-baseline.md](observability-baseline.md): OpenTelemetry/OTLP,
-Grafana Alloy, Grafana LGTM Stack, and GlitchTip are the target direction.
+logaffe for logs, with Grafana Alloy and the Grafana LGTM Stack behind traces and metrics, is the target direction.
 
 Minimum production dashboards and alerts should include the shared views for
 host/service status, HTTP/API, workers or jobs, database, and error reports.

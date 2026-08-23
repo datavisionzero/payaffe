@@ -56,3 +56,4 @@ material value to understanding the decision.
 - [0023 – MCP is narrower than the Admin UI, and stays local](./0023-mcp-is-narrower-than-the-admin-ui-and-stays-local.md)
 - [0024 – The browser API lives under /api, on one origin](./0024-the-browser-api-lives-under-api-on-one-origin.md)
 - [0025 – Logs are delivered to logaffe, and only logs](./0025-logs-are-delivered-to-logaffe.md)
+- [0026 – An error is an entry, and there is no error tracker](./0026-an-error-is-an-entry-and-there-is-no-error-tracker.md)

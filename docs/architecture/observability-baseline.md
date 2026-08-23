@@ -6,16 +6,15 @@ This document records the baseline for technical observability.
 
 `payaffe` provides observability through external self-hosted services:
 
-- logaffe for logs.
+- logaffe for logs, errors among them.
 - Grafana LGTM Stack for dashboards, traces, and metrics.
-- GlitchTip for error reporting and exception monitoring.
 
-Three targets, because no one of them takes what the others do. logaffe accepts
-log entries and neither spans nor time series; the LGTM stack takes those but is
-a larger thing to run than a single operator needs for reading a log; GlitchTip
-groups errors across releases, which neither of the others attempts. The Grafana
-LGTM Stack target here is Grafana for dashboards, Tempo for traces, and Mimir
-for metrics. Loki is not part of it, because logaffe is where logs go.
+Two targets, because neither takes what the other does: logaffe accepts log
+entries and neither spans nor time series. An error is an entry and is not sent
+anywhere separately ([ADR 0026](../adr/0026-an-error-is-an-entry-and-there-is-no-error-tracker.md)).
+The Grafana LGTM Stack target here is Grafana for dashboards, Tempo for traces,
+and Mimir for metrics. Loki is not part of it, because logaffe is where logs
+go.
 
 An operator running several applications may point all of them at one
 observability stack rather than running one per application. A dedicated stack
@@ -46,7 +45,7 @@ Structured logs must be correlatable with traces and metrics. At minimum, these 
 
 HTTP, database, worker, blockchain observation, webhook, and external provider contexts should use structured attributes, such as `http.method`, `http.route`, `http.status_code`, `db.system`, `db.operation`, or domain-neutral provider and job attributes.
 
-Error tracking is provided separately through GlitchTip with Sentry-compatible SDKs. GlitchTip is not the general OTLP receiver for technical logs, traces, and metrics.
+There is no separate error-tracking service. An error is a log entry at `Error` or above and reaches logaffe with everything else; grouping, issue state, and release regression are given up deliberately and the cost is recorded in ADR 0026.
 
 For .NET, `Microsoft.Extensions.Logging`, `Activity`, and `Meter` remain the preferred local APIs. Trace and metric export is handled through the OpenTelemetry .NET SDK.
 
@@ -54,7 +53,7 @@ Log delivery is handled by `Logaffe.Extensions.Logging`, an `ILoggerProvider` th
 
 Serilog may be used in .NET hosts as the structured logging implementation when it improves bootstrap logging, structured JSON output, enrichment, or request logging. `Logaffe.Serilog` is the delivery path in that case. Application code still depends only on `ILogger<T>`.
 
-For Next.js and Node.js, server-side logs are structured and connected through OpenTelemetry where stable. Browser-side error reporting primarily uses the GlitchTip or Sentry-compatible SDK; broader browser telemetry needs a separate privacy and sampling decision.
+For Next.js and Node.js, server-side logs are structured and connected through OpenTelemetry where stable. Browser-side errors are posted to the product's own API and logged there rather than to a third-party SDK, which keeps the browser bundle free of any installation-specific value; broader browser telemetry needs a separate privacy and sampling decision.
 
 ## Local Log Output For Operators
 
@@ -73,9 +72,8 @@ the product or operations context.
 Production hosts should provide these minimum signals:
 
 - structured logs on `stdout`/`stderr`,
-- log delivery to a logaffe installation,
-- OTLP export for traces and metrics,
-- error reports to GlitchTip or a Sentry-compatible target.
+- log delivery to a logaffe installation, errors included,
+- OTLP export for traces and metrics.
 
 Host-local agents are not mandatory by default. They may be used when
 operations, platform, network boundaries, or scaling require them.

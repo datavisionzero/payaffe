@@ -15,10 +15,9 @@ public static class TelemetryHostApplicationBuilderExtensions
     /// <summary>
     /// Wires the shared observability baseline for a `payaffe` host: structured
     /// JSON logs on the console always, delivery of those entries to a logaffe
-    /// installation when one is configured, OTLP export of traces and metrics
-    /// when a collector endpoint is configured, and GlitchTip error reports when
-    /// a DSN is configured. Each channel carries what the others cannot, and all
-    /// three are optional (ADR 0025).
+    /// installation when one is configured, and OTLP export of traces and
+    /// metrics when a collector endpoint is configured. Errors are entries like
+    /// any other and are not sent anywhere separately (ADR 0026).
     /// </summary>
     /// <param name="serviceName">Value for the <c>service.name</c> resource attribute.</param>
     /// <param name="logToStandardError">
@@ -87,21 +86,6 @@ public static class TelemetryHostApplicationBuilderExtensions
                 logaffeOptions.OnFailure = (message, exception) =>
                     Console.Error.WriteLine(
                         exception is null ? message : $"{message} {exception}");
-            });
-        }
-
-        if (!string.IsNullOrWhiteSpace(options.GlitchTipDsn))
-        {
-            builder.Logging.AddSentry(sentry =>
-            {
-                sentry.Dsn = options.GlitchTipDsn;
-                sentry.Environment = options.DeploymentEnvironment ?? builder.Environment.EnvironmentName;
-                sentry.Release = options.ServiceVersion;
-                // Error reporting must not become a second channel for payer or
-                // Admin data, so request bodies and identities stay out of it.
-                sentry.SendDefaultPii = false;
-                sentry.MaxBreadcrumbs = 20;
-                sentry.MinimumEventLevel = LogLevel.Error;
             });
         }
 
