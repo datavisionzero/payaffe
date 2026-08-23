@@ -172,6 +172,6 @@ Implementation must include focused verification that:
 - domain IDs use UUIDs where required,
 - technical instants use `timestamptz`,
 - mutable concurrent resources have a concurrency value where needed,
-- production hosts do not auto-run migrations as normal startup side effects,
+- concurrent hosts applying the schema on startup do so exactly once,
 - explicit SQL paths preserve authorization, audit, tenant or installation
   context, and observability expectations.
