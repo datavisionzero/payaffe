@@ -76,6 +76,26 @@ docker build -f apps/web/Dockerfile \
 
 and sets `PAYAFFE_WEB_IMAGE=payaffe-web:local` in `.env`.
 
+## Published image tags
+
+Three tags are published to `ghcr.io/datavisionzero`, and only one of them is
+meant for an installation:
+
+| Tag | Moved by | For |
+| --- | --- | --- |
+| `0.1.0` | nothing, once published | what an installation pins |
+| `latest` | a release tag, never a prerelease | an installation that accepts every release |
+| `main` | every green trunk push | our own staging installation |
+
+`main` is the trunk, which is to say a commit whose tests passed and nothing
+more: no release notes, no version number, and no promise that the Integration
+API contract it carries is one anybody has agreed to. Pointing an installation
+at it means taking whatever was merged in the last few minutes. It exists so
+that a staging environment can follow the trunk without a build step of its own.
+
+Pin `PAYAFFE_VERSION` to a released version. A pull should upgrade when the
+operator decides to, not when a tag moves.
+
 ## Services
 
 Both Compose files define these concrete services:
@@ -466,9 +486,8 @@ docker compose up -d
 Back up the database before the `up`, not after it
 ([postgresql-backup-restore.md](postgresql-backup-restore.md)). There is no
 downgrade, so that artifact is the rollback for a migration that fails on the
-way up. Pin
-`PAYAFFE_VERSION` to a released version rather than leaving it at `latest`, so
-that a pull upgrades when the operator decides to and not when a tag moves.
+way up. Which version a pull moves to is
+[the tag `PAYAFFE_VERSION` names](#published-image-tags).
 
 ## Ports
 
