@@ -168,6 +168,7 @@ public sealed class ClientErrorEndpointTests
             builder.UseSetting("Diagnostics:ClientErrors:Enabled", enabled ? "true" : "false");
             builder.ConfigureServices(services =>
             {
+                services.RemoveStartupSchemaMigration();
                 services.AddSingleton<ILoggerProvider>(log);
                 if (permitLimit is not null)
                 {

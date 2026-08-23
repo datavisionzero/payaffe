@@ -1,5 +1,6 @@
 using Payaffe.Infrastructure.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
+using Payaffe.Infrastructure.Persistence;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -9,7 +10,8 @@ namespace Payaffe.Infrastructure.Webhooks;
 public sealed class WebhookDeliveryHostedService(
     IServiceScopeFactory scopeFactory,
     IOptions<WebhookDeliveryOptions> options,
-    ILogger<WebhookDeliveryHostedService> logger) : BackgroundService
+    ILogger<WebhookDeliveryHostedService> logger,
+    SchemaMigrationState schemaMigration) : SchemaGatedBackgroundService(schemaMigration)
 {
     private readonly WebhookDeliveryOptions _options = options.Value;
     private readonly int _maxEventsPerPoll = Math.Max(1, options.Value.MaxEventsPerPoll);
@@ -17,7 +19,7 @@ public sealed class WebhookDeliveryHostedService(
         ? options.Value.PollInterval
         : TimeSpan.FromSeconds(10);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)
         {

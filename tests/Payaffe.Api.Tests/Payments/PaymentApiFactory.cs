@@ -33,6 +33,7 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Testing");
         builder.ConfigureServices(services =>
         {
+            services.RemoveStartupSchemaMigration();
             services.RemoveAll<DbContextOptions<PayaffeDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<PayaffeDbContext>>();
             services.AddDbContext<PayaffeDbContext>(options => options.UseInMemoryDatabase(_databaseName));

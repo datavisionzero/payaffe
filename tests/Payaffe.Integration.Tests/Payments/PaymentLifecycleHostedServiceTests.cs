@@ -29,7 +29,8 @@ public sealed class PaymentLifecycleHostedServiceTests(PostgreSqlFixture postgre
                 PollInterval = TimeSpan.FromHours(1),
                 ExpirationBatchSize = 10,
             }),
-            NullLogger<PaymentLifecycleHostedService>.Instance);
+            NullLogger<PaymentLifecycleHostedService>.Instance,
+            SchemaMigrationState.AlreadyApplied());
 
         try
         {

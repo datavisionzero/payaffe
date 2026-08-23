@@ -1,6 +1,7 @@
 using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
+using Payaffe.Infrastructure.Persistence;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -10,7 +11,8 @@ namespace Payaffe.Infrastructure.Payments;
 public sealed class ReorgMonitoringHostedService(
     IServiceScopeFactory scopeFactory,
     IOptions<ReorgMonitoringWorkerOptions> options,
-    ILogger<ReorgMonitoringHostedService> logger) : BackgroundService
+    ILogger<ReorgMonitoringHostedService> logger,
+    SchemaMigrationState schemaMigration) : SchemaGatedBackgroundService(schemaMigration)
 {
     private readonly ReorgMonitoringWorkerOptions _options = options.Value;
     private readonly int _maxTransactionsPerPoll = Math.Max(1, options.Value.MaxTransactionsPerPoll);
@@ -18,7 +20,7 @@ public sealed class ReorgMonitoringHostedService(
         ? options.Value.PollInterval
         : TimeSpan.FromMinutes(5);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)
         {

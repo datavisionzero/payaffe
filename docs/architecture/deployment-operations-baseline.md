@@ -45,7 +45,7 @@ When the corresponding hosts exist, Compose services use these names:
 | `mcp` | Admin MCP host if it is deployed separately from another host. |
 | `worker` | .NET background worker for Blockchain Observation, scheduler, outbox, and retry work. |
 | `db` | PostgreSQL product database. |
-| `migrations` | Controlled production migration runner. |
+| `migrations` | Manual schema run and the first-admin command. |
 
 Not every service must exist as a separate container in the first
 implementation. Combining hosts is allowed when the implementation keeps
@@ -80,8 +80,8 @@ HTTP hosts expose:
 perform deep dependency checks.
 
 `/health/ready` reports whether the host can accept its intended traffic. It
-may check required configuration, PostgreSQL connectivity, migration state,
-and required internal dependencies. It must not expose secrets, connection
+must report whether the schema is current, and may check required
+configuration, PostgreSQL connectivity, and required internal dependencies. It must not expose secrets, connection
 strings, token values, provider keys, raw configuration values, payment data,
 or provider payloads.
 
@@ -116,15 +116,21 @@ leaking secret values.
 
 ## Migrations
 
-Production database migrations run through one controlled path.
+Production database migrations run through one path, and the `api` and `worker`
+hosts take it as they start
+([ADR 0027](../adr/0027-migrations-apply-on-startup.md)). The `web` and `mcp`
+hosts never apply a migration: `web` has no database, and `mcp` is a local
+process that takes the schema as given.
 
-The preferred self-hosted path is a `migrations` Compose service. A documented
-explicit command is also allowed when it is intentionally run by an operator,
-makes failure visible, logs enough context for diagnosis, and prevents or
-safely handles concurrent migration execution.
+The path must make failure visible, log enough context for diagnosis, and
+handle concurrent execution safely — both hosts start together and either may
+be first. It must not block the host from starting: a database that is not yet
+reachable is waited for, while a migration that cannot be applied stops the
+host with a non-zero exit code.
 
-Normal production startup for `web`, `api`, `mcp`, or `worker` must not apply
-schema migrations as an unordered side effect.
+The `migrations` Compose service runs the same code for an operator who wants
+the schema applied before anything else is started, and carries the first-admin
+command ([ADR 0020](../adr/0020-the-first-admin-is-created-by-a-local-command.md)).
 
 Local development and automated tests may use more convenient database
 initialization, provided that behavior is not documented as the production
@@ -233,8 +239,10 @@ Implementation must include focused verification that:
 - health and readiness endpoints return safe responses without secrets,
 - readiness fails or refuses traffic when start-critical dependencies are not
   usable,
-- production hosts do not auto-run migrations during normal startup,
+- readiness reports `not_ready` until the schema this build needs is applied,
 - the migration runner handles repeat and concurrent execution safely,
+- a host still starts and serves `/health/live` while its database is briefly
+  unreachable,
 - Compose healthchecks target the intended live or ready signal,
 - backup and restore procedures are executable in a local or CI-like
   environment once deployment artifacts exist,

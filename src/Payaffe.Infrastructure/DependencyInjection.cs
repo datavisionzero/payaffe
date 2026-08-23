@@ -19,12 +19,33 @@ public static class DependencyInjection
     /// requests, such as the local Admin MCP host, pass <c>false</c> so they
     /// never take a worker lease or process a batch.
     /// </param>
+    /// <param name="applySchemaOnStartup">
+    /// Brings the schema up to date while the host starts (ADR 0027). The
+    /// <c>api</c> and <c>worker</c> hosts pass <c>true</c>. It stays off by
+    /// default so that the local Admin MCP host, the <c>migrations</c> host
+    /// and the tests decide for themselves when a schema is applied.
+    /// </param>
     public static IServiceCollection AddPayaffeInfrastructure(
         this IServiceCollection services,
         string connectionString,
-        bool registerHostedWorkers = true)
+        bool registerHostedWorkers = true,
+        bool applySchemaOnStartup = false)
     {
         services.AddDbContext<PayaffeDbContext>(options => options.UseNpgsql(connectionString));
+
+        // A host that does not migrate takes the schema as given, so its
+        // workers must not wait for a migration that is never going to run
+        // there. That is the whole difference between the two registrations.
+        if (applySchemaOnStartup)
+        {
+            services.AddSingleton<SchemaMigrationState>();
+            services.AddHostedService<SchemaMigrationHostedService>();
+        }
+        else
+        {
+            services.AddSingleton(SchemaMigrationState.AlreadyApplied());
+        }
+
         services.AddSingleton<IAdminPasswordHasher, AdminPasswordHasher>();
         services.AddSingleton<IAdminSessionTokenService, AdminSessionTokenService>();
         services.AddSingleton<IIntegrationApiCredentialTokenService, IntegrationApiCredentialTokenService>();

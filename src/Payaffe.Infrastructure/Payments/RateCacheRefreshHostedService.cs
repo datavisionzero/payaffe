@@ -1,6 +1,7 @@
 using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
+using Payaffe.Infrastructure.Persistence;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -10,14 +11,15 @@ namespace Payaffe.Infrastructure.Payments;
 public sealed class RateCacheRefreshHostedService(
     IServiceScopeFactory scopeFactory,
     IOptions<RateCacheRefreshWorkerOptions> options,
-    ILogger<RateCacheRefreshHostedService> logger)
-    : BackgroundService
+    ILogger<RateCacheRefreshHostedService> logger,
+    SchemaMigrationState schemaMigration)
+    : SchemaGatedBackgroundService(schemaMigration)
 {
     private const string WorkerName = "rate-cache-refresh";
 
     private readonly RateCacheRefreshWorkerOptions _options = options.Value;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)
         {

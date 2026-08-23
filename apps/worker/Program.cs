@@ -63,7 +63,11 @@ builder.Services.AddOptions<WorkerHealthOptions>()
     .ValidateOnStart();
 
 builder.Services.AddPayaffeApplication();
-builder.Services.AddPayaffeInfrastructure(connectionString!);
+builder.Services.AddPayaffeInfrastructure(connectionString!, applySchemaOnStartup: true);
+
+// After the infrastructure registration, and that is not cosmetic: hosted
+// services start in registration order, so the heartbeat this host is judged
+// healthy by cannot begin before the schema migration has returned.
 builder.Services.AddHostedService<WorkerHealthHostedService>();
 
 try
@@ -77,6 +81,9 @@ catch (OptionsValidationException exception)
 }
 
 // The telemetry exporters keep threads alive after the host stops, so the
-// process is ended explicitly rather than waiting for them.
-Environment.Exit(0);
+// process is ended explicitly rather than waiting for them. The code is
+// whatever the run set: a host that stopped because its migration failed has
+// already put `EX_SOFTWARE` there, and exiting 0 over it would report a broken
+// deployment as a clean shutdown.
+Environment.Exit(Environment.ExitCode);
 return 0;

@@ -416,18 +416,28 @@ never returned to the unused pool.
 
 ## Migrations
 
-Production-style migrations are an explicit operator action:
+The `api` and `worker` hosts bring the schema up to date as they start
+([ADR 0027](../adr/0027-migrations-apply-on-startup.md)). There is no step to
+run between `pull` and `up`, and no order to remember between versions.
+
+While a migration is being applied the host is already up: `/health/live`
+answers, and `/health/ready` answers `503` until the schema is current. A
+migration that cannot be applied stops the host with exit code `70`, so the
+container restarts rather than serving against a schema it does not expect.
+
+The `migrations` service is still there for an operator who wants the schema
+applied before anything else is started, and it runs the same code the hosts do:
 
 ```sh
 docker compose --profile operations run --rm migrations
 ```
 
-Normal `api` or `web` startup does not apply schema migrations.
+It is also what creates the first admin; see
+[credential-rotation.md](credential-rotation.md).
 
 ## Start
 
-After migrations have been applied, start the product hosts. An installation
-runs the published images:
+An installation runs the published images:
 
 ```sh
 docker compose up -d
@@ -445,18 +455,18 @@ metrics use `PAYAFFE_OTLP_ENDPOINT`; see [observability.md](observability.md).
 
 ## Upgrading
 
-An upgrade is the same three steps as a first start, in the same order, because
-the schema and the code are deliberately separable
-([ADR 0016](../adr/0016-migrations-are-a-step-not-a-startup-side-effect.md)):
+An upgrade is two steps, and the hosts apply the schema themselves
+([ADR 0027](../adr/0027-migrations-apply-on-startup.md)):
 
 ```sh
 docker compose pull
-docker compose --profile operations run --rm migrations
 docker compose up -d
 ```
 
-Back up the database before the migration step, not after it
-([postgresql-backup-restore.md](postgresql-backup-restore.md)). Pin
+Back up the database before the `up`, not after it
+([postgresql-backup-restore.md](postgresql-backup-restore.md)). There is no
+downgrade, so that artifact is the rollback for a migration that fails on the
+way up. Pin
 `PAYAFFE_VERSION` to a released version rather than leaving it at `latest`, so
 that a pull upgrades when the operator decides to and not when a tag moves.
 

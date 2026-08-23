@@ -257,7 +257,8 @@ builder.Services.AddPayaffeApplication();
 var runWorkersInApiHost = builder.Configuration.GetValue("Workers:RunInApiHost", true);
 builder.Services.AddPayaffeInfrastructure(
     builder.Configuration.GetConnectionString("Payaffe") ?? "Host=localhost;Database=payaffe",
-    registerHostedWorkers: runWorkersInApiHost);
+    registerHostedWorkers: runWorkersInApiHost,
+    applySchemaOnStartup: true);
 
 var app = builder.Build();
 
@@ -269,11 +270,20 @@ if (webAllowedOrigins.Length > 0)
 app.UseRateLimiter();
 
 app.MapGet("/health/live", () => Results.Ok(new HealthResponse("alive")));
-app.MapGet("/health/ready", async (PayaffeDbContext dbContext, CancellationToken cancellationToken) =>
+// Readiness is the schema and the database, in that order. Kestrel answers
+// before the hosted services have run, so an installation that reported ready
+// on connectivity alone would be telling a deployment it is serving while the
+// migration this build needs is still being applied (ADR 0027). It still says
+// only `ready` or `not_ready`: which migration is pending is not something a
+// readiness endpoint tells whoever can reach the port.
+app.MapGet("/health/ready", async (
+    SchemaMigrationState schemaMigration,
+    PayaffeDbContext dbContext,
+    CancellationToken cancellationToken) =>
 {
     try
     {
-        return await dbContext.Database.CanConnectAsync(cancellationToken)
+        return schemaMigration.IsComplete && await dbContext.Database.CanConnectAsync(cancellationToken)
             ? Results.Ok(new HealthResponse("ready"))
             : Results.Json(new HealthResponse("not_ready"), statusCode: StatusCodes.Status503ServiceUnavailable);
     }

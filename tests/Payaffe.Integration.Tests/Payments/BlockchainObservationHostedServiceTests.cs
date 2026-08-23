@@ -36,7 +36,8 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
                 PollInterval = TimeSpan.FromHours(1),
                 MaxPaymentsPerPoll = 10,
             }),
-            NullLogger<BlockchainObservationHostedService>.Instance);
+            NullLogger<BlockchainObservationHostedService>.Instance,
+            SchemaMigrationState.AlreadyApplied());
 
         try
         {
@@ -92,7 +93,8 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
                 PollInterval = TimeSpan.FromHours(1),
                 MaxTransactionsPerPoll = 10,
             }),
-            NullLogger<ReorgMonitoringHostedService>.Instance);
+            NullLogger<ReorgMonitoringHostedService>.Instance,
+            SchemaMigrationState.AlreadyApplied());
 
         try
         {

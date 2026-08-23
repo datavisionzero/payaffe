@@ -1,7 +1,6 @@
 # The First Admin Is Created by a Local Command
 
-After migrations, the operator runs an operations command that creates the first
-Admin Account. No HTTP surface creates one, no MCP tool creates one, and no host
+The operator runs an operations command that creates the first Admin Account. No HTTP surface creates one, no MCP tool creates one, and no host
 creates one while starting.
 
 The usual alternative is a first-run registration page guarded by a bootstrap
