@@ -26,7 +26,7 @@ after authentication, authorization, and any required step-up.
 Admin Accounts authenticate with:
 
 - local password,
-- required TOTP MFA,
+- optionally TOTP MFA, enrolled by the admin (ADR 0028),
 - product-local session cookie.
 
 Admin password hashes, MFA secrets, recovery codes, session identifiers, and
@@ -85,7 +85,7 @@ Authorization is enforced server-side.
 
 The MVP policy model is intentionally small:
 
-- `Admin`: authenticated local Admin Account with required MFA.
+- `Admin`: authenticated local Admin Account.
 
 Because all Admin Accounts are privileged, the policy question is not which
 role they have, but whether the actor, session, MFA state, step-up state, and
@@ -106,10 +106,18 @@ only UX. They do not authorize protected effects.
 
 ## Step-Up
 
-All Admin Accounts are MFA-capable and MFA-required.
+All Admin Accounts are MFA-capable. MFA is not required: an account without an
+enrolled second factor signs in on its password and may perform every
+operation, and step-up is enforced only for accounts that have one
+([ADR 0028](../adr/0028-the-second-factor-is-optional-and-enrolled-later.md)).
+A session records honestly what it cleared — the MFA and step-up timestamps are
+null when no factor was ever verified.
 
-Particularly sensitive actions require a fresh step-up if the current
-MFA-backed authentication is older than 15 minutes.
+For an account with an enrolled second factor, particularly sensitive actions
+require a fresh step-up if the current MFA-backed authentication is older than
+15 minutes. An account without one is not asked: it has nothing to step up
+with, and refusing would make these actions unreachable rather than protected.
+The list below is what step-up covers where it applies.
 
 Step-up-required actions include:
 
@@ -156,19 +164,24 @@ through HTTP or MCP.
 
 Bootstrap succeeds only while no Admin Account exists and serializes the
 empty-state check with account creation. It reads the password through a
-masked interactive prompt, resolves an operator-managed TOTP secret through a
-restricted server-side reference, verifies a current TOTP code, stores only
-protected password and Recovery Code hashes plus the TOTP secret reference,
-and shows Recovery Codes once.
+masked interactive prompt, stores only protected password and Recovery Code
+hashes, and shows Recovery Codes once.
+
+It asks for no second factor
+([ADR 0028](../adr/0028-the-second-factor-is-optional-and-enrolled-later.md)).
+Requiring one here meant an operator had to agree a secret between a secret
+store, an authenticator app and this command before any account existed to
+attach it to, and a setup step that can fail after prompting for a password and
+before producing anything is the step people abandon.
 
 Normal API or Web startup never seeds Admin Accounts. Passwords, current TOTP
 codes, Recovery Codes, and reusable bootstrap tokens must not be supplied
 through command arguments, environment variables, Compose defaults, logs, or
-Audit Log entries. A raw TOTP secret may use the documented non-versioned
-server-side runtime secret mechanism, but must not have a versioned value or
-enter logs or Audit Log entries. After the first account exists, authenticated
-Admin management and the separate operator lockout-recovery procedure are the
-only account-management paths.
+Audit Log entries. A raw TOTP secret for an account that references one may use
+the documented non-versioned server-side runtime secret mechanism, but must not
+have a versioned value or enter logs or Audit Log entries. After the first
+account exists, authenticated Admin management and the separate operator
+lockout-recovery procedure are the only account-management paths.
 
 ## Generic Security Responses
 
@@ -292,7 +305,8 @@ resend by an Admin.
 ## Audit Access And Export
 
 Because the MVP has one Admin permission level, Audit Log access is an explicit
-capability of every Admin Account after MFA and required step-up. This is a
+capability of every Admin Account once signed in, and of an account with a
+second factor after step-up. This is a
 product-local simplification. A future role model may split Audit access into a
 separate permission.
 
@@ -318,7 +332,7 @@ Implementation must include focused tests for:
 - bootstrap output and diagnostics excluding password, TOTP, Recovery Code
   hashes, and connection-string values,
 - successful and failed Admin login,
-- MFA-required Admin access,
+- Admin access with an optional second factor,
 - session absolute and inactivity limits,
 - logout ending the local Admin session,
 - unsafe Admin browser requests without CSRF evidence being rejected,
