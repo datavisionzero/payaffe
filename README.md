@@ -15,11 +15,13 @@ deliberately is not.
 
 ## Status
 
-**Pre-release.** The product is built and version-stamped `0.1.0`. The `0.x`
+**`0.1.0` — the first release.** Images are published to
+`ghcr.io/datavisionzero` and an installation is the two files below. The `0.x`
 is deliberate: the Integration API and the webhook contract are versioned and
 snapshotted, but they have not yet been depended on by anyone, and `1.0.0` is
-reserved for the point where breaking them would cost something. Everything
-below runs from a checkout.
+reserved for the point where breaking them would cost something. Pin
+`PAYAFFE_VERSION` to a version rather than leaving it at `latest`, and read the
+release notes before moving it.
 
 What works end to end: payment creation over the Integration API with
 idempotency, the payer page with currency selection and rate locking, address
@@ -27,7 +29,9 @@ assignment from a watch-only wallet source or the ETH pool, blockchain
 observation against Blockchair or NOWNodes, confirmation and completion, late
 and partial payment handling, signed webhook delivery with retries, the Admin UI
 behind TOTP with step-up on sensitive writes, an admin MCP surface for an agent
-CLI, and OpenTelemetry metrics with shipped Grafana and Prometheus assets.
+CLI, logs delivered to a [logaffe](https://github.com/datavisionzero/logaffe)
+installation, and OpenTelemetry metrics with shipped Grafana and Prometheus
+assets.
 
 Known gaps are tracked as goals in the repository rather than as issues.
 
