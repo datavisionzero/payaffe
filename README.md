@@ -10,8 +10,7 @@ reports what arrived; it cannot sweep, refund, or withdraw, and no admin action
 can make it. That is the decision the rest of the product is shaped around
 ([ADR 0005](docs/adr/0005-payaffe-never-holds-a-key-that-can-spend.md)).
 
-See [docs/product/vision.md](docs/product/vision.md) for what payaffe is, and
-[the non-goals](docs/product/requirements.md#non-goals-for-the-mvp) for what it
+See [VISION.md](VISION.md) for what payaffe is and, just as importantly, what it
 deliberately is not.
 
 ## Status

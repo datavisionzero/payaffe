@@ -2,7 +2,7 @@
 
 This directory contains decisions that are difficult to reverse, would be
 surprising without context, and resulted from a genuine trade-off. Product scope
-and promises belong in the [product vision](../product/vision.md) and
+and promises belong in the [product vision](../../VISION.md) and
 [requirements](../product/requirements.md) instead; the technical roster —
 what was chosen, without the argument — is
 [technical-constraints.md](../architecture/technical-constraints.md). An entry

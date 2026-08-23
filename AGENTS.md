@@ -16,7 +16,8 @@ The product exposes:
 
 ## Working Style
 
-- Start with [docs/README.md](docs/README.md) for the documentation map.
+- Start with [VISION.md](VISION.md) for what the product is and is not, then [docs/README.md](docs/README.md) for the documentation map.
+- Agent-facing conventions for this repository live in [docs/agents/](docs/agents/).
 - Follow [docs/architecture/technical-constraints.md](docs/architecture/technical-constraints.md), [docs/architecture/observability-baseline.md](docs/architecture/observability-baseline.md), and [docs/architecture/repository-structure.md](docs/architecture/repository-structure.md) for technical and structural baselines.
 - Use [CONTEXT.md](CONTEXT.md) for domain language. Do not invent alternate names for established terms.
 - Architecture decisions live in [docs/adr/](docs/adr/). Follow the form described in [docs/adr/README.md](docs/adr/README.md) and update the decision index there.

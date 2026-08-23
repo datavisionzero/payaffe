@@ -10,6 +10,14 @@ on:
 permissions:
   contents: read
 
+# Per branch, and superseded runs are cancelled. This workflow publishes
+# nothing, so there is no registry tag to move and no reason to let an outdated
+# run finish: pushing three times to a pull request should cost one run, not
+# three. Releases serialise separately in release.yml, which does publish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # The backend, in one job rather than two. The integration tests start
   # PostgreSQL through Testcontainers and need the Docker daemon a hosted runner

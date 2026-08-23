@@ -4,7 +4,7 @@ This directory contains product, architecture, and process documentation for `pa
 
 ## Structure
 
-- [product/](product/) documents product vision, requirements, and scope.
+- [product/](product/) documents the detailed product requirements and scope. The vision itself is [../VISION.md](../VISION.md).
 - [architecture/](architecture/) documents stable technical constraints and the implementation baselines.
 - [adr/](adr/) records the architecture decisions those baselines follow from.
 - [operations/](operations/) documents operator-facing setup and maintenance procedures.
@@ -12,7 +12,7 @@ This directory contains product, architecture, and process documentation for `pa
 ## Entry Points
 
 1. [../CONTEXT.md](../CONTEXT.md)
-2. [product/vision.md](product/vision.md)
+2. [../VISION.md](../VISION.md)
 3. [product/requirements.md](product/requirements.md)
 4. [architecture/technical-constraints.md](architecture/technical-constraints.md)
 5. [architecture/observability-baseline.md](architecture/observability-baseline.md)

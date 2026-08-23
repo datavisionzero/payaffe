@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # So that a release can be re-run without moving the tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The existing tag to release, for example v0.1.0"
+        required: true
+
+permissions:
+  contents: read
+
+# One release at a time. Two tags pushed in quick succession would otherwise
+# race to move `:latest`, leaving it wherever the slower run finished — which
+# can be the older version. Nothing is cancelled: every tag pushed still gets
+# released, in the order it was pushed.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # The tag says what is being released, and this is the only place that reads
+  # it. Everything downstream takes the version from here rather than parsing
+  # the ref again.
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      ref: ${{ steps.read.outputs.ref }}
+      latest: ${{ steps.read.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+
+      - id: read
+        name: Read the version out of the tag
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          case "$TAG" in
+            v*) version="${TAG#v}" ;;
+            *) echo "A release tag begins with v: $TAG"; exit 1 ;;
+          esac
+
+          # What the registry will take and what the build can stamp:
+          # major.minor.patch, with an optional prerelease behind it.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "Not a version this can release: $version"
+            exit 1
+          fi
+
+          # The images carry no VERSION build argument: a .NET host reports what
+          # Directory.Build.props stamped into it, and the web app reports
+          # NEXT_PUBLIC_RELEASE. So the tag and that file have to agree, or the
+          # release would publish an image that reports a version nobody tagged.
+          # This is the check that keeps the note in Directory.Build.props — bump
+          # it in the same commit the tag points at — from being a thing someone
+          # has to remember.
+          prefix="$(grep -oE '<VersionPrefix>[^<]*</VersionPrefix>' Directory.Build.props | sed -E 's#</?VersionPrefix>##g')"
+          suffix="$(grep -oE '<VersionSuffix>[^<]*</VersionSuffix>' Directory.Build.props | sed -E 's#</?VersionSuffix>##g' || true)"
+          if [ -n "$suffix" ]; then
+            stamped="$prefix-$suffix"
+          else
+            stamped="$prefix"
+          fi
+
+          if [ "$stamped" != "$version" ]; then
+            echo "The tag says $version and Directory.Build.props stamps $stamped."
+            echo "Bump the version in the commit the tag points at, then re-tag."
+            exit 1
+          fi
+
+          {
+            echo "version=$version"
+            echo "ref=$TAG"
+            # `latest` is what an operator following the deployment compose file
+            # pulls, so a prerelease must not move it: someone who never asked
+            # for one would be upgraded into it by an ordinary `docker compose
+            # pull`.
+            case "$version" in
+              *-*) echo "latest=false" ;;
+              *) echo "latest=true" ;;
+            esac
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Releasing payaffe $version from $TAG."
+
+  # The release gate. A tag does not publish anything its tests did not pass —
+  # expressing it here costs one repeated test run and is cheaper than
+  # discovering it from a published image.
+  verify:
+    name: Verify
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Payaffe.slnx
+      - run: dotnet build Payaffe.slnx -c Release --no-restore
+      - run: dotnet test Payaffe.slnx -c Release --no-build
+
+  images:
+    name: Images
+    needs: [version, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # Five images from one commit. They are a matrix rather than five steps so
+      # that a failure names which one failed, and `fail-fast: false` so a
+      # broken web build does not leave the four .NET images unpublished for a
+      # release that is otherwise fine — an incomplete release is easier to
+      # finish than to diagnose.
+      fail-fast: false
+      matrix:
+        image: [api, worker, web, migrations, mcp]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Sign in to the registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: tags
+        name: The names this image is published under
+        env:
+          NAME: ${{ matrix.image }}
+          VERSION: ${{ needs.version.outputs.version }}
+          LATEST: ${{ needs.version.outputs.latest }}
+        run: |
+          set -euo pipefail
+          {
+            echo "value<<TAGS"
+            echo "ghcr.io/datavisionzero/payaffe-$NAME:$VERSION"
+            if [ "$LATEST" = "true" ]; then
+              echo "ghcr.io/datavisionzero/payaffe-$NAME:latest"
+            fi
+            echo "TAGS"
+          } >> "$GITHUB_OUTPUT"
+
+      # The web image is the only one that needs its version passed in: the .NET
+      # hosts read it from the assembly Directory.Build.props stamped, and the
+      # version job has already refused any tag those two disagree about.
+      - name: Build and publish
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.image }}/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_RELEASE=${{ needs.version.outputs.version }}
+          tags: ${{ steps.tags.outputs.value }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
