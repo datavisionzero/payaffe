@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using Payaffe.Application;
 using Payaffe.Application.Admin;
@@ -126,6 +127,7 @@ builder.Services.AddOptions<ReorgMonitoringWorkerOptions>()
     .ValidateOnStart();
 builder.Services.Configure<AdminAuthenticationOptions>(builder.Configuration.GetSection("Admin:Authentication"));
 builder.Services.Configure<IntegrationApiRateLimitOptions>(builder.Configuration.GetSection("IntegrationApi:RateLimit"));
+builder.Services.Configure<ClientErrorReportOptions>(builder.Configuration.GetSection("Diagnostics:ClientErrors"));
 builder.Services.AddOptions<PaymentLifecycleWorkerOptions>()
     .Bind(builder.Configuration.GetSection("Payments:LifecycleWorker"))
     .ValidateOnStart();
@@ -224,6 +226,28 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true,
             });
     });
+    // The one endpoint anybody on the internet may post to. The limit is per
+    // source address and deliberately small: a browser that is failing reports
+    // once, and a caller that wants to write a thousand lines into the
+    // operator's log store is the case this bounds.
+    options.AddPolicy("ClientErrors", httpContext =>
+    {
+        var clientErrorOptions = httpContext.RequestServices
+            .GetRequiredService<IOptions<ClientErrorReportOptions>>()
+            .Value;
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = Math.Max(1, clientErrorOptions.RateLimitPermitLimit),
+                Window = clientErrorOptions.RateLimitWindow > TimeSpan.Zero
+                    ? clientErrorOptions.RateLimitWindow
+                    : TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true,
+            });
+    });
 });
 builder.Services.AddPayaffeApplication();
 
@@ -303,6 +327,20 @@ integrationApi.MapGet("/payments/{paymentId:guid}", GetPaymentAsync)
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status429TooManyRequests, "application/problem+json");
+
+// Errors the browser could not handle, reported by the payer page and the Admin
+// UI so that they reach the same log the backend writes to. An installation
+// that does not want a publicly postable endpoint sets
+// `Diagnostics:ClientErrors:Enabled` to false and it is not mapped at all.
+var clientErrorOptions = builder.Configuration
+    .GetSection("Diagnostics:ClientErrors")
+    .Get<ClientErrorReportOptions>() ?? new ClientErrorReportOptions();
+if (clientErrorOptions.Enabled)
+{
+    app.MapPost("/api/client-errors", ReportClientErrorAsync)
+        .RequireRateLimiting("ClientErrors")
+        .ExcludeFromDescription();
+}
 
 var payerApi = app.MapGroup("/api/payer");
 
@@ -2259,6 +2297,250 @@ static void AddReturnUrlErrors(
         errors["returnUrl"] = ["return_url.invalid"];
     }
 }
+
+static async Task<IResult> ReportClientErrorAsync(
+    HttpContext httpContext,
+    ILoggerFactory loggerFactory)
+{
+    // The body is read here rather than bound, so that the cap is enforced by
+    // this endpoint on any server. Kestrel has a limit of its own, but it is
+    // global and far larger, and a test host has none at all -- a bound that
+    // only holds in production is a bound nobody has seen work.
+    var request = await ClientErrorReport.ReadAsync(httpContext);
+    if (request is null)
+    {
+        return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+    }
+
+    // Everything below arrives from a browser nobody controls -- the payer page
+    // is reachable by anyone -- so the shape of what is logged is decided here
+    // and never by the caller. Fixed template, fixed fields, hard caps.
+    var name = ClientErrorReport.SingleLine(request.Name, ClientErrorReport.MaxNameLength) ?? "Error";
+    var message = ClientErrorReport.SingleLine(request.Message, ClientErrorReport.MaxMessageLength)
+        ?? "(no message)";
+    var path = ClientErrorReport.PathOnly(request.Path);
+    var stack = ClientErrorReport.MultiLine(request.Stack, ClientErrorReport.MaxStackLength);
+
+    // The name, the message and the stack are values, never part of the
+    // template: a browser that reports `{Foo}` must not be able to write a
+    // placeholder into the log.
+    loggerFactory.CreateLogger("Payaffe.Web.ClientError").Log(
+        // Warning, not Error, and this is a security property rather than a
+        // judgement about severity. The endpoint is unauthenticated, so logging
+        // at Error would let anyone raise the installation's error rate -- and
+        // an error rate is what an alert is derived from.
+        LogLevel.Warning,
+        default,
+        // Carried as an exception because that is the field a log store keeps a
+        // stack trace in and searches on its own; a property that never reaches
+        // the rendered message is stored but not findable.
+        stack is null ? null : new ClientReportedError(stack),
+        "Browser reported {ClientErrorName} on {ClientErrorPath}: {ClientErrorMessage}",
+        [name, path, message]);
+
+    // Accepted rather than created, and with no body: a page that is already
+    // failing has nothing to do with the answer.
+    return Results.Accepted();
+}
+
+/// <summary>
+/// The caps and the scrubbing applied to a browser-reported error. Text from a
+/// browser is untrusted, and it is read later by a person and by an agent, so
+/// what leaves this class is single-line where it should be, bounded, and free
+/// of control characters.
+/// </summary>
+public static class ClientErrorReport
+{
+    public const int MaxRequestBytes = 32 * 1024;
+
+    /// <summary>
+    /// Reads the report, or <c>null</c> when the caller sent more than
+    /// <see cref="MaxRequestBytes"/>. Nothing beyond the cap is buffered: the
+    /// read stops at the byte that crosses it.
+    /// </summary>
+    public static async Task<ClientErrorReportHttpRequest?> ReadAsync(HttpContext httpContext)
+    {
+        if (httpContext.Request.ContentLength > MaxRequestBytes)
+        {
+            return null;
+        }
+
+        using var buffered = new MemoryStream();
+        var chunk = new byte[8 * 1024];
+        while (true)
+        {
+            var read = await httpContext.Request.Body.ReadAsync(chunk, httpContext.RequestAborted);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (buffered.Length + read > MaxRequestBytes)
+            {
+                return null;
+            }
+
+            buffered.Write(chunk, 0, read);
+        }
+
+        buffered.Position = 0;
+        try
+        {
+            return await JsonSerializer.DeserializeAsync<ClientErrorReportHttpRequest>(
+                buffered,
+                JsonSerializerOptions.Web,
+                httpContext.RequestAborted)
+                ?? new ClientErrorReportHttpRequest(null, null, null, null);
+        }
+        catch (JsonException)
+        {
+            // A browser that cannot serialise its own failure is not worth a
+            // 400 nobody will read. It is recorded as the empty report it is.
+            return new ClientErrorReportHttpRequest(null, null, null, null);
+        }
+    }
+    public const int MaxNameLength = 200;
+    public const int MaxMessageLength = 1000;
+    public const int MaxStackLength = 8000;
+    public const int MaxPathLength = 200;
+
+    /// <summary>
+    /// One line, capped. Newlines are removed rather than escaped, because a
+    /// reported message is a sentence and a message that spans lines is how a
+    /// log reader is given something that looks like a second entry.
+    /// </summary>
+    public static string? SingleLine(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder(Math.Min(value.Length, maxLength));
+        foreach (var character in value)
+        {
+            if (builder.Length == maxLength)
+            {
+                break;
+            }
+
+            builder.Append(char.IsControl(character) ? ' ' : character);
+        }
+
+        var result = builder.ToString().Trim();
+        return result.Length == 0 ? null : Flag(result, value.Length > maxLength);
+    }
+
+    /// <summary>
+    /// A stack trace keeps its line breaks, because that is what makes it a
+    /// stack trace. Every other control character still goes.
+    /// </summary>
+    public static string? MultiLine(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder(Math.Min(value.Length, maxLength));
+        foreach (var character in value)
+        {
+            if (builder.Length == maxLength)
+            {
+                break;
+            }
+
+            if (character is '\n' or '\t')
+            {
+                builder.Append(character);
+            }
+            else if (!char.IsControl(character))
+            {
+                builder.Append(character);
+            }
+        }
+
+        var result = builder.ToString().Trim();
+        return result.Length == 0 ? null : Flag(result, value.Length > maxLength);
+    }
+
+    /// <summary>
+    /// The path of the page, and nothing else. A query string is dropped rather
+    /// than trimmed of known keys: the payer page carries an identifier in its
+    /// path and this endpoint has no business learning what else a URL held.
+    /// </summary>
+    public static string PathOnly(string? value)
+    {
+        var trimmed = SingleLine(value, 2048);
+        if (trimmed is null)
+        {
+            return "(unknown)";
+        }
+
+        // Only an http(s) address is treated as one. A bare path such as
+        // `/admin?tab=x` parses as an absolute `file:` URI on unix and its
+        // AbsolutePath comes back percent-encoded, which is how `?` survived
+        // as `%3F` the first time this was written.
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute) &&
+            (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
+        {
+            trimmed = absolute.AbsolutePath;
+        }
+
+        var cut = trimmed.IndexOfAny(['?', '#']);
+        if (cut >= 0)
+        {
+            trimmed = trimmed[..cut];
+        }
+
+        trimmed = trimmed.Trim();
+        if (trimmed.Length == 0)
+        {
+            return "(unknown)";
+        }
+
+        return trimmed.Length > MaxPathLength ? Flag(trimmed[..MaxPathLength], true) : trimmed;
+    }
+
+    private static string Flag(string value, bool truncated) => truncated ? value + "…" : value;
+}
+
+/// <summary>
+/// A browser error is text, not something that was thrown here. This carries it
+/// in the argument <c>ILogger</c> reserves for an exception, because that is
+/// where a log store keeps a stack trace, and it renders as exactly the text it
+/// was given -- no type name, no fabricated frames of our own.
+/// </summary>
+public sealed class ClientReportedError(string description) : Exception(description)
+{
+    public override string ToString() => Message;
+
+    public override string? StackTrace => null;
+}
+
+public sealed class ClientErrorReportOptions
+{
+    /// <summary>
+    /// False leaves the endpoint unmapped. There is then no publicly postable
+    /// surface at all, rather than one that answers and discards.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    public int RateLimitPermitLimit { get; set; } = 10;
+
+    public TimeSpan RateLimitWindow { get; set; } = TimeSpan.FromMinutes(1);
+}
+
+/// <summary>
+/// What a browser may report. Deliberately four fields: the release, the
+/// environment, the user agent and the address are known to the host already,
+/// and taking them from the caller would only let the caller choose them.
+/// </summary>
+public sealed record ClientErrorReportHttpRequest(
+    string? Name,
+    string? Message,
+    string? Stack,
+    string? Path);
 
 public sealed record HealthResponse(string Status);
 

@@ -28,7 +28,7 @@ export class ApiError extends Error {
 // entirely and the browser calls it cross-origin. Empty counts as unset: a
 // Docker build argument that was never passed still arrives as an empty
 // string, and it means the same thing.
-function resolveApiBaseUrl(): string {
+export function resolveApiBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_PAYAFFE_API_BASE_URL;
   if (configured !== undefined && configured !== "") {
     return configured;

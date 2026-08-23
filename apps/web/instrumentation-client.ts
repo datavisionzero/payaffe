@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { installClientErrorReporting } from "./lib/client-errors";
 
 const dsn = process.env.NEXT_PUBLIC_GLITCHTIP_DSN;
 
@@ -29,5 +30,11 @@ Sentry.init({
     return event;
   }
 });
+
+// Errors the browser could not handle also go to the installation's own API,
+// which logs them where the backend logs (ADR 0025). It runs alongside the
+// GlitchTip reporting above rather than instead of it, because the alerting
+// that would replace GlitchTip does not exist yet.
+installClientErrorReporting();
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

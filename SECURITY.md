@@ -65,6 +65,10 @@ In scope:
   response, log, audit entry, or contract snapshot,
 - native ETH Address Pool handling, in particular an assigned address becoming
   available again,
+- the browser error endpoint, `POST /api/client-errors`, which is
+  unauthenticated by necessity: anything that gets past its size cap, its rate
+  limit, or the scrubbing that keeps reported text out of a log message
+  template,
 - the default configuration of the published container images and the Compose
   setup.
 
@@ -88,6 +92,12 @@ Out of scope:
   ([ADR 0018](docs/adr/0018-every-admin-is-fully-privileged.md)),
 - rate-limit exhaustion by an integration holding a valid credential. Those are
   issued by the operator to their own systems, which are trusted by design,
+- **a browser error report containing whatever the reporter chose to put in
+  it.** The endpoint bounds, scrubs, and rate-limits what it accepts, and logs
+  it at `Warning` so that it cannot move the installation's error rate. It does
+  not attempt to judge whether a report is genuine, and a log entry that says
+  something untrue because somebody posted it is the same class of thing as an
+  application logging an attacker's user agent,
 - free-tier hosted API throttling causing missed or delayed detection. This is a
   documented operational risk of running on a free provider plan.
 

@@ -145,6 +145,12 @@ services:
       Admin__Authentication__RateLimitWindow: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_WINDOW:-00:05:00}
       IntegrationApi__RateLimit__PermitLimit: ${PAYAFFE_INTEGRATION_API_RATE_LIMIT_PERMIT_LIMIT:-120}
       IntegrationApi__RateLimit__Window: ${PAYAFFE_INTEGRATION_API_RATE_LIMIT_WINDOW:-00:01:00}
+      # The browser error endpoint is the only unauthenticated surface anybody
+      # may post to. The limit is per source address; setting Enabled to false
+      # leaves it unmapped entirely.
+      Diagnostics__ClientErrors__Enabled: ${PAYAFFE_CLIENT_ERRORS_ENABLED:-true}
+      Diagnostics__ClientErrors__RateLimitPermitLimit: ${PAYAFFE_CLIENT_ERROR_RATE_LIMIT_PERMIT_LIMIT:-10}
+      Diagnostics__ClientErrors__RateLimitWindow: ${PAYAFFE_CLIENT_ERROR_RATE_LIMIT_WINDOW:-00:01:00}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/ready"]
       interval: 10s

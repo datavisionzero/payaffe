@@ -52,6 +52,9 @@ stays visible even when the lease holder is the unhealthy instance.
 
 | Environment variable | Configuration key | Effect |
 | --- | --- | --- |
+| `PAYAFFE_CLIENT_ERRORS_ENABLED` | `Diagnostics:ClientErrors:Enabled` | Whether `POST /api/client-errors` is mapped. Default `true`. |
+| `PAYAFFE_CLIENT_ERROR_RATE_LIMIT_PERMIT_LIMIT` | `Diagnostics:ClientErrors:RateLimitPermitLimit` | Reports accepted per source address per window. Default `10`. |
+| `PAYAFFE_CLIENT_ERROR_RATE_LIMIT_WINDOW` | `Diagnostics:ClientErrors:RateLimitWindow` | The window. Default one minute. |
 | `PAYAFFE_LOGAFFE_URL` | `Observability:Logaffe:Url` | Scheme and host of the logaffe installation, for example `https://logs.example.com`. The ingest path is appended by the client and is not a setting. Empty keeps logs on stdout only. |
 | `PAYAFFE_LOGAFFE_TOKEN` | `Observability:Logaffe:IngestToken` | Ingest token. A secret, and also what names the logaffe project entries land in. |
 | `PAYAFFE_OTLP_ENDPOINT` | `Observability:OtlpEndpoint` | OTLP receiver for traces and metrics, normally Grafana Alloy, for example `http://alloy:4317`. Logs do not travel this path. Empty disables export. |
@@ -62,6 +65,45 @@ stays visible even when the lease holder is the unhealthy instance.
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` is accepted as an alternative to
 `PAYAFFE_OTLP_ENDPOINT` for operators who already set the conventional variable.
+
+### Browser errors
+
+Errors the payer page and the Admin UI could not handle are posted back to this
+installation at `POST /api/client-errors` and logged where everything else is
+logged. That is why no separate browser error-tracking service is required for
+them.
+
+It is the only unauthenticated endpoint anybody on the internet may post to, and
+it is bounded accordingly:
+
+| Bound | Value |
+| --- | --- |
+| Request body | 32 KiB, enforced by the endpoint rather than by the server |
+| Rate limit | `PAYAFFE_CLIENT_ERROR_RATE_LIMIT_PERMIT_LIMIT` per source address per window |
+| Fields accepted | `name`, `message`, `stack`, `path` — nothing else is read |
+| Level | `Warning` |
+
+Three of those are security properties rather than tuning.
+
+**Warning, not Error.** An unauthenticated caller must not be able to raise the
+installation's error rate, because an error rate is what an alert is derived
+from. Browser errors are found by filtering on `Warning` and the
+`Payaffe.Web.ClientError` source, not by watching the error count.
+
+**The release, the environment, the user agent and the address are not accepted
+from the caller.** The host already knows all four, and taking them from the
+body would only let the body choose them.
+
+**The reported text is never part of a log message template.** It is passed as
+values, so a browser reporting `{ClientErrorName}` gets those characters logged
+rather than a substitution. Messages are reduced to one line, control characters
+are removed, a query string is dropped from the path, and everything is cut to a
+cap and flagged with an ellipsis. The stack trace is carried in the field a log
+store keeps an exception in, so it is searchable there.
+
+`PAYAFFE_CLIENT_ERRORS_ENABLED=false` leaves the endpoint unmapped. An
+installation that does not want a publicly postable surface does not get one
+that answers and discards.
 
 ### Log delivery
 
