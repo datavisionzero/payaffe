@@ -55,12 +55,15 @@ Stopping `worker` matters as much as stopping `api`: a running worker keeps
 taking leases, polling providers, and delivering Webhook Events against whatever
 database it is pointed at.
 
-Point a non-production API instance at the restored database. Run migrations
-only when restoring into the same or a newer compatible application version.
-Normal API startup never applies migrations, so this is always an explicit step:
+Point a non-production API instance at the restored database — and note that
+starting one applies migrations to whatever it is pointed at
+([ADR 0027](../adr/0027-migrations-apply-on-startup.md)). Restoring into an
+older application version than the dump came from is the case to be careful
+with: start a host of the version that took the dump, or apply the schema
+deliberately first and read the result before starting anything.
 
 ```sh
-docker compose run --rm migrations
+docker compose --profile operations run --rm migrations
 ```
 
 ## Verification Checklist
