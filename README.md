@@ -15,8 +15,8 @@ deliberately is not.
 
 ## Status
 
-**`0.1.0` — the first release.** Images are published to
-`ghcr.io/datavisionzero` and an installation is the two files below. The `0.x`
+**Released.** Images are published to `ghcr.io/datavisionzero` for `linux/amd64`
+and `linux/arm64`, and an installation is the two files below. The `0.x`
 is deliberate: the Integration API and the webhook contract are versioned and
 snapshotted, but they have not yet been depended on by anyone, and `1.0.0` is
 reserved for the point where breaking them would cost something. Pin

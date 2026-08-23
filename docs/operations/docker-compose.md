@@ -71,7 +71,6 @@ address compiled in:
 ```sh
 docker build -f apps/web/Dockerfile \
   --build-arg NEXT_PUBLIC_PAYAFFE_API_BASE_URL=https://api.example.com \
-  --build-arg NEXT_PUBLIC_RELEASE=0.1.0 \
   -t payaffe-web:local .
 ```
 

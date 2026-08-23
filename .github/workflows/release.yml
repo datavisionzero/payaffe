@@ -130,6 +130,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
+      # Emulation for the architecture the runner is not. An operator running a
+      # shop this size is as likely to be on a cheap ARM host -- Ampere,
+      # Graviton, a Pi -- as on x86, and an image that exists for one of the two
+      # is an image half of them cannot start. The first release shipped amd64
+      # only and this is what that cost.
+      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
 
       - name: Sign in to the registry
@@ -166,6 +172,7 @@ jobs:
           context: .
           file: apps/${{ matrix.image }}/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tags.outputs.value }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
