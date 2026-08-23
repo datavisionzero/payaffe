@@ -1,3 +1,5 @@
+using Payaffe.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -15,6 +17,8 @@ namespace Payaffe.Infrastructure.Migrations;
 /// `mfa_authenticated_at` would record in the security store that a factor was
 /// cleared which never was.
 /// </remarks>
+[DbContext(typeof(PayaffeDbContext))]
+[Migration("202608230001_AllowSessionsWithoutASecondFactor")]
 public sealed partial class AllowSessionsWithoutASecondFactor : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
