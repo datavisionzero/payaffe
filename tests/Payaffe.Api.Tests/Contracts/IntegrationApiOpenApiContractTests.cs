@@ -101,7 +101,7 @@ public sealed class IntegrationApiOpenApiContractTests
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Payaffe.sln")))
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Payaffe.slnx")))
         {
             directory = directory.Parent;
         }

@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY Payaffe.sln global.json ./
+COPY Payaffe.slnx global.json ./
 COPY apps/api/Payaffe.Api.csproj apps/api/
 COPY src/Payaffe.Application/Payaffe.Application.csproj src/Payaffe.Application/
 COPY src/Payaffe.Domain/Payaffe.Domain.csproj src/Payaffe.Domain/

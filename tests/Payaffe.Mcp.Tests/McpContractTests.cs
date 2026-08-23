@@ -186,7 +186,7 @@ public sealed class McpContractTests
     private static string ResolveRepositoryPath(params string[] segments)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Payaffe.sln")))
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Payaffe.slnx")))
         {
             directory = directory.Parent;
         }

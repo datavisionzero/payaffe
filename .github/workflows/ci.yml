@@ -24,9 +24,9 @@ jobs:
         with:
           global-json-file: global.json
 
-      - run: dotnet restore Payaffe.sln
-      - run: dotnet build Payaffe.sln --configuration Release --no-restore
-      - run: dotnet test Payaffe.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+      - run: dotnet restore Payaffe.slnx
+      - run: dotnet build Payaffe.slnx --configuration Release --no-restore
+      - run: dotnet test Payaffe.slnx --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
 
       - name: Keep the results of a failed run
         if: failure()
