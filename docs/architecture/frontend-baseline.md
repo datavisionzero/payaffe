@@ -33,6 +33,27 @@ The first frontend implementation uses one Next.js App Router application under
 The app serves Payer and Admin routes. Route structure should make the two
 surfaces clear, but separate apps are not required for the MVP.
 
+The Admin surface is a route per view, framed by one shell that holds the
+section navigation and the signed-in identity:
+
+| Route | View |
+| --- | --- |
+| `/admin/login` | Sign-in and the second step, outside the shell |
+| `/admin` | Overview: Observation Health, Reorg Alerts, Webhook Delivery backlog, Address Pool capacity, recent Payments |
+| `/admin/payments` | Payment list |
+| `/admin/payments/{paymentId}` | Payment detail and manual Settlement |
+| `/admin/monitoring` | Observation Health and Reorg Alerts |
+| `/admin/webhooks` | Webhook Endpoints, and Webhook Deliveries under `?view=deliveries` |
+| `/admin/integrations` | Integration API Credentials |
+| `/admin/addresses` | Native ETH Address Pool |
+| `/admin/audit-log` | Audit Log list and export |
+| `/admin/audit-log/{eventId}` | Audit Log entry detail |
+| `/admin/account` | Session, step-up, recovery codes, sign-out |
+
+The navigation carries a count for the sections that can need attention, so an
+unresolved Reorg Alert, a Webhook Delivery backlog, or a draining Address Pool
+is visible from any Admin route rather than only from the page that lists it.
+
 Next.js Server Components may be used for rendering, layout, metadata, and
 safe read paths. They must not contain domain logic or protected mutation
 logic.
