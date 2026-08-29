@@ -41,7 +41,7 @@ test("Payer sees completion and chooses the Return URL", async ({ page }) => {
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
-test("Admin signs in and performs a CSRF-protected credential write", async ({ page }) => {
+test("Admin signs in, navigates the admin sections, and writes with CSRF", async ({ page }) => {
   let authenticated = false;
   let csrfHeader: string | undefined;
 
@@ -119,7 +119,11 @@ test("Admin signs in and performs a CSRF-protected credential write", async ({ p
     return route.fulfill({ json: emptyResponses[path] ?? {} });
   });
 
+  // An unauthenticated admin is sent to the sign-in route rather than shown
+  // panels that each fail on their own.
   await page.goto("/admin");
+  await expect(page).toHaveURL(/\/admin\/login$/);
+
   await page.getByLabel("Username").focus();
   await page.keyboard.type("admin@example.test");
   await page.keyboard.press("Tab");
@@ -134,7 +138,26 @@ test("Admin signs in and performs a CSRF-protected credential write", async ({ p
   await expect(page.getByRole("button", { name: "Sign in" })).toBeFocused();
   await page.keyboard.press("Enter");
 
-  await expect(page.getByRole("heading", { name: "Current session" })).toBeVisible();
+  // Sign-in lands on the overview, and the sections are reachable from there.
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "Admin sections" });
+  await expect(navigation.getByRole("link", { name: "Overview" })).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  await navigation.getByRole("link", { name: "Integrations" }).click();
+  await expect(page).toHaveURL(/\/admin\/integrations$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Integration API Credentials" })
+  ).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Integrations" })).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+
   await page.getByLabel("Credential name").focus();
   await page.keyboard.type("Playwright integration");
   await page.keyboard.press("Tab");
@@ -143,5 +166,83 @@ test("Admin signs in and performs a CSRF-protected credential write", async ({ p
 
   await expect(page.getByText("payaffe_playwright_one_time_token")).toBeVisible();
   expect(csrfHeader).toBe("csrf-token");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("Admin reaches the Webhook Deliveries view by its own URL", async ({ page }) => {
+  await page.route("**/api/admin/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/admin/session") {
+      return route.fulfill({
+        json: {
+          status: "authenticated",
+          adminAccountId: "f30c6d61-8ce9-488b-93bb-33f72dbf6ac1",
+          username: "admin@example.test",
+          mfaAuthenticatedAt: "2026-07-05T10:00:00Z",
+          stepUpAuthenticatedAt: "2026-07-05T10:00:00Z",
+          expiresAt: "2026-07-12T10:00:00Z",
+          idleExpiresAt: "2026-07-05T22:00:00Z"
+        }
+      });
+    }
+    if (path === "/api/admin/webhook-deliveries") {
+      return route.fulfill({
+        json: {
+          deliveries: [
+            {
+              webhookEventId: "4c5b4f2a-df57-4804-8a6f-dce55b2e680a",
+              paymentId: "78d8a09b-1c4a-4b6e-9f94-f8acbd4278f1",
+              paymentExternalReference: "order-123",
+              eventType: "payment.created",
+              eventVersion: "1",
+              status: "retry_pending",
+              attemptCount: 1,
+              lastErrorCode: "http.503",
+              nextAttemptAt: "2026-07-05T10:25:00Z",
+              occurredAt: "2026-07-05T10:00:00Z",
+              createdAt: "2026-07-05T10:00:00Z",
+              lastAttemptedAt: "2026-07-05T10:20:00Z",
+              lastAttemptResult: "retry_pending",
+              lastHttpStatusCode: 503,
+              lastSafeErrorCode: "http.503",
+              correlationId: "trace-webhook"
+            }
+          ]
+        }
+      });
+    }
+
+    const emptyResponses: Record<string, unknown> = {
+      "/api/admin/payments": { payments: [] },
+      "/api/admin/audit-log": { entries: [] },
+      "/api/admin/reorg-alerts": { alerts: [] },
+      "/api/admin/integration-api-credentials": { credentials: [] },
+      "/api/admin/webhook-endpoints": { endpoints: [] },
+      "/api/admin/observation-health": { currencies: [] },
+      "/api/admin/native-eth-address-pool": {
+        unusedCount: 0,
+        assignedCount: 0,
+        retiredCount: 0,
+        lowCapacityThreshold: 5,
+        isLowCapacity: false
+      }
+    };
+    return route.fulfill({ json: emptyResponses[path] ?? {} });
+  });
+
+  await page.goto("/admin/webhooks?view=deliveries");
+
+  await expect(page.getByRole("link", { name: "Deliveries" })).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+  await expect(page.getByRole("heading", { level: 2, name: "Webhook deliveries" })).toBeVisible();
+  await expect(page.getByText("http.503")).toBeVisible();
+  // The count that the navigation carries comes from the same list.
+  await expect(
+    page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", {
+      name: "Webhooks, 1 needs attention"
+    })
+  ).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
