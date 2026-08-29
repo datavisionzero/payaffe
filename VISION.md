@@ -70,10 +70,10 @@ workers watch for the transaction, count confirmations, and complete the
 payment. The shop learns about it through a signed webhook, or by polling the
 same API it created the payment with.
 
-An admin signs in behind a second factor to see payments, resolve the cases
-automation should not decide alone, manage integration credentials and webhook
-endpoints, and read the audit log. An agent CLI reaches a deliberately narrower
-version of that over MCP.
+An admin signs in with a password, and with a second factor once they have
+enrolled one, to see payments, resolve the cases automation should not decide
+alone, manage integration credentials and webhook endpoints, and read the audit
+log. An agent CLI reaches a deliberately narrower version of that over MCP.
 
 The detailed product rules — statuses, tolerances, late payments, expiration,
 evidence storage, and the full admin scope — are
@@ -118,10 +118,10 @@ explains why the obvious alternative was not.
 
 ## Operating an installation
 
-An installation is a compose file, a `.env`, and a PostgreSQL volume. Migrations
-run as a deliberate step rather than on startup, so an upgrade can be stopped
-between the schema and the code. The database is the backup target, and a
-restore has to keep assigned ETH addresses assigned.
+An installation is a compose file, a `.env`, and a PostgreSQL volume. The hosts
+bring the schema up to date as they start, so an upgrade is a pull and an up
+with no step in between. The database is the backup target, and a restore has to
+keep assigned ETH addresses assigned.
 
 Setup, backup, rotation, and incident procedures are in
 [docs/operations/](docs/operations/).

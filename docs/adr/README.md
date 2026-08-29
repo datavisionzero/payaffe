@@ -49,7 +49,7 @@ material value to understanding the decision.
 - [0016 – Migrations are a step, not a startup side effect](./0016-migrations-are-a-step-not-a-startup-side-effect.md) — superseded by 0027
 - [0017 – One installation serves one shop](./0017-one-installation-serves-one-shop.md)
 - [0018 – Every admin is fully privileged](./0018-every-admin-is-fully-privileged.md)
-- [0019 – The second factor is TOTP, and sensitive writes need a fresh one](./0019-the-second-factor-is-totp-and-sensitive-writes-need-a-fresh-one.md)
+- [0019 – The second factor is TOTP, and sensitive writes need a fresh one](./0019-the-second-factor-is-totp-and-sensitive-writes-need-a-fresh-one.md) — amended by 0028
 - [0020 – The first admin is created by a local command](./0020-the-first-admin-is-created-by-a-local-command.md)
 - [0021 – Secrets live in the environment, never in the repository](./0021-secrets-live-in-the-environment-never-in-the-repository.md)
 - [0022 – The backend owns every protected mutation](./0022-the-backend-owns-every-protected-mutation.md)
