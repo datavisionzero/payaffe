@@ -9,6 +9,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
     public DbSet<ProjectConfigurationRecord> ProjectConfigurations => Set<ProjectConfigurationRecord>();
 
+    public DbSet<ProjectWatchOnlyWalletSourceRecord> ProjectWatchOnlyWalletSources => Set<ProjectWatchOnlyWalletSourceRecord>();
+
     public DbSet<AdminAccountRecord> AdminAccounts => Set<AdminAccountRecord>();
 
     public DbSet<AdminLoginChallengeRecord> AdminLoginChallenges => Set<AdminLoginChallengeRecord>();
@@ -58,6 +60,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureProjects(modelBuilder);
+        ConfigureProjectWatchOnlyWalletSources(modelBuilder);
         ConfigureAdminAccounts(modelBuilder);
         ConfigureAdminLoginChallenges(modelBuilder);
         ConfigureAdminSessions(modelBuilder);
@@ -116,6 +119,9 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(configuration => configuration.PaymentExpirationSeconds).HasColumnName("payment_expiration_seconds").HasColumnType("bigint");
             entity.Property(configuration => configuration.LateAcceptanceWindowSeconds).HasColumnName("late_acceptance_window_seconds").HasColumnType("bigint");
             entity.Property(configuration => configuration.PaymentTolerancePercent).HasColumnName("payment_tolerance_percent").HasColumnType("numeric");
+            entity.Property(configuration => configuration.BtcEnabled).HasColumnName("btc_enabled").HasColumnType("boolean").HasDefaultValue(true);
+            entity.Property(configuration => configuration.LtcEnabled).HasColumnName("ltc_enabled").HasColumnType("boolean").HasDefaultValue(true);
+            entity.Property(configuration => configuration.EthEnabled).HasColumnName("eth_enabled").HasColumnType("boolean").HasDefaultValue(true);
             entity.Property(configuration => configuration.BtcConfirmationRequirement).HasColumnName("btc_confirmation_requirement").HasColumnType("integer");
             entity.Property(configuration => configuration.LtcConfirmationRequirement).HasColumnName("ltc_confirmation_requirement").HasColumnType("integer");
             entity.Property(configuration => configuration.EthConfirmationRequirement).HasColumnName("eth_confirmation_requirement").HasColumnType("integer");
@@ -144,6 +150,39 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 table.HasCheckConstraint("ck_project_configuration_confirmations", "btc_confirmation_requirement >= 0 and ltc_confirmation_requirement >= 0 and eth_confirmation_requirement >= 0");
                 table.HasCheckConstraint("ck_project_configuration_reorg_depths", "btc_reorg_monitoring_depth >= 0 and ltc_reorg_monitoring_depth >= 0 and eth_reorg_monitoring_depth >= 0");
                 table.HasCheckConstraint("ck_project_configuration_eth_threshold", "native_eth_low_capacity_threshold >= 0");
+            });
+        });
+    }
+
+    private static void ConfigureProjectWatchOnlyWalletSources(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectWatchOnlyWalletSourceRecord>(entity =>
+        {
+            entity.ToTable("project_watch_only_wallet_sources", "app");
+            entity.HasKey(source => new { source.ProjectId, source.SupportedCurrency })
+                .HasName("pk_project_watch_only_wallet_sources");
+            entity.Property(source => source.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
+            entity.Property(source => source.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
+            entity.Property(source => source.SourceFingerprint).HasColumnName("source_fingerprint").HasColumnType("text");
+            entity.Property(source => source.Network).HasColumnName("network").HasColumnType("text");
+            entity.Property(source => source.AddressType).HasColumnName("address_type").HasColumnType("text");
+            entity.Property(source => source.StartingIndex).HasColumnName("starting_index").HasColumnType("bigint");
+            entity.Property(source => source.SourceReference).HasColumnName("source_reference").HasColumnType("text");
+            entity.Property(source => source.Enabled).HasColumnName("enabled").HasColumnType("boolean");
+            entity.Property(source => source.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(source => source.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(source => source.Version).HasColumnName("version").HasColumnType("bigint").HasDefaultValue(1L).IsConcurrencyToken();
+            entity.HasOne<ProjectRecord>()
+                .WithMany()
+                .HasForeignKey(source => source.ProjectId)
+                .HasConstraintName("fk_project_watch_only_wallet_sources_projects")
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(source => new { source.SupportedCurrency, source.SourceFingerprint })
+                .HasDatabaseName("ix_project_watch_only_wallet_sources_fingerprint");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("ck_project_watch_only_wallet_sources_currency", "supported_currency in ('BTC', 'LTC')");
+                table.HasCheckConstraint("ck_project_watch_only_wallet_sources_starting_index", "starting_index >= 0 and starting_index <= 2147483647");
             });
         });
     }
@@ -406,6 +445,9 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(payment => payment.SelectedCurrency).HasColumnName("selected_currency").HasColumnType("text");
             entity.Property(payment => payment.ExpectedCryptoAmount).HasColumnName("expected_crypto_amount").HasColumnType("text");
             entity.Property(payment => payment.PaymentAddress).HasColumnName("payment_address").HasColumnType("text");
+            entity.Property(payment => payment.ConfirmationRequirement).HasColumnName("confirmation_requirement").HasColumnType("integer");
+            entity.Property(payment => payment.PaymentTolerancePercent).HasColumnName("payment_tolerance_percent").HasColumnType("numeric");
+            entity.Property(payment => payment.ReorgMonitoringDepth).HasColumnName("reorg_monitoring_depth").HasColumnType("integer");
             entity.Property(payment => payment.ConfirmedEligibleTotal).HasColumnName("confirmed_eligible_total").HasColumnType("text");
             entity.Property(payment => payment.CompletedAt).HasColumnName("completed_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.SettledAt).HasColumnName("settled_at").HasColumnType("timestamp with time zone");
@@ -613,6 +655,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(assignment => assignment.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(assignment => assignment.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
             entity.Property(assignment => assignment.PaymentAddress).HasColumnName("payment_address").HasColumnType("text");
+            entity.Property(assignment => assignment.SourceFingerprint).HasColumnName("source_fingerprint").HasColumnType("text");
+            entity.Property(assignment => assignment.DerivationIndex).HasColumnName("derivation_index").HasColumnType("bigint");
             entity.Property(assignment => assignment.AssignedAt).HasColumnName("assigned_at").HasColumnType("timestamp with time zone");
 
             entity.HasOne<PaymentRecord>()
@@ -623,6 +667,10 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(assignment => new { assignment.ProjectId, assignment.PaymentId })
                 .HasDatabaseName("ix_payment_address_assignments_project_payment");
+            entity.HasIndex(assignment => new { assignment.SupportedCurrency, assignment.PaymentAddress })
+                .IsUnique()
+                .HasFilter("source_fingerprint is not null")
+                .HasDatabaseName("uq_payment_address_assignments_currency_address");
         });
     }
 
@@ -631,7 +679,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
         modelBuilder.Entity<WatchOnlyWalletCursorRecord>(entity =>
         {
             entity.ToTable("watch_only_wallet_cursors", "app");
-            entity.HasKey(cursor => cursor.SupportedCurrency)
+            entity.HasKey(cursor => new { cursor.SupportedCurrency, cursor.SourceFingerprint })
                 .HasName("pk_watch_only_wallet_cursors");
             entity.Property(cursor => cursor.SupportedCurrency)
                 .HasColumnName("supported_currency")

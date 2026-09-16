@@ -216,6 +216,9 @@ public sealed record PaymentSelectionDraft(
     string RateSource,
     string RateValue,
     DateTimeOffset RateObservedAt,
+    int ConfirmationRequirement,
+    decimal PaymentTolerancePercent,
+    int ReorgMonitoringDepth,
     DateTimeOffset SelectedAt);
 
 public sealed record BlockchainObservationDraft(

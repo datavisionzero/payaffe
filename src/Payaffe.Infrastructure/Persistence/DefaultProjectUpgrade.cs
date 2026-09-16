@@ -36,29 +36,104 @@ internal static class DefaultProjectUpgrade
                     "All starting hosts must use the same Payments and PaymentAddresses settings during the multi-Project upgrade.");
             }
 
-            return;
         }
 
-        configuration.PaymentExpirationSeconds = ToWholeSeconds(
-            paymentOptions.PaymentExpiration,
-            "Payments:PaymentExpiration");
-        configuration.LateAcceptanceWindowSeconds = ToWholeSeconds(
-            paymentOptions.LateAcceptanceWindow,
-            "Payments:LateAcceptanceWindow",
-            allowZero: true);
-        configuration.PaymentTolerancePercent = paymentOptions.PaymentTolerancePercent;
-        configuration.BtcConfirmationRequirement = paymentOptions.BtcConfirmationRequirement;
-        configuration.LtcConfirmationRequirement = paymentOptions.LtcConfirmationRequirement;
-        configuration.EthConfirmationRequirement = paymentOptions.EthConfirmationRequirement;
-        configuration.BtcReorgMonitoringDepth = paymentOptions.BtcReorgMonitoringDepth;
-        configuration.LtcReorgMonitoringDepth = paymentOptions.LtcReorgMonitoringDepth;
-        configuration.EthReorgMonitoringDepth = paymentOptions.EthReorgMonitoringDepth;
-        configuration.NativeEthLowCapacityThreshold = addressOptions.NativeEthLowCapacityThreshold;
-        configuration.LegacySettingsFingerprint = fingerprint;
-        configuration.UpdatedAt = DateTimeOffset.UtcNow;
-        configuration.Version++;
+        if (configuration.LegacySettingsFingerprint.Length == 0)
+        {
+            configuration.PaymentExpirationSeconds = ToWholeSeconds(
+                paymentOptions.PaymentExpiration,
+                "Payments:PaymentExpiration");
+            configuration.LateAcceptanceWindowSeconds = ToWholeSeconds(
+                paymentOptions.LateAcceptanceWindow,
+                "Payments:LateAcceptanceWindow",
+                allowZero: true);
+            configuration.PaymentTolerancePercent = paymentOptions.PaymentTolerancePercent;
+            configuration.BtcConfirmationRequirement = paymentOptions.BtcConfirmationRequirement;
+            configuration.LtcConfirmationRequirement = paymentOptions.LtcConfirmationRequirement;
+            configuration.EthConfirmationRequirement = paymentOptions.EthConfirmationRequirement;
+            configuration.BtcReorgMonitoringDepth = paymentOptions.BtcReorgMonitoringDepth;
+            configuration.LtcReorgMonitoringDepth = paymentOptions.LtcReorgMonitoringDepth;
+            configuration.EthReorgMonitoringDepth = paymentOptions.EthReorgMonitoringDepth;
+            configuration.NativeEthLowCapacityThreshold = addressOptions.NativeEthLowCapacityThreshold;
+            configuration.LegacySettingsFingerprint = fingerprint;
+            configuration.UpdatedAt = DateTimeOffset.UtcNow;
+            configuration.Version++;
+        }
+
+        await MaterializeWalletSourceAsync("BTC", addressOptions.Btc);
+        await MaterializeWalletSourceAsync("LTC", addressOptions.Ltc);
+
+        var selectedPayments = await dbContext.Payments
+            .Where(payment => payment.ProjectId == ProjectDefaults.DefaultProjectId &&
+                              payment.SelectedCurrency != null &&
+                              payment.ConfirmationRequirement == null)
+            .ToListAsync(cancellationToken);
+        foreach (var payment in selectedPayments)
+        {
+            payment.ConfirmationRequirement = payment.SelectedCurrency switch
+            {
+                "BTC" => configuration.BtcConfirmationRequirement,
+                "LTC" => configuration.LtcConfirmationRequirement,
+                "ETH" => configuration.EthConfirmationRequirement,
+                _ => null,
+            };
+            payment.PaymentTolerancePercent = configuration.PaymentTolerancePercent;
+            payment.ReorgMonitoringDepth = payment.SelectedCurrency switch
+            {
+                "BTC" => configuration.BtcReorgMonitoringDepth,
+                "LTC" => configuration.LtcReorgMonitoringDepth,
+                "ETH" => configuration.EthReorgMonitoringDepth,
+                _ => null,
+            };
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        async Task MaterializeWalletSourceAsync(
+            string supportedCurrency,
+            WatchOnlyWalletSourceOptions source)
+        {
+            if (!source.Enabled || string.IsNullOrWhiteSpace(source.ExtendedPublicKey))
+            {
+                return;
+            }
+
+            var sourceFingerprint = WatchOnlyWalletSourceFingerprint.Compute(
+                supportedCurrency,
+                source.Network,
+                source.AddressType,
+                source.ExtendedPublicKey);
+            var existing = await dbContext.ProjectWatchOnlyWalletSources.SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == ProjectDefaults.DefaultProjectId &&
+                             candidate.SupportedCurrency == supportedCurrency,
+                cancellationToken);
+            if (existing is not null)
+            {
+                if (!StringComparer.Ordinal.Equals(existing.SourceFingerprint, sourceFingerprint))
+                {
+                    throw new InvalidOperationException(
+                        $"The configured {supportedCurrency} Watch-Only Wallet Source differs from the source bound to the default Project.");
+                }
+
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            dbContext.ProjectWatchOnlyWalletSources.Add(new Records.ProjectWatchOnlyWalletSourceRecord
+            {
+                ProjectId = ProjectDefaults.DefaultProjectId,
+                SupportedCurrency = supportedCurrency,
+                SourceFingerprint = sourceFingerprint,
+                Network = source.Network,
+                AddressType = source.AddressType,
+                StartingIndex = source.StartingIndex,
+                SourceReference = "legacy",
+                Enabled = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+                Version = 1,
+            });
+        }
     }
 
     private static long ToWholeSeconds(TimeSpan value, string setting, bool allowZero = false)

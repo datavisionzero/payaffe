@@ -10,5 +10,9 @@ public sealed class PaymentAddressAssignmentRecord
 
     public string PaymentAddress { get; set; } = string.Empty;
 
+    public string? SourceFingerprint { get; set; }
+
+    public long? DerivationIndex { get; set; }
+
     public DateTimeOffset AssignedAt { get; set; }
 }

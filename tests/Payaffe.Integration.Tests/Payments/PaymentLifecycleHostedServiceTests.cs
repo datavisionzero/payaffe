@@ -173,6 +173,7 @@ public sealed class PaymentLifecycleHostedServiceTests(PostgreSqlFixture postgre
     private sealed class FixedPaymentAddressProvider : IPaymentAddressProvider
     {
         public Task<PaymentAddressAssignment?> AssignAsync(
+            Guid projectId,
             Guid paymentId,
             string supportedCurrency,
             CancellationToken cancellationToken)

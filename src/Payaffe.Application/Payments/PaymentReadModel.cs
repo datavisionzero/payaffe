@@ -24,7 +24,8 @@ public sealed record PaymentReadModel(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     IReadOnlyList<PaymentOptionReadModel>? PaymentOptions = null,
-    DateTimeOffset? SettledAt = null);
+    DateTimeOffset? SettledAt = null,
+    Guid ProjectId = default);
 
 public sealed record PaymentOptionReadModel(
     string SupportedCurrency,

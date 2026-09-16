@@ -111,6 +111,11 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
             });
         }
 
+        if (!await dbContext.ProjectConfigurations.AnyAsync(configuration => configuration.ProjectId == owningProjectId))
+        {
+            dbContext.ProjectConfigurations.Add(CreateProjectConfiguration(owningProjectId, now));
+        }
+
         dbContext.IntegrationApiCredentials.Add(new IntegrationApiCredentialRecord
         {
             ProjectId = owningProjectId,
@@ -142,9 +147,33 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
             CreatedAt = now,
             UpdatedAt = now,
         });
+        dbContext.ProjectConfigurations.Add(CreateProjectConfiguration(projectId, now));
         await dbContext.SaveChangesAsync();
         return projectId;
     }
+
+    private static ProjectConfigurationRecord CreateProjectConfiguration(
+        Guid projectId,
+        DateTimeOffset now) => new()
+    {
+        ProjectId = projectId,
+        PaymentExpirationSeconds = 3600,
+        LateAcceptanceWindowSeconds = 86400,
+        PaymentTolerancePercent = 1m,
+        BtcEnabled = true,
+        LtcEnabled = true,
+        EthEnabled = true,
+        BtcConfirmationRequirement = 1,
+        LtcConfirmationRequirement = 1,
+        EthConfirmationRequirement = 12,
+        BtcReorgMonitoringDepth = 6,
+        LtcReorgMonitoringDepth = 12,
+        EthReorgMonitoringDepth = 64,
+        NativeEthLowCapacityThreshold = 20,
+        LegacySettingsFingerprint = string.Empty,
+        CreatedAt = now,
+        UpdatedAt = now,
+    };
 
     public async Task<Guid> SeedAdminAccountAsync(
         string username,
@@ -216,6 +245,7 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
     private sealed class FixedPaymentAddressProvider : IPaymentAddressProvider
     {
         public Task<PaymentAddressAssignment?> AssignAsync(
+            Guid projectId,
             Guid paymentId,
             string supportedCurrency,
             CancellationToken cancellationToken)

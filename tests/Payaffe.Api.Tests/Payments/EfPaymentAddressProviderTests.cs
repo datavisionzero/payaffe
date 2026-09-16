@@ -42,14 +42,17 @@ public sealed class EfPaymentAddressProviderTests
                 });
 
             var first = await provider.AssignAsync(
+                ProjectDefaults.DefaultProjectId,
                 firstPaymentId,
                 "BTC",
                 CancellationToken.None);
             var repeated = await provider.AssignAsync(
+                ProjectDefaults.DefaultProjectId,
                 firstPaymentId,
                 "BTC",
                 CancellationToken.None);
             var second = await provider.AssignAsync(
+                ProjectDefaults.DefaultProjectId,
                 secondPaymentId,
                 "BTC",
                 CancellationToken.None);
@@ -96,15 +99,15 @@ public sealed class EfPaymentAddressProviderTests
         await dbContext.SaveChangesAsync();
         var provider = CreateProvider(dbContext, new PaymentAddressOptions());
 
-        Assert.True(await provider.IsAddressAvailableAsync("ETH", CancellationToken.None));
-        var first = await provider.AssignAsync(firstPaymentId, "ETH", CancellationToken.None);
-        var repeated = await provider.AssignAsync(firstPaymentId, "ETH", CancellationToken.None);
-        var exhausted = await provider.AssignAsync(secondPaymentId, "ETH", CancellationToken.None);
+        Assert.True(await provider.IsAddressAvailableAsync(ProjectDefaults.DefaultProjectId, "ETH", CancellationToken.None));
+        var first = await provider.AssignAsync(ProjectDefaults.DefaultProjectId, firstPaymentId, "ETH", CancellationToken.None);
+        var repeated = await provider.AssignAsync(ProjectDefaults.DefaultProjectId, firstPaymentId, "ETH", CancellationToken.None);
+        var exhausted = await provider.AssignAsync(ProjectDefaults.DefaultProjectId, secondPaymentId, "ETH", CancellationToken.None);
 
         Assert.Equal("0x1111111111111111111111111111111111111111", first!.PaymentAddress);
         Assert.Equal(first, repeated);
         Assert.Null(exhausted);
-        Assert.False(await provider.IsAddressAvailableAsync("ETH", CancellationToken.None));
+        Assert.False(await provider.IsAddressAvailableAsync(ProjectDefaults.DefaultProjectId, "ETH", CancellationToken.None));
         var poolAddress = Assert.Single(dbContext.NativeEthAddresses);
         Assert.Equal("assigned", poolAddress.Status);
         Assert.Equal(firstPaymentId, poolAddress.AssignedPaymentId);
@@ -133,6 +136,7 @@ public sealed class EfPaymentAddressProviderTests
             });
 
         var assignment = await provider.AssignAsync(
+            ProjectDefaults.DefaultProjectId,
             paymentId,
             "LTC",
             CancellationToken.None);

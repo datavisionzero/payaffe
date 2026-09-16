@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminWebhookEndpointStore, EfAdminWebhookEndpointStore>();
         services.AddScoped<IAdminNativeEthAddressPoolStore, EfAdminNativeEthAddressPoolStore>();
         services.AddScoped<IPaymentStore, EfPaymentStore>();
+        services.AddScoped<IProjectPaymentConfigurationStore, EfProjectPaymentConfigurationStore>();
         services.AddScoped<IPaymentAddressProvider, EfPaymentAddressProvider>();
         services.AddScoped<IRateCacheStore, EfRateCacheStore>();
         services.AddScoped<IObservationHealthStore, EfObservationHealthStore>();

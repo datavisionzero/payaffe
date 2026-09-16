@@ -10,6 +10,12 @@ public sealed class ProjectConfigurationRecord
 
     public decimal PaymentTolerancePercent { get; set; }
 
+    public bool BtcEnabled { get; set; } = true;
+
+    public bool LtcEnabled { get; set; } = true;
+
+    public bool EthEnabled { get; set; } = true;
+
     public int BtcConfirmationRequirement { get; set; }
 
     public int LtcConfirmationRequirement { get; set; }

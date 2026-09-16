@@ -78,7 +78,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             await transaction.CommitAsync(cancellationToken);
         }
 
-        return CreatePaymentStoreResult.Created(ToReadModel(payment, paymentOptions));
+        return CreatePaymentStoreResult.Created(ToReadModel(projectId, payment, paymentOptions));
     }
 
     public async Task<PaymentReadModel?> FindAsync(
@@ -171,12 +171,15 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                       payment.ExpectedCryptoAmount != null &&
                       transaction.SupportedCurrency == payment.SelectedCurrency &&
                       transaction.PaymentAddress == payment.PaymentAddress &&
-                      ((transaction.SupportedCurrency == "BTC" &&
-                        transaction.Confirmations < monitoringPolicy.BtcRequiredConfirmations + monitoringPolicy.BtcMonitoringDepth) ||
-                       (transaction.SupportedCurrency == "LTC" &&
-                        transaction.Confirmations < monitoringPolicy.LtcRequiredConfirmations + monitoringPolicy.LtcMonitoringDepth) ||
-                       (transaction.SupportedCurrency == "ETH" &&
-                        transaction.Confirmations < monitoringPolicy.EthRequiredConfirmations + monitoringPolicy.EthMonitoringDepth))
+                      transaction.Confirmations <
+                      (payment.ConfirmationRequirement ??
+                       (transaction.SupportedCurrency == "BTC" ? monitoringPolicy.BtcRequiredConfirmations :
+                        transaction.SupportedCurrency == "LTC" ? monitoringPolicy.LtcRequiredConfirmations :
+                        monitoringPolicy.EthRequiredConfirmations)) +
+                      (payment.ReorgMonitoringDepth ??
+                       (transaction.SupportedCurrency == "BTC" ? monitoringPolicy.BtcMonitoringDepth :
+                        transaction.SupportedCurrency == "LTC" ? monitoringPolicy.LtcMonitoringDepth :
+                        monitoringPolicy.EthMonitoringDepth))
                 orderby transaction.LastCheckedAt, transaction.Id
                 select new BlockchainReorgMonitoringTarget(
                     payment.Id,
@@ -213,6 +216,9 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         payment.SelectedCurrency = selection.SupportedCurrency;
         payment.ExpectedCryptoAmount = selection.ExpectedCryptoAmount;
         payment.PaymentAddress = selection.PaymentAddress;
+        payment.ConfirmationRequirement = selection.ConfirmationRequirement;
+        payment.PaymentTolerancePercent = selection.PaymentTolerancePercent;
+        payment.ReorgMonitoringDepth = selection.ReorgMonitoringDepth;
         payment.UpdatedAt = selection.SelectedAt;
         payment.Version++;
 
@@ -327,6 +333,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             }));
         }
 
+        completionPolicy = ResolveCompletionPolicy(payment, completionPolicy);
         var completion = await CalculateCompletionAsync(payment, observedTransaction, completionPolicy, cancellationToken);
         if (completion.IsCompleted)
         {
@@ -477,6 +484,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             dbContext.PaymentEventHistory.Add(ToRecord(payment.ProjectId, reorgPaymentEvent));
         }
 
+        completionPolicy = ResolveCompletionPolicy(payment, completionPolicy);
         var completion = await CalculateCompletionAsync(payment, matchingTransaction, completionPolicy, cancellationToken);
         if (completion.IsCompleted)
         {
@@ -834,10 +842,12 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             payment.CreatedAt,
             payment.UpdatedAt,
             paymentOptions,
-            payment.SettledAt);
+            payment.SettledAt,
+            payment.ProjectId);
     }
 
     private static PaymentReadModel ToReadModel(
+        Guid projectId,
         PaymentDraft payment,
         IReadOnlyCollection<PaymentOptionDraft> paymentOptions)
     {
@@ -870,8 +880,17 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                     option.SupportedCurrency,
                     option.Status,
                     option.UnavailableReason))
-                .ToArray());
+                .ToArray(),
+            SettledAt: null,
+            ProjectId: projectId);
     }
+
+    private static PaymentCompletionPolicyDraft ResolveCompletionPolicy(
+        PaymentRecord payment,
+        PaymentCompletionPolicyDraft fallback) =>
+        new(
+            payment.ConfirmationRequirement ?? fallback.RequiredConfirmations,
+            payment.PaymentTolerancePercent ?? fallback.PaymentTolerancePercent);
 
     private sealed record CompletionCalculation(
         bool IsCompleted,

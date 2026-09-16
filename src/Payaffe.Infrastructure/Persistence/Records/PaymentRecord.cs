@@ -38,6 +38,12 @@ public sealed class PaymentRecord
 
     public string? PaymentAddress { get; set; }
 
+    public int? ConfirmationRequirement { get; set; }
+
+    public decimal? PaymentTolerancePercent { get; set; }
+
+    public int? ReorgMonitoringDepth { get; set; }
+
     public string? ConfirmedEligibleTotal { get; set; }
 
     public DateTimeOffset? CompletedAt { get; set; }

@@ -12,6 +12,7 @@ public sealed class PaymentApplicationService(
     IPayerPageIdGenerator payerPageIdGenerator,
     IExchangeRateSource exchangeRateSource,
     IPaymentAddressProvider paymentAddressProvider,
+    IProjectPaymentConfigurationStore projectConfigurationStore,
     IBlockchainObservationAdapter blockchainObservationAdapter,
     IClock clock,
     IOptions<PaymentApplicationOptions> options)
@@ -35,6 +36,13 @@ public sealed class PaymentApplicationService(
             command.PaymentContext?.Note);
         var returnUrl = NormalizeReturnUrl(command.ReturnUrl);
         var createdAt = clock.UtcNow;
+        var projectConfiguration = await projectConfigurationStore.FindByCredentialAsync(
+            integrationApiCredentialId,
+            cancellationToken);
+        if (projectConfiguration is null || projectConfiguration.ProjectStatus != "active")
+        {
+            return CreatePaymentResult.ProjectUnavailable();
+        }
 
         var payment = Payment.Create(
             integrationApiCredentialId,
@@ -44,8 +52,8 @@ public sealed class PaymentApplicationService(
             returnUrl,
             payerPageIdGenerator.Generate(),
             createdAt,
-            _options.PaymentExpiration,
-            _options.LateAcceptanceWindow);
+            projectConfiguration.PaymentExpiration,
+            projectConfiguration.LateAcceptanceWindow);
 
         var paymentDraft = ToPaymentDraft(payment);
         var eventDrafts = payment.Events.Select(ToPaymentEventDraft).ToArray();
@@ -58,24 +66,28 @@ public sealed class PaymentApplicationService(
         var optionDrafts = new List<PaymentOptionDraft>();
         foreach (var currency in SupportedCurrencies)
         {
-            var rateAvailable = await exchangeRateSource.IsRateAvailableAsync(
+            var currencyConfiguration = projectConfiguration.For(currency);
+            var rateAvailable = currencyConfiguration.Enabled && await exchangeRateSource.IsRateAvailableAsync(
                 fiatAmount.Currency,
                 currency,
                 createdAt,
                 cancellationToken);
             var addressAvailable = await paymentAddressProvider.IsAddressAvailableAsync(
+                projectConfiguration.ProjectId,
                 currency,
                 cancellationToken);
             var observationAvailable =
                 await blockchainObservationAdapter.IsObservationAvailableAsync(
                     currency,
                     cancellationToken);
-            var optionAvailable = rateAvailable && addressAvailable && observationAvailable;
+            var optionAvailable = currencyConfiguration.Enabled && rateAvailable && addressAvailable && observationAvailable;
             optionDrafts.Add(new PaymentOptionDraft(
                 payment.Id,
                 currency,
                 optionAvailable ? "available" : "unavailable",
-                !rateAvailable
+                !currencyConfiguration.Enabled
+                    ? PaymentOptionUnavailableReasons.ProjectConfiguration
+                    : !rateAvailable
                     ? PaymentOptionUnavailableReasons.ExchangeRate
                     : !addressAvailable
                         ? PaymentOptionUnavailableReasons.PaymentAddress
@@ -146,6 +158,16 @@ public sealed class PaymentApplicationService(
             return SelectPaymentCurrencyResult.AlreadySelected(ToResponse(payment));
         }
 
+        var projectConfiguration = await projectConfigurationStore.FindByProjectAsync(
+            payment.ProjectId,
+            cancellationToken);
+        var currencyConfiguration = projectConfiguration?.For(supportedCurrency)
+            ?? ProjectCurrencyConfiguration.Disabled;
+        if (!currencyConfiguration.Enabled)
+        {
+            return SelectPaymentCurrencyResult.PaymentAddressUnavailable();
+        }
+
         var selectedOption = payment.PaymentOptions?
             .SingleOrDefault(option =>
                 StringComparer.Ordinal.Equals(option.SupportedCurrency, supportedCurrency));
@@ -183,6 +205,7 @@ public sealed class PaymentApplicationService(
         }
 
         var address = await paymentAddressProvider.AssignAsync(
+            payment.ProjectId,
             payment.Id,
             supportedCurrency,
             cancellationToken);
@@ -199,6 +222,9 @@ public sealed class PaymentApplicationService(
             quote.RateSource,
             quote.RateValue,
             quote.ObservedAt,
+            currencyConfiguration.ConfirmationRequirement,
+            projectConfiguration!.PaymentTolerancePercent,
+            currencyConfiguration.ReorgMonitoringDepth,
             selectedAt);
         var storeResult = await paymentStore.SelectCurrencyAsync(
             selection,

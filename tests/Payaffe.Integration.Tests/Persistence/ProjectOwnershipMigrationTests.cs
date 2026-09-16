@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Payaffe.Application;
 using Payaffe.Application.Payments;
 using Payaffe.Infrastructure;
@@ -8,6 +10,7 @@ using Payaffe.Infrastructure.Persistence.Records;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using NBitcoin;
 
 namespace Payaffe.Integration.Tests.Persistence;
 
@@ -54,7 +57,9 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
                 "ProductVersion" character varying(32) not null,
                 constraint "PK___EFMigrationsHistory" primary key ("MigrationId"));
             insert into "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-            values ('202609160001_AddProjectOwnership', '10.0.9');
+            values
+                ('202609160001_AddProjectOwnership', '10.0.9'),
+                ('202609160002_AddProjectPaymentConfigurationAndAddressSources', '10.0.9');
             """);
         await using (var scope = provider.CreateAsyncScope())
         {
@@ -63,8 +68,9 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
         }
         await ExecuteAsync(
             connectionString,
-            "delete from \"__EFMigrationsHistory\" where \"MigrationId\" = @migration_id",
-            ("migration_id", ProjectMigration));
+            "delete from \"__EFMigrationsHistory\" where \"MigrationId\" in (@migration_id, @address_migration_id)",
+            ("migration_id", ProjectMigration),
+            ("address_migration_id", "202609160002_AddProjectPaymentConfigurationAndAddressSources"));
 
         var credentialId = Guid.NewGuid();
         var paymentId = Guid.NewGuid();
@@ -272,6 +278,124 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
         Assert.Equal("active", principal.ProjectStatus);
     }
 
+    [Fact]
+    public async Task Shared_watch_only_source_and_native_eth_pools_allocate_without_cross_project_reuse()
+    {
+        var connectionString = await postgres.CreateDatabaseAsync();
+        await using var provider = BuildProvider(connectionString);
+        await SchemaMigrator.ApplyAsync(provider, CancellationToken.None);
+
+        var otherProjectId = Guid.NewGuid();
+        var defaultPaymentId = Guid.NewGuid();
+        var otherPaymentId = Guid.NewGuid();
+        var defaultEthPaymentId = Guid.NewGuid();
+        var otherEthPaymentId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var extendedPublicKey = new ExtKey().Neuter().ToString(Network.TestNet);
+        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"BTC\ntestnet\nsegwit\n{extendedPublicKey}")));
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+            dbContext.Projects.Add(Project(otherProjectId, "address-other", "active", now));
+            dbContext.ProjectWatchOnlyWalletSources.AddRange(
+                WalletSource(ProjectDefaults.DefaultProjectId),
+                WalletSource(otherProjectId));
+
+            var defaultCredentialId = Guid.NewGuid();
+            var otherCredentialId = Guid.NewGuid();
+            dbContext.IntegrationApiCredentials.AddRange(
+                Credential(ProjectDefaults.DefaultProjectId, defaultCredentialId, "address-default-token", now),
+                Credential(otherProjectId, otherCredentialId, "address-other-token", now));
+            dbContext.Payments.AddRange(
+                PaymentRecord(ProjectDefaults.DefaultProjectId, defaultPaymentId, defaultCredentialId, "address-default", now),
+                PaymentRecord(otherProjectId, otherPaymentId, otherCredentialId, "address-other", now),
+                PaymentRecord(ProjectDefaults.DefaultProjectId, defaultEthPaymentId, defaultCredentialId, "eth-default", now),
+                PaymentRecord(otherProjectId, otherEthPaymentId, otherCredentialId, "eth-other", now));
+
+            var adminId = Guid.NewGuid();
+            dbContext.AdminAccounts.Add(new AdminAccountRecord
+            {
+                Id = adminId,
+                Username = "address-admin",
+                NormalizedUsername = "ADDRESS-ADMIN",
+                PasswordHash = "test-hash",
+                Status = "active",
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            AddEthPool(ProjectDefaults.DefaultProjectId, "0x1111111111111111111111111111111111111111");
+            AddEthPool(otherProjectId, "0x2222222222222222222222222222222222222222");
+            await dbContext.SaveChangesAsync();
+
+            ProjectWatchOnlyWalletSourceRecord WalletSource(Guid projectId) => new()
+            {
+                ProjectId = projectId,
+                SupportedCurrency = "BTC",
+                SourceFingerprint = fingerprint,
+                Network = "testnet",
+                AddressType = "segwit",
+                StartingIndex = 0,
+                SourceReference = $"xpub:{extendedPublicKey}",
+                Enabled = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+
+            void AddEthPool(Guid projectId, string address)
+            {
+                var importId = Guid.NewGuid();
+                dbContext.NativeEthAddressPoolImports.Add(new NativeEthAddressPoolImportRecord
+                {
+                    ProjectId = projectId,
+                    Id = importId,
+                    ImportedByAdminAccountId = adminId,
+                    AddressCount = 1,
+                    ImportedAt = now,
+                });
+                dbContext.NativeEthAddresses.Add(new NativeEthAddressRecord
+                {
+                    ProjectId = projectId,
+                    Id = Guid.NewGuid(),
+                    ImportId = importId,
+                    Address = address,
+                    Status = "unused",
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    Version = 1,
+                });
+            }
+        }
+
+        var defaultBtc = AssignAsync(ProjectDefaults.DefaultProjectId, defaultPaymentId, "BTC");
+        var otherBtc = AssignAsync(otherProjectId, otherPaymentId, "BTC");
+        var defaultEth = AssignAsync(ProjectDefaults.DefaultProjectId, defaultEthPaymentId, "ETH");
+        var otherEth = AssignAsync(otherProjectId, otherEthPaymentId, "ETH");
+        await Task.WhenAll(defaultBtc, otherBtc, defaultEth, otherEth);
+        var defaultBtcAssignment = await defaultBtc;
+        var otherBtcAssignment = await otherBtc;
+        var defaultEthAssignment = await defaultEth;
+        var otherEthAssignment = await otherEth;
+
+        Assert.NotEqual(defaultBtcAssignment!.PaymentAddress, otherBtcAssignment!.PaymentAddress);
+        Assert.Equal("0x1111111111111111111111111111111111111111", defaultEthAssignment!.PaymentAddress);
+        Assert.Equal("0x2222222222222222222222222222222222222222", otherEthAssignment!.PaymentAddress);
+
+        await using var verificationScope = provider.CreateAsyncScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var cursor = Assert.Single(await verificationDb.WatchOnlyWalletCursors.ToListAsync());
+        Assert.Equal(2, cursor.NextDerivationIndex);
+        Assert.Equal(4, await verificationDb.PaymentAddressAssignments.CountAsync());
+
+        async Task<PaymentAddressAssignment?> AssignAsync(Guid projectId, Guid paymentId, string currency)
+        {
+            await using var scope = provider.CreateAsyncScope();
+            var addressProvider = scope.ServiceProvider.GetRequiredService<IPaymentAddressProvider>();
+            return await addressProvider.AssignAsync(projectId, paymentId, currency, CancellationToken.None);
+        }
+    }
+
     private static ProjectRecord Project(
         Guid id,
         string slug,
@@ -325,6 +449,27 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
             ReturnUrl: null,
             now,
             now);
+
+    private static PaymentRecord PaymentRecord(
+        Guid projectId,
+        Guid id,
+        Guid credentialId,
+        string payerPageId,
+        DateTimeOffset now) => new()
+    {
+        ProjectId = projectId,
+        Id = id,
+        IntegrationApiCredentialId = credentialId,
+        ExternalReference = payerPageId,
+        FiatCurrency = "EUR",
+        FiatAmountMinor = 100,
+        Status = "pending_currency_selection",
+        PayerPageId = payerPageId,
+        ExpiresAt = now.AddHours(1),
+        LateAcceptanceEndsAt = now.AddHours(25),
+        CreatedAt = now,
+        UpdatedAt = now,
+    };
 
     private static ServiceProvider BuildProvider(
         string connectionString,
