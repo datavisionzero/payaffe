@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
+import { ThemeSelect } from "./theme-select";
 import { useFormatter, useLocale, useTranslations } from "../lib/english";
 import {
   buildPaymentUri,
@@ -42,9 +43,15 @@ export function PayerPage({ payerPageId }: { payerPageId: string }) {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl px-5 py-8 sm:px-8">
-      <header className="mb-8 border-b border-[var(--border)] pb-5">
-        <p className="text-sm font-medium text-[var(--accent)]">payaffe</p>
-        <h1 className="mt-2 text-3xl font-semibold">{t("title")}</h1>
+      <header className="mb-8 flex items-start justify-between gap-4 border-b border-[var(--border)] pb-5">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <span aria-hidden="true" className="size-4 rounded-sm bg-[var(--brand)]" />
+            payaffe
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">{t("title")}</h1>
+        </div>
+        <ThemeSelect compact />
       </header>
 
       {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
@@ -111,7 +118,7 @@ function PaymentContent({
                 return (
                   <div className="rounded-md border border-[var(--border)] bg-[var(--surface-strong)]" key={option.supportedCurrency}>
                     <button
-                      className="w-full rounded-md px-4 py-3 text-left font-semibold hover:ring-2 hover:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-md px-4 py-3 text-left font-semibold hover:ring-2 hover:ring-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={isSelecting || !isAvailable}
                       onClick={() => onSelect(option.supportedCurrency)}
                       type="button"
@@ -144,7 +151,7 @@ function PaymentContent({
         {returnUrl && (payment.status === "completed" || payment.status === "settled") ? (
           <div className="mt-6 border-t border-[var(--border)] pt-5">
             <a
-              className="inline-flex rounded-md bg-[var(--accent)] px-4 py-3 font-semibold text-white hover:bg-[var(--accent-strong)]"
+              className="inline-flex rounded-md bg-[var(--brand)] px-4 py-3 font-semibold text-[var(--brand-foreground)] hover:opacity-90"
               href={returnUrl}
               rel="noopener noreferrer"
             >
@@ -187,7 +194,7 @@ function PaymentInstruction({ payment }: { payment: PayerPayment }) {
     <div className="mt-8 border-t border-[var(--border)] pt-6">
       <h2 className="text-lg font-semibold">{t("payInstruction")}</h2>
       <div className="mt-5 grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)]">
-        <div className="flex h-[180px] w-[180px] items-center justify-center rounded-md border border-[var(--border)] bg-white">
+        <div className="flex h-[180px] w-[180px] items-center justify-center rounded-md border border-[var(--border)] bg-[#fff]">
           <QRCodeSVG aria-label={t("qrCode")} size={144} value={paymentUri} />
         </div>
         <dl className="min-w-0 space-y-4">
@@ -211,7 +218,7 @@ function StatusBadge({ status }: { status: string }) {
   const t = useTranslations("PayerPage");
   const labelKey = statusLabels[status];
   return (
-    <span className="inline-flex rounded-md bg-[var(--surface-strong)] px-3 py-1 text-sm font-medium">
+    <span className="inline-flex rounded-md px-3 py-1 text-sm font-medium" data-status={status}>
       {labelKey ? t(labelKey) : status}
     </span>
   );

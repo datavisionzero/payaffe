@@ -6,7 +6,7 @@ import { useSearchParams } from "../../lib/navigation";
 import { useTranslations } from "../../lib/english";
 import { useEffect, useId, useState } from "react";
 import type { AdminPaymentSummary } from "../../lib/admin-api";
-import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage } from "./common";
+import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage, StatusPill } from "./common";
 import { formatDateTime, formatFiatAmount } from "./format";
 import { adminQueries } from "./queries";
 
@@ -70,7 +70,7 @@ export function AdminPaymentsPage() {
           <label className="block text-sm font-medium" htmlFor={statusFieldId}>
             <span>{t("filterStatus")}</span>
             <select
-              className="mt-2 block h-11 w-full rounded-md border border-[var(--border)] bg-white px-3"
+              className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
               id={statusFieldId}
               onChange={(event) => setStatus(event.target.value)}
               value={status}
@@ -86,7 +86,7 @@ export function AdminPaymentsPage() {
           <label className="block text-sm font-medium" htmlFor={searchFieldId}>
             <span>{t("filterSearch")}</span>
             <input
-              className="mt-2 block h-11 w-full rounded-md border border-[var(--border)] bg-white px-3 text-base outline-none focus:border-[var(--accent)]"
+              className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3 text-base outline-none focus:border-[var(--brand)]"
               id={searchFieldId}
               onChange={(event) => setSearch(event.target.value)}
               type="search"
@@ -138,16 +138,14 @@ function PaymentTable({ payments }: { payments: AdminPaymentSummary[] }) {
             <tr className="border-b border-[var(--border)] last:border-0" key={payment.paymentId}>
               <td className="max-w-[220px] break-words py-3 pr-4 font-medium">
                 <Link
-                  className="text-[var(--accent)] hover:text-[var(--accent-strong)]"
+                  className="text-[var(--brand-ink)] hover:text-[var(--brand-ink)]"
                   href={`/admin/payments/${payment.paymentId}`}
                 >
                   {payment.externalReference}
                 </Link>
               </td>
               <td className="py-3 pr-4">
-                <span className="inline-flex rounded-md bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium">
-                  {payment.status}
-                </span>
+                <StatusPill status={payment.status} />
               </td>
               <td className="py-3 pr-4">
                 {formatFiatAmount(payment.fiatCurrency, payment.fiatAmountMinor)}

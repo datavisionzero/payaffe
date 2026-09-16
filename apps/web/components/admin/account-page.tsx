@@ -120,7 +120,7 @@ export function AdminAccountPage() {
         </form>
         <div className="mt-5 border-t border-[var(--border)] pt-5">
           <button
-            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
+            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)] disabled:cursor-wait disabled:opacity-70"
             disabled={recoveryCodesMutation.isPending}
             onClick={() => recoveryCodesMutation.mutate()}
             type="button"
@@ -141,7 +141,7 @@ export function AdminAccountPage() {
 
       <Panel>
         <button
-          className="rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:cursor-wait disabled:opacity-70"
+          className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:opacity-85 disabled:cursor-wait disabled:opacity-70"
           disabled={logoutMutation.isPending}
           onClick={() => logoutMutation.mutate()}
           type="button"
@@ -170,7 +170,7 @@ function RecoveryCodesPanel({
       </p>
       <ul className="mt-3 grid gap-2">
         {recoveryCodes.recoveryCodes.map((code) => (
-          <li className="rounded-md bg-white px-3 py-2 font-mono text-sm" key={code}>
+          <li className="rounded-md bg-[var(--card)] px-3 py-2 font-mono text-sm" key={code}>
             {code}
           </li>
         ))}

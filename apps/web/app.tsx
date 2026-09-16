@@ -48,7 +48,7 @@ function HomePage() {
       <p className="mt-3 max-w-xl text-base text-[var(--muted-foreground)]">
         Payment pages are available through payment-specific links.
       </p>
-      <Link className="mt-8 text-sm font-medium text-[var(--accent)]" href="/admin">
+      <Link className="mt-8 text-sm font-medium text-[var(--brand-ink)]" href="/admin">
         Admin sign-in
       </Link>
     </main>
@@ -85,7 +85,7 @@ function NotFoundPage() {
       <p className="mt-3 text-sm text-[var(--muted-foreground)]">
         The address does not identify a payaffe screen.
       </p>
-      <Link className="mt-5 text-sm font-medium text-[var(--accent)]" href="/">
+      <Link className="mt-5 text-sm font-medium text-[var(--brand-ink)]" href="/">
         Return home
       </Link>
     </main>
@@ -115,7 +115,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
           Retry the page. If the error continues, contact the operator.
         </p>
         <button
-          className="mt-5 rounded-md bg-[var(--accent)] px-4 py-2 font-semibold text-white"
+          className="mt-5 rounded-md bg-[var(--brand)] px-4 py-2 font-semibold text-[var(--brand-foreground)]"
           onClick={() => this.setState({ error: null })}
           type="button"
         >

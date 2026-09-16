@@ -5,6 +5,7 @@ import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PayerPage } from "../components/payer-page";
+import { ThemeProvider } from "../components/theme-provider";
 
 const pendingPayment = {
   paymentId: "78d8a09b-1c4a-4b6e-9f94-f8acbd4278f1",
@@ -155,8 +156,10 @@ function renderPayerPage() {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <PayerPage payerPageId="fixed-payer-page-id" />
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <PayerPage payerPageId="fixed-payer-page-id" />
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

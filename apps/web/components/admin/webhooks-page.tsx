@@ -83,7 +83,7 @@ function ViewTab({
         className={cn(
           "-mb-px inline-block border-b-2 px-3 py-2 text-sm font-medium",
           active
-            ? "border-[var(--accent)] text-[var(--accent-strong)]"
+            ? "border-[var(--brand)] text-[var(--brand-ink)]"
             : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         )}
         href={href}
@@ -132,7 +132,7 @@ function WebhookEndpointSection() {
         <label className="block text-sm font-medium">
           <span>{t("credential")}</span>
           <select
-            className="mt-2 block h-11 w-full rounded-md border border-[var(--border)] bg-white px-3"
+            className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
             {...form.register("integrationApiCredentialId")}
           >
             <option value="">{t("selectCredential")}</option>
@@ -337,7 +337,7 @@ function WebhookDeliverySection() {
                   </td>
                   <td className="py-3">
                     <button
-                      className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
+                      className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--brand)] disabled:cursor-wait disabled:opacity-70"
                       disabled={resendMutation.isPending}
                       onClick={() => resendMutation.mutate(delivery.webhookEventId)}
                       type="button"

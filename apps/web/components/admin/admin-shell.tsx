@@ -5,6 +5,7 @@ import Link from "../../lib/link";
 import { usePathname, useRouter } from "../../lib/navigation";
 import { useTranslations } from "../../lib/english";
 import { useEffect, useState } from "react";
+import { MenuIcon, UserCircleIcon } from "lucide-react";
 import {
   defaultAdminProjectId,
   setSelectedAdminProjectId,
@@ -14,6 +15,7 @@ import {
 import { ErrorMessage, StateMessage } from "./common";
 import { AdminNav } from "./admin-nav";
 import { adminQueries } from "./queries";
+import { ThemeSelect } from "../theme-select";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations("AdminNav");
@@ -113,9 +115,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[var(--background)]">
       <a
-        className="sr-only rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-20"
+        className="sr-only rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--primary-foreground)] focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-40"
         href="#admin-main"
       >
         {t("skipToContent")}
@@ -128,9 +130,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         selectedProject={selectedProject}
         session={session.data}
       />
-      <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
+      {navOpen ? (
+        <button
+          aria-label="Close navigation"
+          className="fixed inset-0 top-12 z-20 bg-[color:color-mix(in_oklch,var(--foreground)_30%,transparent)] lg:hidden"
+          onClick={() => setNavOpen(false)}
+          type="button"
+        />
+      ) : null}
+      <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
         <AdminNav onNavigate={() => setNavOpen(false)} open={navOpen} />
-        <main className="min-w-0 px-5 py-8 sm:px-8" id="admin-main" key={selectedProject.projectId}>
+        <main
+          className="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
+          id="admin-main"
+          key={selectedProject.projectId}
+        >
           {children}
         </main>
       </div>
@@ -155,26 +169,28 @@ function TopBar({
 }) {
   const t = useTranslations("AdminNav");
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4">
+    <header className="sticky top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--card)] px-3">
       <div className="flex items-center gap-3">
         <button
           aria-controls="admin-navigation"
           aria-expanded={navOpen}
-          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium lg:hidden"
+          className="inline-flex size-8 items-center justify-center rounded-md border border-[var(--border)] hover:bg-[var(--muted)] lg:hidden"
           onClick={onToggleNav}
           type="button"
         >
-          {t("menu")}
+          <MenuIcon aria-hidden="true" className="size-4" />
+          <span className="sr-only">{t("menu")}</span>
         </button>
-        <Link className="text-sm font-semibold text-[var(--accent)]" href="/admin">
-          payaffe
+        <Link className="flex items-center gap-2 text-sm font-semibold" href="/admin">
+          <span aria-hidden="true" className="size-4 rounded-sm bg-[var(--brand)]" />
+          <span className="hidden sm:inline">payaffe</span>
         </Link>
       </div>
-      <label className="ml-auto flex min-w-0 items-center gap-2 text-sm">
+      <label className="ml-auto flex w-28 min-w-0 items-center gap-2 text-xs sm:w-auto">
         <span className="hidden text-[var(--muted-foreground)] sm:inline">{t("project")}</span>
         <select
           aria-label={t("project")}
-          className="max-w-52 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5"
+          className="h-8 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-xs sm:max-w-56"
           onChange={(event) => onSelectProject(event.target.value)}
           value={selectedProject.projectId}
         >
@@ -185,12 +201,15 @@ function TopBar({
           ))}
         </select>
       </label>
+      <ThemeSelect compact />
       <Link
-        className="max-w-[50%] truncate text-sm font-medium hover:text-[var(--accent)]"
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--muted)]"
         href="/admin/account"
+        title={session.username}
       >
         <span className="sr-only">{t("signedInAs")} </span>
-        {session.username}
+        <UserCircleIcon aria-hidden="true" className="size-4" />
+        <span className="sr-only">{session.username}</span>
       </Link>
     </header>
   );

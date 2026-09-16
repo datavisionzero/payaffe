@@ -4,30 +4,40 @@ import Link from "../../lib/link";
 import { usePathname } from "../../lib/navigation";
 import { useTranslations } from "../../lib/english";
 import { cn } from "../../lib/utils";
+import {
+  ActivityIcon,
+  BlocksIcon,
+  CreditCardIcon,
+  GaugeIcon,
+  KeyRoundIcon,
+  ListChecksIcon,
+  UserRoundIcon,
+  WalletCardsIcon
+} from "lucide-react";
 import { type AdminAttention, useAdminAttention } from "./attention";
 
 const NAV_GROUPS = [
   {
     key: "operations",
     items: [
-      { key: "overview", href: "/admin" },
-      { key: "payments", href: "/admin/payments" },
-      { key: "monitoring", href: "/admin/monitoring" },
-      { key: "webhooks", href: "/admin/webhooks" }
+      { key: "overview", href: "/admin", icon: GaugeIcon },
+      { key: "payments", href: "/admin/payments", icon: CreditCardIcon },
+      { key: "monitoring", href: "/admin/monitoring", icon: ActivityIcon },
+      { key: "webhooks", href: "/admin/webhooks", icon: BlocksIcon }
     ]
   },
   {
     key: "configuration",
     items: [
-      { key: "integrations", href: "/admin/integrations" },
-      { key: "addresses", href: "/admin/addresses" }
+      { key: "integrations", href: "/admin/integrations", icon: KeyRoundIcon },
+      { key: "addresses", href: "/admin/addresses", icon: WalletCardsIcon }
     ]
   },
   {
     key: "security",
     items: [
-      { key: "auditLog", href: "/admin/audit-log" },
-      { key: "account", href: "/admin/account" }
+      { key: "auditLog", href: "/admin/audit-log", icon: ListChecksIcon },
+      { key: "account", href: "/admin/account", icon: UserRoundIcon }
     ]
   }
 ] as const;
@@ -41,8 +51,8 @@ export function AdminNav({ onNavigate, open }: { onNavigate: () => void; open: b
     <nav
       aria-label={t("ariaLabel")}
       className={cn(
-        "border-b border-[var(--border)] bg-[var(--surface)] px-3 py-4 lg:sticky lg:top-14 lg:block lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto lg:border-r lg:border-b-0",
-        open ? "block" : "hidden"
+        "fixed inset-y-0 left-0 top-12 z-30 w-64 overflow-y-auto border-r border-[var(--sidebar-border)] bg-[var(--sidebar)] px-3 py-4 shadow-xl lg:sticky lg:top-12 lg:block lg:h-[calc(100vh-3rem)] lg:w-auto lg:shadow-none",
+        open ? "block" : "hidden lg:block"
       )}
       id="admin-navigation"
     >
@@ -68,19 +78,20 @@ export function AdminNav({ onNavigate, open }: { onNavigate: () => void; open: b
                     aria-current={isActive(pathname, item.href) ? "page" : undefined}
                     aria-label={badge ? `${label}, ${badge.label}` : undefined}
                     className={cn(
-                      "flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium",
+                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
                       isActive(pathname, item.href)
-                        ? "bg-[var(--surface-strong)] text-[var(--accent-strong)]"
-                        : "text-[var(--foreground)] hover:bg-[var(--surface-strong)]"
+                        ? "bg-[var(--brand-soft)] text-[var(--foreground)]"
+                        : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
                     )}
                     href={item.href}
                     onClick={onNavigate}
                   >
+                    <item.icon aria-hidden="true" className="size-4 shrink-0" />
                     <span>{label}</span>
                     {badge ? (
                       <span
                         aria-hidden="true"
-                        className="inline-flex min-w-6 items-center justify-center rounded-md bg-[var(--danger)] px-1.5 py-0.5 text-xs font-semibold text-white"
+                        className="ml-auto inline-flex min-w-6 items-center justify-center rounded-md bg-[var(--destructive)] px-1.5 py-0.5 text-xs font-semibold text-[var(--primary-foreground)]"
                       >
                         {badge.text}
                       </span>

@@ -146,7 +146,7 @@ function Tile({
         {value}
       </p>
       <div className="grow">{children}</div>
-      <Link className="mt-4 text-sm font-medium text-[var(--accent)]" href={href}>
+      <Link className="mt-4 text-sm font-medium text-[var(--brand-ink)]" href={href}>
         {linkLabel}
       </Link>
     </article>
@@ -162,7 +162,7 @@ function RecentPayments() {
     <Panel>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-xl font-semibold">{t("paymentsTitle")}</h2>
-        <Link className="text-sm font-medium text-[var(--accent)]" href="/admin/payments">
+        <Link className="text-sm font-medium text-[var(--brand-ink)]" href="/admin/payments">
           {t("viewPayments")}
         </Link>
       </div>
@@ -187,7 +187,7 @@ function RecentPayments() {
                 <tr className="border-b border-[var(--border)] last:border-0" key={payment.paymentId}>
                   <td className="max-w-[220px] break-words py-3 pr-4 font-medium">
                     <Link
-                      className="text-[var(--accent)] hover:text-[var(--accent-strong)]"
+                      className="text-[var(--brand-ink)] hover:text-[var(--brand-ink)]"
                       href={`/admin/payments/${payment.paymentId}`}
                     >
                       {payment.externalReference}

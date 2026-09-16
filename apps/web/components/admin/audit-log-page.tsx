@@ -31,7 +31,7 @@ export function AdminAuditLogPage() {
               {t("auditLogCount", { count: entries.length })}
             </span>
             <button
-              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
+              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--brand)] disabled:cursor-wait disabled:opacity-70"
               disabled={exportMutation.isPending}
               onClick={() => exportMutation.mutate()}
               type="button"
@@ -79,7 +79,7 @@ export function AdminAuditLogPage() {
                       <td className="py-3 pr-4">{formatDateTime(entry.occurredAt)}</td>
                       <td className="max-w-[220px] break-words py-3 pr-4 font-medium">
                         <Link
-                          className="text-[var(--accent)] hover:text-[var(--accent-strong)]"
+                          className="text-[var(--brand-ink)] hover:text-[var(--brand-ink)]"
                           href={`/admin/audit-log/${entry.eventId}`}
                         >
                           {entry.eventType}

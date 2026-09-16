@@ -6,6 +6,7 @@ import { setupServer } from "msw/node";
 import type React from "react";
 import { MemoryRouter } from "react-router";
 import { defaultAdminProjectId, setSelectedAdminProjectId } from "../lib/admin-api";
+import { ThemeProvider } from "../components/theme-provider";
 
 export const session = {
   status: "authenticated",
@@ -351,8 +352,10 @@ export function renderAdmin(ui: React.ReactNode) {
   });
 
   return render(
-    <MemoryRouter>
-      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
-    </MemoryRouter>
+    <ThemeProvider>
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+      </MemoryRouter>
+    </ThemeProvider>
   );
 }

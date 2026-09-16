@@ -22,6 +22,7 @@ const payment = {
 };
 
 test("Payer sees completion and chooses the Return URL", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
   await page.route("**/api/payer/payments/payer-123", (route) =>
     route.fulfill({ json: payment })
   );
@@ -35,9 +36,12 @@ test("Payer sees completion and chooses the Return URL", async ({ page }) => {
     "https://shop.example.test/orders/order-123"
   );
   await expect(page).toHaveURL(/\/pay\/payer-123$/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   await returnLink.focus();
   await expect(returnLink).toBeFocused();
   expect(await returnLink.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+  await page.getByRole("combobox", { name: "Color theme" }).selectOption("dark");
+  await expect(page.locator("html")).toHaveClass(/dark/);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
@@ -180,6 +184,11 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
   await expect(page.getByText("payaffe_playwright_one_time_token")).toBeVisible();
   expect(csrfHeader).toBe("csrf-token");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.getByRole("button", { name: "Menu" }).click();
+  await expect(navigation.getByRole("link", { name: "Payments" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });
 
 test("Admin reaches the Webhook Deliveries view by its own URL", async ({ page }) => {

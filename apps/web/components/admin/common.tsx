@@ -17,9 +17,9 @@ export function PageHeader({
   title: string;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-5">
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-4">
       <div>
-        <h1 className="text-2xl font-semibold">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">{description}</p>
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
@@ -39,10 +39,10 @@ export function AdminSection({
   title: string;
 }) {
   return (
-    <section className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5">
+    <section className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold">{title}</h2>
+          <h2 className="text-lg font-semibold">{title}</h2>
           {description ? (
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">{description}</p>
           ) : null}
@@ -56,13 +56,16 @@ export function AdminSection({
 
 export function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5">{children}</div>
+    <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">{children}</div>
   );
 }
 
 export function StatusPill({ status }: { status: string }) {
   return (
-    <span className="inline-flex rounded-md bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium">
+    <span
+      className="inline-flex rounded-md px-2 py-1 text-xs font-medium"
+      data-status={status.toLowerCase()}
+    >
       {status}
     </span>
   );
@@ -103,7 +106,7 @@ export function SecondaryButton({
 }) {
   return (
     <button
-      className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
+      className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:cursor-wait disabled:opacity-70"
       disabled={busy}
       onClick={onClick}
       type="button"
@@ -128,7 +131,7 @@ export function TextField({
     <label className="block text-sm font-medium" htmlFor={id}>
       <span>{label}</span>
       <input
-        className="mt-2 block h-11 w-full rounded-md border border-[var(--border)] bg-white px-3 text-base outline-none focus:border-[var(--accent)]"
+        className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3 text-base outline-none focus:border-[var(--brand)]"
         aria-describedby={error ? errorId : undefined}
         aria-invalid={error ? "true" : undefined}
         id={id}
@@ -154,7 +157,7 @@ export function InfoItem({ label, value }: { label: string; value: string }) {
 
 export function StateMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5 text-sm">
+    <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-5 text-sm">
       {children}
     </div>
   );
@@ -175,7 +178,7 @@ export function ErrorMessage({ error }: { error: Error }) {
     return (
       <div
         aria-live="assertive"
-        className="mt-4 rounded-md border border-[var(--danger)] bg-white p-4 text-sm text-[var(--danger)]"
+        className="mt-4 rounded-md border border-[var(--destructive)] bg-[var(--status-danger-bg)] p-4 text-sm text-[var(--status-danger-fg)]"
         role="alert"
       >
         <span>{message}</span>
@@ -202,7 +205,7 @@ export function SensitiveValuePanel({
 }) {
   const t = useTranslations("AdminPage");
   return (
-    <div className="mt-5 rounded-md border border-[var(--danger)] bg-white p-4" role="status">
+    <div className="mt-5 rounded-md border border-[var(--destructive)] bg-[var(--card)] p-4" role="status">
       <p className="font-semibold">{label}</p>
       <p className="mt-2 break-all font-mono text-sm">{value}</p>
       <p className="mt-2 text-sm text-[var(--muted-foreground)]">{t("oneTimeValue")}</p>

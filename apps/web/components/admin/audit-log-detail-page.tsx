@@ -18,7 +18,7 @@ export function AdminAuditLogDetailPage({ eventId }: { eventId: string }) {
         description={t("auditLogDetailDescription")}
         title={query.data?.eventType ?? t("auditLogDetailTitle")}
       />
-      <Link className="inline-block text-sm font-medium text-[var(--accent)]" href="/admin/audit-log">
+      <Link className="inline-block text-sm font-medium text-[var(--brand-ink)]" href="/admin/audit-log">
         {t("backToAuditLog")}
       </Link>
       {query.isPending ? <StateMessage>{t("auditLogDetailLoading")}</StateMessage> : null}

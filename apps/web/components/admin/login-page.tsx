@@ -18,6 +18,7 @@ import {
 } from "../../lib/admin-api";
 import { ErrorMessage, SubmitButton, TextField } from "./common";
 import { adminQueries } from "./queries";
+import { ThemeSelect } from "../theme-select";
 
 export function AdminLoginPage() {
   const t = useTranslations("AdminPage");
@@ -110,8 +111,14 @@ export function AdminLoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-12">
-      <p className="text-sm font-medium text-[var(--accent)]">payaffe</p>
-      <section className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface)] p-5">
+      <div className="flex items-center justify-between gap-4">
+        <p className="flex items-center gap-2 text-sm font-semibold">
+          <span aria-hidden="true" className="size-4 rounded-sm bg-[var(--brand)]" />
+          payaffe
+        </p>
+        <ThemeSelect compact />
+      </div>
+      <section className="mt-4 rounded-md border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
         <h1 className="text-xl font-semibold">{challengeId ? t("mfaTitle") : t("loginTitle")}</h1>
         <p className="mt-2 text-sm text-[var(--muted-foreground)]">
           {challengeId ? t("mfaDescription") : t("loginDescription")}
@@ -154,7 +161,7 @@ export function AdminLoginPage() {
                 {mfaMutation.isPending ? t("submitting") : t("signIn")}
               </SubmitButton>
               <button
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)]"
                 onClick={() => {
                   setChallengeId(null);
                   mfaForm.reset({ totpCode: "" });
@@ -165,7 +172,7 @@ export function AdminLoginPage() {
                 {t("back")}
               </button>
               <button
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)]"
                 onClick={() => {
                   setMfaMode("recovery");
                   mfaForm.reset({ totpCode: "" });
@@ -191,7 +198,7 @@ export function AdminLoginPage() {
                 {mfaMutation.isPending ? t("submitting") : t("signIn")}
               </SubmitButton>
               <button
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)]"
                 onClick={() => {
                   setMfaMode("totp");
                   recoveryCodeForm.reset({ recoveryCode: "" });
@@ -201,7 +208,7 @@ export function AdminLoginPage() {
                 {t("useAuthenticatorCode")}
               </button>
               <button
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)]"
                 onClick={() => {
                   setChallengeId(null);
                   mfaForm.reset({ totpCode: "" });

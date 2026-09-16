@@ -50,7 +50,7 @@ export function AdminAddressesPage() {
             <textarea
               aria-describedby={form.formState.errors.addresses ? "address-pool-error" : undefined}
               aria-invalid={form.formState.errors.addresses ? "true" : undefined}
-              className="mt-2 block min-h-36 w-full rounded-md border border-[var(--border)] bg-white p-3 font-mono text-sm"
+              className="mt-2 block min-h-36 w-full rounded-md border border-[var(--input)] bg-[var(--background)] p-3 font-mono text-sm"
               {...form.register("addresses")}
             />
           </label>

@@ -32,7 +32,7 @@ export function AdminPaymentDetailPage({ paymentId }: { paymentId: string }) {
         description={t("paymentDetailDescription")}
         title={query.data?.externalReference ?? t("paymentDetailTitle")}
       />
-      <Link className="inline-block text-sm font-medium text-[var(--accent)]" href="/admin/payments">
+      <Link className="inline-block text-sm font-medium text-[var(--brand-ink)]" href="/admin/payments">
         {t("backToPayments")}
       </Link>
       {query.isPending ? <StateMessage>{t("paymentDetailLoading")}</StateMessage> : null}

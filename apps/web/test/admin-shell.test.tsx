@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "../components/admin/admin-shell";
@@ -89,6 +89,23 @@ describe("AdminShell", () => {
     expect(within(navigation).getByRole("link", { name: "Overview" })).not.toHaveAttribute(
       "aria-current"
     );
+  });
+
+  it("applies and stores an explicit color theme", async () => {
+    state.authenticated = true;
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    await screen.findByText("Protected content");
+    fireEvent.change(screen.getByRole("combobox", { name: "Color theme" }), {
+      target: { value: "dark" }
+    });
+
+    expect(document.documentElement).toHaveClass("dark");
+    expect(window.localStorage.getItem("payaffe.theme")).toBe("dark");
   });
 
   it("counts what needs attention in the navigation", async () => {
