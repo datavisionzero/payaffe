@@ -22,8 +22,8 @@ related implementation exists.
 
 ## Deployment Model
 
-The MVP deployment model is one Single-Tenant Instance serving one operator or
-shop.
+The MVP deployment model is one Single-Operator Installation serving one
+operator or shop, with one or more isolated Projects sharing the deployment.
 
 Docker Compose is the minimum baseline for local development and self-hosted
 operation. Other platforms may be added later, but they must not replace the
@@ -40,14 +40,18 @@ When the corresponding hosts exist, Compose services use these names:
 
 | Service | Purpose |
 | --- | --- |
-| `web` | Next.js app serving the Payer Page and Admin UI. |
-| `api` | ASP.NET Core host for the Integration API and backend HTTP endpoints. |
+| `api` | ASP.NET Core host for the Integration API, browser APIs, health endpoints, and built Payer/Admin SPA assets. |
 | `mcp` | Admin MCP host if it is deployed separately from another host. |
 | `worker` | .NET background worker for Blockchain Observation, scheduler, outbox, and retry work. |
 | `db` | PostgreSQL product database. |
 | `migrations` | Manual schema run and the first-admin command. |
 
-Not every service must exist as a separate container in the first
+`apps/web` is a frontend source package, not a long-running service. The API
+image builds it in a Node.js 24 plus pnpm stage and copies the static output
+into the .NET runtime image. Production does not publish or operate a separate
+web image or port.
+
+Not every remaining service must exist as a separate container in the first
 implementation. Combining hosts is allowed when the implementation keeps
 surface boundaries, configuration, logs, health, and authorization clear.
 
@@ -57,14 +61,16 @@ flows are introduced later, the deployment must adopt them through a new ADR.
 
 ## External Names
 
-The preferred external names are:
+The preferred external name is:
 
-- `app.<domain>` for the Payer Page and Admin UI,
-- `api.<domain>` for the public Integration API when it is exposed separately,
+- `app.<domain>` for the Payer Page, Admin UI, Integration API, and health
+  endpoints,
 - `mcp.<domain>` only if a future remote MCP host is deliberately exposed.
 
-Path-based routing under one product domain remains allowed for the MVP when
-the reverse proxy preserves clear API, Admin, Payer Page, and MCP boundaries.
+An additional API-only name may reverse proxy the same API host when an
+operator needs one, but the shipped browser application always uses its own
+origin. The reverse proxy no longer splits browser and API traffic between two
+product containers.
 
 Remote MCP over HTTP is not part of the MVP baseline. Local agent CLI access
 remains the first admin MCP path.
@@ -118,9 +124,9 @@ leaking secret values.
 
 Production database migrations run through one path, and the `api` and `worker`
 hosts take it as they start
-([ADR 0027](../adr/0027-migrations-apply-on-startup.md)). The `web` and `mcp`
-hosts never apply a migration: `web` has no database, and `mcp` is a local
-process that takes the schema as given.
+([ADR 0027](../adr/0027-migrations-apply-on-startup.md)). The `mcp` host never
+applies a migration; it is a local process that takes the schema as given. The
+static application has no host process of its own.
 
 The path must make failure visible, log enough context for diagnosis, and
 handle concurrent execution safely — both hosts start together and either may
@@ -142,6 +148,7 @@ The PostgreSQL product database is the primary backup target.
 
 A PostgreSQL backup must preserve enough data to recover:
 
+- Projects, their status, Project configuration, and ownership links,
 - Payments and Payment Event History,
 - Matching Blockchain Transactions and payment evidence,
 - Rate Locks and Rate Cache state needed for explanation,
@@ -158,7 +165,7 @@ A PostgreSQL backup must preserve enough data to recover:
 
 Address Pool data is operationally important even though public receiving
 addresses are not spending secrets. A restore must not make already assigned
-native ETH addresses appear unused.
+native ETH addresses appear unused or move any address to another Project.
 
 The operator's external wallet seeds, private keys, watch-only wallet source
 exports, Hosted Blockchain API accounts, DNS, TLS material, reverse-proxy

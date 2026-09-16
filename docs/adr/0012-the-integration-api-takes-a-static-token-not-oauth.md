@@ -38,5 +38,10 @@ to be improvised.
 Integration API is exempt from the antiforgery handling the cookie-authenticated
 admin surface requires.
 
+**The credential is backend-only.** An embedded payment screen calls its own
+product backend, which authenticates its customer and invokes Payaffe. A static
+bearer token is never a browser, mobile, or desktop application credential;
+ADR 0031 records that trust boundary for the embedded flow.
+
 If this product ever serves integrations the operator did not configure
 themselves, this is the decision to reopen first.

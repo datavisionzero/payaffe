@@ -1,5 +1,10 @@
 # One Installation Serves One Shop
 
+Superseded by
+[ADR 0029](./0029-one-operator-can-isolate-payment-projects.md). The
+single-operator boundary remains; the decision that all resources and settings
+are installation-wide does not.
+
 There is no tenant. Not a tenant column with one value in it, not a default
 tenant, not a tenant resolved from a header — the concept is absent, and a shop
 that wants its own `payaffe` runs its own `payaffe`.

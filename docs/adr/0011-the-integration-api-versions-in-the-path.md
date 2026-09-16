@@ -1,5 +1,9 @@
 # The Integration API Versions in the Path
 
+ADR 0031 adds an authenticated, idempotent Currency Selection endpoint and
+additive Payment fields to v1. The initial two-endpoint description below is
+historical; the path-versioning and compatibility decision remains current.
+
 Everything under `/api/v1/` is public contract. A breaking change means
 `/api/v2/`, not an edit. Errors are `ProblemDetails` with a `correlationId` and
 a stable machine-readable code; validation failures use one shape,
@@ -34,10 +38,10 @@ same body returns the same payment, and the same key with a different body is a
 conflict. A shop that retries a creation after a timeout gets one payment, which
 is the failure this product cannot afford to get wrong.
 
-**`ETag` and `If-Match` are absent because nothing here mutates.** Create and
-read need no optimistic concurrency. Any future mutating endpoint has to decide
-its own concurrency behaviour before it is introduced rather than inheriting a
-silence.
+**`ETag` and `If-Match` were absent because nothing initially mutated.** Create
+and read need no optimistic concurrency. ADR 0031 gives Currency Selection a
+narrower first-write-wins rule; any other mutating endpoint still has to decide
+its concurrency behaviour before introduction.
 
 The detailed contract rules are in
 [integration-api-contract.md](../architecture/integration-api-contract.md).

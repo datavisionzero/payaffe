@@ -30,10 +30,11 @@ controls, and it asks a hosted blockchain API whether money arrived.
 
 ## Target user and scenario
 
-One operator, running one shop, taking roughly five to twenty payments a day of
-ten to twenty euros each. They can run a compose file and they already have a
-wallet they control. They want the payment to land in their own wallet, and they
-want their shop software to be told about it.
+One operator, running one shop and one or more products, taking roughly five to
+twenty payments a day of ten to twenty euros each. They can run a compose file
+and they already have a wallet they control. They want the payment to land in
+their own wallet, and they want each product to receive only its own payment
+data and notifications.
 
 They are not a payment platform, they do not serve other merchants, and they do
 not have an operations team. Every decision in this product is sized for that
@@ -64,11 +65,17 @@ against.
 ## What it does
 
 An integration creates a payment with a fiat amount, an external reference, and
-an idempotency key. The payer opens a page hosted by the installation, picks a
-currency, and gets an address and an amount fixed at that moment. Background
-workers watch for the transaction, count confirmations, and complete the
-payment. The shop learns about it through a signed webhook, or by polling the
-same API it created the payment with.
+an idempotency key. The payer either uses a page hosted by the installation or
+an embedded screen owned by the integrating product, picks a currency, and gets
+an address and an amount fixed at that moment. Background workers watch for the
+transaction, count confirmations, and complete the payment. The shop learns
+about it through a signed webhook, or by polling the same API it created the
+payment with.
+
+The operator separates products into Projects. Each Project owns its Payments,
+Integration API Credentials, receiving-address allocation, Webhook Delivery,
+and payment-policy configuration. Admins remain installation-wide and may
+operate every Project.
 
 An admin signs in with a password, and with a second factor once they have
 enrolled one, to see payments, resolve the cases automation should not decide
@@ -85,8 +92,10 @@ These are not backlog items. They are the shape of the product.
 
 - **Custody, and therefore refunds.** A refund requires spending, and spending
   is the thing that is absent.
-- **Multi-tenancy.** One installation serves one shop. There is no tenant
-  concept to configure, and a second shop is a second installation.
+- **Multi-operator tenancy.** One installation serves one operator or shop.
+  Projects isolate that operator's products; they do not introduce tenant
+  memberships, Project-specific Admins, or roles. A second shop is a second
+  installation.
 - **Full-node verification.** Not required, not offered as the default.
 - **High throughput.** Sized for tens of payments a day, not hundreds a minute.
 - **Token payments.** ERC-20 and anything like it are out; native ETH only.
@@ -107,8 +116,12 @@ explains why the obvious alternative was not.
   `mcp`, `migrations`.
 - PostgreSQL as the only datastore. Jobs, the outbox, and the scheduler are
   tables, not a broker.
-- Next.js App Router with React and TypeScript for the payer page and the Admin
-  UI, in one application.
+- One installation serves one operator with one or more isolated Projects;
+  Admins remain installation-wide.
+- React, TypeScript, Vite, and React Router for the Payer Page and Admin UI, in
+  one static application served by the API host.
+- A versioned Integration API and a UI-free `net10.0` SDK for embedded payment
+  flows; bearer credentials remain in the integrating product's backend.
 - Docker Compose for deployment, with the service count treated as a budget.
 - Blockchair or NOWNodes for blockchain observation, one selected at a time.
 - CoinGecko for exchange rates, with a cache and a bounded stale window.

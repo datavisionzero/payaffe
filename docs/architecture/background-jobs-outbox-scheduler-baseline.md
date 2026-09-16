@@ -84,7 +84,8 @@ Durable job or outbox records need at least these concepts:
 - lock owner or lease information,
 - safe error code or reason code,
 - correlation identifier,
-- installation context where relevant.
+- Project context for Project-owned work, or installation context for shared
+  work.
 
 Payloads should reference product data by ID instead of copying full domain
 payloads. They must not contain secrets, bearer tokens, webhook secrets, MFA
@@ -195,14 +196,23 @@ implementation deliberately shards the work.
 In-memory timers without persistent state are allowed only for non-critical,
 loss-tolerant, process-local work.
 
-## Installation Context
+## Project And Installation Context
 
-The MVP is single-tenant, so jobs do not need a merchant tenant identifier.
+Jobs and outbox records that act on Project-owned resources carry a non-null
+`project_id`. The Project is copied from the source resource when work is made
+durable; workers do not infer it from mutable process state or a currently
+selected Admin view.
 
-Jobs and outbox records still need enough context to resolve installation-wide
-configuration, selected Blockchain Observation Mode, provider credentials,
-Webhook Endpoints, rate limits, Audit Log context, and observability
-attributes without relying on global mutable process state.
+Installation-wide schedulers and leases may have no Project. They enumerate
+eligible Projects explicitly and create or claim Project-scoped work before
+loading Project-owned configuration. Shared Blockchain Observation provider
+configuration, Exchange Rate Source and cache policy, rate limits, and
+observability remain installation context.
+
+Disabling a Project prevents new Payment Creation but does not cancel durable
+work for existing Payments. Project workers continue with stored Payment policy
+until the work reaches a terminal state. Archival is rejected while Project
+work remains pending or retryable.
 
 ## Audit Boundary
 
@@ -251,6 +261,8 @@ Implementation must include focused tests for:
 - retry and dead-letter behavior,
 - scheduler state persistence,
 - safe payload contents without secret raw values,
+- correct Project propagation and cross-Project claim isolation,
+- disabled Projects completing already durable work,
 - observability and Audit Log expectations for security-relevant work.
 
 PostgreSQL integration tests with Testcontainers are the preferred direction

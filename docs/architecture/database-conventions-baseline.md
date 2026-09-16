@@ -17,7 +17,7 @@ Database objects use lowercase `snake_case`:
 Quoted mixed-case identifiers are not the standard path.
 
 Foreign-key columns should name the referenced domain concept, such as
-`payment_id`, `admin_account_id`, `integration_api_credential_id`, or
+`project_id`, `payment_id`, `admin_account_id`, `integration_api_credential_id`, or
 `webhook_endpoint_id`.
 
 ## IDs
@@ -26,6 +26,7 @@ Long-lived domain and contract-visible IDs use UUIDs.
 
 UUID IDs are expected for at least:
 
+- Projects,
 - Payments,
 - Admin Accounts,
 - Integration API Credentials,
@@ -97,6 +98,7 @@ Initial schemas:
 
 Expected `app` data includes:
 
+- Projects and Project-owned configuration,
 - Payments,
 - Matching Blockchain Transactions,
 - Rate Locks,
@@ -111,7 +113,8 @@ Expected `auth` data includes:
 - Admin password hashes,
 - Admin MFA metadata and recovery-code hashes,
 - Admin sessions,
-- Integration API Credential token hashes and authentication status.
+- Integration API Credential token hashes, authentication status, and Project
+  ownership.
 
 Expected `audit` data includes:
 
@@ -125,6 +128,24 @@ Expected `outbox` data includes:
 - durable background jobs,
 - scheduler and lock state,
 - dead-letter records.
+
+## Project Ownership
+
+Project-owned tables use a non-null `project_id` and follow the storage rules in
+[project-isolation-baseline.md](project-isolation-baseline.md). Relationships
+between Project-owned rows use composite candidate keys and foreign keys that
+contain both `project_id` and the referenced identifier. This prevents a child,
+endpoint, outbox record, or job from being attached to a resource in another
+Project.
+
+Project-scoped indexes start with `project_id`. Uniqueness local to a Project
+contains `project_id`; safety invariants that must hold across the installation,
+including normalized Payment Address uniqueness, remain global.
+
+Project-scoped application stores require explicit Project context and fail
+closed without it. Platform-wide Admin and scheduler queries use separate store
+interfaces. EF Core query filters may be defense in depth but are not the only
+isolation control.
 
 ## Migrations
 
@@ -150,7 +171,7 @@ Production migrations must run through one controlled path:
 - documented operations command.
 
 Production migrations must not run as an unordered side effect of normal
-`web`, `api`, `mcp`, or `worker` host startup.
+`api`, `mcp`, or `worker` host startup.
 
 A controlled migration run must:
 
@@ -173,5 +194,5 @@ Implementation must include focused verification that:
 - technical instants use `timestamptz`,
 - mutable concurrent resources have a concurrency value where needed,
 - concurrent hosts applying the schema on startup do so exactly once,
-- explicit SQL paths preserve authorization, audit, tenant or installation
+- explicit SQL paths preserve authorization, Audit Log, Project or installation
   context, and observability expectations.

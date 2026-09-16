@@ -1,5 +1,9 @@
 # The Backend Owns Every Protected Mutation
 
+The protected-mutation boundary remains current. The Next.js runtime details
+are superseded by
+[ADR 0030](./0030-the-web-application-is-a-vite-spa-served-by-the-api.md).
+
 One Next.js application under `apps/web` serves both the payer page and the
 Admin UI. It owns routing, rendering, UI state, forms, accessibility,
 localization, and error presentation. It does not own a single rule about when a

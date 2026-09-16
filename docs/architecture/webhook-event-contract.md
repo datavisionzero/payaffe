@@ -7,7 +7,9 @@ truth once implementation exists.
 ## Scope
 
 The MVP supports outgoing Webhook Events from `payaffe` to Webhook Endpoints
-owned by Integration API Credentials.
+owned by Integration API Credentials. The Payment, credential, endpoint, event,
+and Delivery must belong to the same Project; dispatch never fans an event out
+across Projects.
 
 The MVP does not support incoming provider webhooks for Blockchain Observation.
 Hosted Blockchain API behavior is handled through product-specific observation
@@ -58,8 +60,17 @@ Each payload includes:
 The Payment snapshot should include only data an external system needs for
 reconciliation, such as Payment identifier, External Reference, status, Fiat
 Amount, selected Supported Currency when available, expected cryptocurrency
-amount when available, observed or completed totals when relevant, Payer Page
-URL, Payment Expiration, and settlement or completion timestamps when relevant.
+amount when available, its atomic-unit value when available, observed and
+confirmed-eligible totals when relevant, observed amount state, Payer Page
+reference, Payment Expiration, and settlement or completion timestamps when
+relevant.
+
+The existing event set is sufficient for hosted and Embedded Payment Flows.
+Transient Payment Option or Currency Selection failures do not emit lifecycle
+events because they do not change the Payment. `payment.currency_selected`
+confirms that the immutable Rate Lock and Payment Instruction exist; a receiver
+that needs the full instruction reconciles through
+`GET /api/v1/payments/{paymentId}` rather than relying on delivery order.
 
 Payloads must not include:
 
@@ -70,7 +81,12 @@ Payloads must not include:
 - provider raw payload dumps,
 - full internal database rows,
 - arbitrary unbounded Payment Context Field dumps beyond the documented
-  contract.
+contract.
+
+The v1 envelope does not require `project_id`. Project context is implicit in
+the Project-owned Webhook Endpoint, which preserves the existing payload and
+signature basis. Admin-facing Delivery views still carry explicit Project
+context.
 
 ## Headers And Signatures
 

@@ -53,7 +53,10 @@ Log delivery is handled by `Logaffe.Extensions.Logging`, an `ILoggerProvider` th
 
 Serilog may be used in .NET hosts as the structured logging implementation when it improves bootstrap logging, structured JSON output, enrichment, or request logging. `Logaffe.Serilog` is the delivery path in that case. Application code still depends only on `ILogger<T>`.
 
-For Next.js and Node.js, server-side logs are structured and connected through OpenTelemetry where stable. Browser-side errors are posted to the product's own API and logged there rather than to a third-party SDK, which keeps the browser bundle free of any installation-specific value; broader browser telemetry needs a separate privacy and sampling decision.
+The Vite application has no production Node.js runtime. Browser-side errors are
+posted to the product's own API and logged there rather than to a third-party
+SDK, which keeps the browser bundle free of any installation-specific value;
+broader browser telemetry needs a separate privacy and sampling decision.
 
 ## Local Log Output For Operators
 

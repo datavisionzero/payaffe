@@ -28,9 +28,26 @@ _Avoid_: Customer, user
 The `payaffe` web page where the Payer selects a Supported Currency, receives payment instructions, and sees Payment status.
 _Avoid_: Checkout, invoice page
 
-**Single-Tenant Instance**:
-A deployment that serves exactly one operator or shop.
-_Avoid_: Merchant platform, marketplace
+**Embedded Payment Flow**:
+A product-owned Payer interface that uses the authenticated Integration API
+through that product's backend instead of sending the Payer to the Payer Page.
+_Avoid_: Embedded Payer Page, direct browser integration
+
+**Single-Operator Installation**:
+A deployment administered by exactly one operator or shop and containing one or more Projects.
+_Avoid_: Tenant, merchant platform, marketplace
+
+**Project**:
+An operator-defined boundary that owns payment data, Integration API Credentials, receiving-address allocation, Webhook Delivery, and payment-policy configuration inside one Single-Operator Installation.
+_Avoid_: Tenant, shop, workspace
+
+**Selected Project**:
+The Project an Admin is currently viewing or acting in; it prevents accidental mixing but does not restrict the Admin's installation-wide permission.
+_Avoid_: Active tenant, membership, role
+
+**Project Status**:
+The lifecycle label controlling whether a Project accepts new Payments, finishes existing work, or is retained as read-only history.
+_Avoid_: Tenant status, deletion state
 
 **Blockchain Transaction**:
 An on-chain transfer observed on a supported blockchain.
@@ -96,6 +113,11 @@ _Avoid_: Alternative payment, coin choice
 The cryptocurrency address assigned to a Payment after the Payer selects a Supported Currency.
 _Avoid_: Wallet, account
 
+**Payment Instruction**:
+The immutable Supported Currency, network, exact amount, Payment Address, and
+wallet URI returned after Currency Selection.
+_Avoid_: QR code, invoice, transaction
+
 **Address Pool**:
 A managed set of pre-provisioned Payment Addresses that `payaffe` may assign to Payments.
 _Avoid_: Wallet, account list
@@ -117,7 +139,7 @@ Ether transferred as the native Ethereum asset, not as an ERC-20 token.
 _Avoid_: ETH token
 
 **Watch-Only Wallet Source**:
-Wallet data that lets `payaffe` derive or know receiving addresses without being able to spend funds.
+Project-bound wallet data that lets `payaffe` derive or know receiving addresses without being able to spend funds.
 _Avoid_: Wallet, private key, seed
 
 **Key Custody**:
@@ -153,7 +175,7 @@ An administrative decision that marks a payment as resolved when automated rules
 _Avoid_: Close, finish
 
 **Admin**:
-A person operating the system and resolving payment workflows.
+A person with installation-wide permission to operate every Project and resolve payment workflows.
 _Avoid_: User, operator
 
 **Admin Account**:
@@ -173,7 +195,7 @@ The API surface used by external systems to create, inspect, or react to payment
 _Avoid_: Backend API, public API
 
 **External Reference**:
-The external system's required identifier for relating a Payment to its own business record.
+The external system's required identifier for relating a Payment to its own business record inside a Project.
 _Avoid_: Order ID, metadata
 
 **Idempotency Key**:
@@ -181,7 +203,7 @@ A required request key that lets `payaffe` return the same Payment when an exter
 _Avoid_: Request ID, retry token
 
 **Integration API Credential**:
-The credential used by an external system to authenticate with the Integration API.
+The Project-owned credential used by an external system to authenticate with the Integration API and select exactly one Project.
 _Avoid_: API user, token
 
 **Webhook Delivery**:

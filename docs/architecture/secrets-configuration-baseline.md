@@ -78,8 +78,11 @@ operations documentation.
 
 Secrets stay server-side.
 
-Browser-readable configuration is public. `NEXT_PUBLIC_*`, static assets,
+Browser-readable configuration is public. Vite `VITE_*` values, static assets,
 browser logs, service workers, and client bundles must not contain secrets.
+Integration API bearer tokens used through `Payaffe.Sdk` stay in the embedding
+product's backend and are never supplied to its browser or other untrusted
+client.
 
 Build arguments and image layers are not a safe place for secrets. Productive
 secrets must not be required to build the web frontend or backend container
@@ -141,6 +144,14 @@ The first concrete Webhook Endpoint secret resolution path stores only a
 secret reference on the Webhook Endpoint record. References in the form
 `configuration:Webhooks:EndpointSecrets:<name>` resolve to server-side
 configuration values under `Webhooks:EndpointSecrets:<name>`.
+
+With Projects, provider, Exchange Rate Source, observability, session, and
+data-protection secret references remain installation-wide. Webhook Endpoint
+and Watch-Only Wallet Source references are Project-owned. Their resolvers
+receive the persisted owner `project_id` and accept only that Project's
+configuration namespace; a request or database record cannot use a reference
+to select another Project's value. Legacy unscoped Webhook and wallet settings
+are accepted only by the one-time default-Project upgrader.
 
 ## Rotation And Revocation
 
@@ -207,8 +218,9 @@ Implementation must include focused verification that:
 - missing start-critical secrets fail fast or fail readiness,
 - missing optional provider keys disable the related integration safely,
 - local development defaults are not accepted as production secrets,
-- browser bundles and `NEXT_PUBLIC_*` values do not contain server secrets,
+- browser bundles and Vite `VITE_*` values do not contain server secrets,
 - logs, errors, health, readiness, Audit Log entries, Webhook Delivery history,
   OpenAPI examples, and snapshots do not contain secret raw values,
 - token and recovery-code storage uses protected hashes,
 - rotation and revocation work for the changed secret class.
+- Project-owned secret references cannot resolve another Project's namespace.
