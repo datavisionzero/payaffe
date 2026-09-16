@@ -72,6 +72,9 @@ public sealed record CreatePaymentStoreResult(
 
     public static CreatePaymentStoreResult IdempotencyConflict() =>
         new(CreatePaymentStoreResultKind.IdempotencyConflict, Payment: null);
+
+    public static CreatePaymentStoreResult ProjectUnavailable() =>
+        new(CreatePaymentStoreResultKind.ProjectUnavailable, Payment: null);
 }
 
 public enum CreatePaymentStoreResultKind
@@ -79,6 +82,7 @@ public enum CreatePaymentStoreResultKind
     Created,
     Existing,
     IdempotencyConflict,
+    ProjectUnavailable,
 }
 
 public sealed record SelectCurrencyStoreResult(

@@ -185,7 +185,7 @@ export async function createAdminIntegrationApiCredential(
 ): Promise<AdminIntegrationApiCredentialSecret> {
   const { data, error, response } = await webApi.POST("/api/admin/integration-api-credentials", {
     headers: await adminMutationHeaders(),
-    body: { name }
+    body: { projectId: null, name }
   });
   return requireData(data, error, response);
 }

@@ -12,12 +12,16 @@ public sealed record AdminIntegrationApiCredentialCreateResult(
 
     public static AdminIntegrationApiCredentialCreateResult InvalidName() =>
         new(AdminIntegrationApiCredentialCreateResultKind.InvalidName, Credential: null, Token: null);
+
+    public static AdminIntegrationApiCredentialCreateResult ProjectUnavailable() =>
+        new(AdminIntegrationApiCredentialCreateResultKind.ProjectUnavailable, Credential: null, Token: null);
 }
 
 public enum AdminIntegrationApiCredentialCreateResultKind
 {
     Created,
     InvalidName,
+    ProjectUnavailable,
 }
 
 public sealed record AdminIntegrationApiCredentialMutationResult(

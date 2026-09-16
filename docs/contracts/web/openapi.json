@@ -1953,10 +1953,18 @@
       },
       "AdminIntegrationApiCredentialCreateHttpRequest": {
         "required": [
+          "projectId",
           "name"
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "name": {
             "type": [
               "null",
@@ -1995,6 +2003,7 @@
       },
       "AdminIntegrationApiCredentialReadModel": {
         "required": [
+          "projectId",
           "id",
           "name",
           "status",
@@ -2005,6 +2014,10 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "id": {
             "type": "string",
             "format": "uuid"

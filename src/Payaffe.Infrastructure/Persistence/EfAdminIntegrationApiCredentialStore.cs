@@ -15,6 +15,7 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
             .OrderBy(credential => credential.Name)
             .ThenBy(credential => credential.Id)
             .Select(credential => new AdminIntegrationApiCredentialReadModel(
+                credential.ProjectId,
                 credential.Id,
                 credential.Name,
                 credential.Status,
@@ -25,13 +26,24 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<AdminIntegrationApiCredentialReadModel> CreateAsync(
+    public async Task<AdminIntegrationApiCredentialReadModel?> CreateAsync(
         AdminIntegrationApiCredentialDraft credential,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
+        var projectAcceptsNewConfiguration = await dbContext.Projects
+            .AsNoTracking()
+            .AnyAsync(
+                project => project.Id == credential.ProjectId && project.Status == "active",
+                cancellationToken);
+        if (!projectAcceptsNewConfiguration)
+        {
+            return null;
+        }
+
         var record = new IntegrationApiCredentialRecord
         {
+            ProjectId = credential.ProjectId,
             Id = credential.Id,
             Name = credential.Name,
             TokenHash = credential.TokenHash,
@@ -40,7 +52,7 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
             UpdatedAt = credential.CreatedAt,
         };
         dbContext.IntegrationApiCredentials.Add(record);
-        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry));
+        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, credential.ProjectId));
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToReadModel(record);
     }
@@ -73,7 +85,7 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
         credential.TokenHash = tokenHash;
         credential.UpdatedAt = occurredAt;
         credential.Version++;
-        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry));
+        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, credential.ProjectId));
 
         return await SaveMutationAsync(credentialId, credential, cancellationToken);
     }
@@ -105,7 +117,7 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
         credential.Status = "disabled";
         credential.UpdatedAt = occurredAt;
         credential.Version++;
-        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry));
+        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, credential.ProjectId));
 
         return await SaveMutationAsync(credentialId, credential, cancellationToken);
     }
@@ -135,6 +147,7 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
     private static AdminIntegrationApiCredentialReadModel ToReadModel(
         IntegrationApiCredentialRecord credential) =>
         new(
+            credential.ProjectId,
             credential.Id,
             credential.Name,
             credential.Status,
@@ -143,9 +156,12 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
             credential.UpdatedAt,
             credential.Version);
 
-    private static AuditLogEntryRecord ToAuditRecord(AdminAuditEntry auditEntry) =>
+    private static AuditLogEntryRecord ToAuditRecord(
+        AdminAuditEntry auditEntry,
+        Guid projectId) =>
         new()
         {
+            ProjectId = projectId,
             EventId = auditEntry.EventId,
             OccurredAt = auditEntry.OccurredAt,
             EventType = auditEntry.EventType,

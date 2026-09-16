@@ -1,6 +1,7 @@
 namespace Payaffe.Application.Admin;
 
 public sealed record AdminIntegrationApiCredentialReadModel(
+    Guid ProjectId,
     Guid Id,
     string Name,
     string Status,

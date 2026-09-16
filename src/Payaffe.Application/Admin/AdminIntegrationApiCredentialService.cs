@@ -14,10 +14,16 @@ public sealed class AdminIntegrationApiCredentialService(
         store.ListAsync(cancellationToken);
 
     public async Task<AdminIntegrationApiCredentialCreateResult> CreateAsync(
+        Guid projectId,
         string? name,
         AdminOperationContext context,
         CancellationToken cancellationToken)
     {
+        if (projectId == Guid.Empty)
+        {
+            return AdminIntegrationApiCredentialCreateResult.ProjectUnavailable();
+        }
+
         var normalizedName = name?.Trim();
         if (string.IsNullOrWhiteSpace(normalizedName) || normalizedName.Length > MaxNameLength)
         {
@@ -29,6 +35,7 @@ public sealed class AdminIntegrationApiCredentialService(
         var token = tokenService.GenerateToken();
         var credential = await store.CreateAsync(
             new AdminIntegrationApiCredentialDraft(
+                projectId,
                 credentialId,
                 normalizedName,
                 tokenService.HashToken(token),
@@ -41,6 +48,11 @@ public sealed class AdminIntegrationApiCredentialService(
                 "integration_api_credential.created",
                 credentialId),
             cancellationToken);
+
+        if (credential is null)
+        {
+            return AdminIntegrationApiCredentialCreateResult.ProjectUnavailable();
+        }
 
         return AdminIntegrationApiCredentialCreateResult.Created(credential, token);
     }

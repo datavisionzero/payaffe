@@ -502,6 +502,8 @@ export interface components {
             csrfToken: string;
         };
         AdminIntegrationApiCredentialCreateHttpRequest: {
+            /** Format: uuid */
+            projectId: null | string;
             name: null | string;
         };
         AdminIntegrationApiCredentialHttpResponse: {
@@ -512,6 +514,8 @@ export interface components {
             expectedVersion: null | number | string;
         };
         AdminIntegrationApiCredentialReadModel: {
+            /** Format: uuid */
+            projectId: string;
             /** Format: uuid */
             id: string;
             name: string;

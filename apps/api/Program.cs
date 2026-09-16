@@ -684,6 +684,12 @@ static async Task<IResult> CreatePaymentAsync(
                     StatusCodes.Status409Conflict,
                     "Idempotency conflict.",
                     "idempotency.conflict"),
+            CreatePaymentResultKind.ProjectUnavailable =>
+                IntegrationApiProblem.Create(
+                    httpContext,
+                    StatusCodes.Status409Conflict,
+                    "Project is not accepting new Payments.",
+                    "project.not_active"),
             _ => throw new InvalidOperationException($"Unsupported create result {result.Kind}."),
         };
     }
@@ -940,6 +946,7 @@ static async Task<IResult> CreateAdminIntegrationApiCredentialAsync(
     }
 
     var result = await credentials.CreateAsync(
+        request?.ProjectId ?? ProjectDefaults.DefaultProjectId,
         request?.Name,
         CreateAdminOperationContext(httpContext, admin.Principal!),
         cancellationToken);
@@ -958,6 +965,12 @@ static async Task<IResult> CreateAdminIntegrationApiCredentialAsync(
                 {
                     ["name"] = ["integration_api_credential.name.invalid"],
                 }),
+        AdminIntegrationApiCredentialCreateResultKind.ProjectUnavailable =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Project is not accepting new integration configuration.",
+                "project.not_active"),
         _ => throw new InvalidOperationException($"Unsupported credential create result {result.Kind}."),
     };
 }
@@ -2648,7 +2661,7 @@ public sealed record AdminRecoveryCodesHttpResponse(
     DateTimeOffset GeneratedAt,
     IReadOnlyList<string> RecoveryCodes);
 
-public sealed record AdminIntegrationApiCredentialCreateHttpRequest(string? Name);
+public sealed record AdminIntegrationApiCredentialCreateHttpRequest(Guid? ProjectId, string? Name);
 
 public sealed record AdminIntegrationApiCredentialMutationHttpRequest(long? ExpectedVersion);
 

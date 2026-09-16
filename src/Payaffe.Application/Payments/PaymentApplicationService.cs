@@ -101,6 +101,7 @@ public sealed class PaymentApplicationService(
             CreatePaymentStoreResultKind.Created => CreatePaymentResult.Created(ToResponse(storeResult.Payment!)),
             CreatePaymentStoreResultKind.Existing => CreatePaymentResult.Existing(ToResponse(storeResult.Payment!)),
             CreatePaymentStoreResultKind.IdempotencyConflict => CreatePaymentResult.IdempotencyConflict(),
+            CreatePaymentStoreResultKind.ProjectUnavailable => CreatePaymentResult.ProjectUnavailable(),
             _ => throw new InvalidOperationException($"Unsupported store result {storeResult.Kind}."),
         };
     }

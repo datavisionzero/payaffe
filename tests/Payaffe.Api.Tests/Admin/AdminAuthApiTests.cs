@@ -1583,6 +1583,7 @@ public sealed class AdminAuthApiTests
             "admin@example.test",
             "correct-password",
             totpSecret: TotpSecret);
+        var projectId = await factory.SeedProjectAsync();
         using var loginClient = factory.CreateClient();
         var sessionCookie = await SignInAndGetSessionCookieAsync(loginClient);
         var rawSessionToken = ExtractCookieValue(sessionCookie);
@@ -1595,12 +1596,13 @@ public sealed class AdminAuthApiTests
 
         var createResponse = await sessionClient.PostAsJsonAsync(
             "/api/admin/integration-api-credentials",
-            new { name = " Partner production " });
+            new { projectId, name = " Partner production " });
 
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var created = await createResponse.Content
             .ReadFromJsonAsync<AdminIntegrationApiCredentialSecretResponse>();
         Assert.NotNull(created);
+        Assert.Equal(projectId, created.Credential.ProjectId);
         Assert.Equal("Partner production", created.Credential.Name);
         Assert.Equal("active", created.Credential.Status);
         Assert.Equal(1, created.Credential.Version);
@@ -1610,12 +1612,14 @@ public sealed class AdminAuthApiTests
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
             var stored = Assert.Single(dbContext.IntegrationApiCredentials);
+            Assert.Equal(projectId, stored.ProjectId);
             Assert.Equal(created.Credential.Id, stored.Id);
             Assert.Equal(IntegrationApiCredentialTokenHasher.HashToken(created.Token), stored.TokenHash);
             Assert.DoesNotContain(created.Token, stored.TokenHash, StringComparison.Ordinal);
             Assert.Contains(dbContext.AuditLogEntries, audit =>
                 audit.EventType == "admin.integration_api_credential.create" &&
                 audit.Outcome == "success" &&
+                audit.ProjectId == projectId &&
                 audit.ActorId == adminAccountId.ToString("D") &&
                 audit.ReasonCode == "integration_api_credential.created" &&
                 audit.SubjectId == stored.Id.ToString("D"));
@@ -1629,6 +1633,7 @@ public sealed class AdminAuthApiTests
             .ReadFromJsonAsync<AdminIntegrationApiCredentialsResponse>();
         var credential = Assert.Single(listed!.Credentials);
         Assert.Equal(created.Credential.Id, credential.Id);
+        Assert.Equal(projectId, credential.ProjectId);
         Assert.Equal("Partner production", credential.Name);
     }
 
@@ -1716,6 +1721,7 @@ public sealed class AdminAuthApiTests
         var rotated = await rotateResponse.Content
             .ReadFromJsonAsync<AdminIntegrationApiCredentialSecretResponse>();
         Assert.NotNull(rotated);
+        Assert.Equal(ProjectDefaults.DefaultProjectId, rotated.Credential.ProjectId);
         Assert.Equal(credentialId, rotated.Credential.Id);
         Assert.Equal(2, rotated.Credential.Version);
         Assert.StartsWith("payaffe_integration_", rotated.Token, StringComparison.Ordinal);
@@ -1729,6 +1735,7 @@ public sealed class AdminAuthApiTests
             Assert.Contains(dbContext.AuditLogEntries, audit =>
                 audit.EventType == "admin.integration_api_credential.rotate" &&
                 audit.Outcome == "success" &&
+                audit.ProjectId == ProjectDefaults.DefaultProjectId &&
                 audit.SubjectId == credentialId.ToString("D"));
         }
 
@@ -1787,6 +1794,7 @@ public sealed class AdminAuthApiTests
         var disabled = await disableResponse.Content
             .ReadFromJsonAsync<AdminIntegrationApiCredentialResponse>();
         Assert.Equal("disabled", disabled!.Credential.Status);
+        Assert.Equal(ProjectDefaults.DefaultProjectId, disabled.Credential.ProjectId);
         Assert.Equal(2, disabled.Credential.Version);
 
         using var integrationClient = factory.CreateClient();
@@ -1803,6 +1811,7 @@ public sealed class AdminAuthApiTests
         Assert.Contains(dbContext.AuditLogEntries, audit =>
             audit.EventType == "admin.integration_api_credential.disable" &&
             audit.Outcome == "success" &&
+            audit.ProjectId == ProjectDefaults.DefaultProjectId &&
             audit.ReasonCode == "integration_api_credential.disabled" &&
             audit.SubjectId == credentialId.ToString("D"));
     }
@@ -2475,6 +2484,7 @@ public sealed class AdminAuthApiTests
         string Token);
 
     private sealed record AdminIntegrationApiCredentialResponseModel(
+        Guid ProjectId,
         Guid Id,
         string Name,
         string Status,

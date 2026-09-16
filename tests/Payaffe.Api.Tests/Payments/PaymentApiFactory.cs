@@ -89,15 +89,31 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
 
     public async Task<Guid> SeedCredentialAsync(
         string token,
-        string status = "active")
+        string status = "active",
+        Guid? projectId = null)
     {
         using var scope = Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
         var now = DateTimeOffset.UtcNow;
         var credentialId = Guid.NewGuid();
+        var owningProjectId = projectId ?? ProjectDefaults.DefaultProjectId;
+
+        if (!await dbContext.Projects.AnyAsync(project => project.Id == owningProjectId))
+        {
+            dbContext.Projects.Add(new ProjectRecord
+            {
+                Id = owningProjectId,
+                Name = owningProjectId == ProjectDefaults.DefaultProjectId ? "Default Project" : "Test Project",
+                Slug = owningProjectId == ProjectDefaults.DefaultProjectId ? ProjectDefaults.DefaultProjectSlug : owningProjectId.ToString("N"),
+                Status = "active",
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
 
         dbContext.IntegrationApiCredentials.Add(new IntegrationApiCredentialRecord
         {
+            ProjectId = owningProjectId,
             Id = credentialId,
             Name = "Test credential",
             TokenHash = IntegrationApiCredentialTokenHasher.HashToken(token),
@@ -109,6 +125,25 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
         await dbContext.SaveChangesAsync();
 
         return credentialId;
+    }
+
+    public async Task<Guid> SeedProjectAsync(string status = "active")
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var projectId = Guid.NewGuid();
+        dbContext.Projects.Add(new ProjectRecord
+        {
+            Id = projectId,
+            Name = "Test Project",
+            Slug = projectId.ToString("N"),
+            Status = status,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await dbContext.SaveChangesAsync();
+        return projectId;
     }
 
     public async Task<Guid> SeedAdminAccountAsync(
@@ -128,6 +163,19 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
         var now = DateTimeOffset.UtcNow;
         var adminAccountId = Guid.NewGuid();
         var passwordHasher = new AdminPasswordHasher();
+
+        if (!await dbContext.Projects.AnyAsync(project => project.Id == ProjectDefaults.DefaultProjectId))
+        {
+            dbContext.Projects.Add(new ProjectRecord
+            {
+                Id = ProjectDefaults.DefaultProjectId,
+                Name = "Default Project",
+                Slug = ProjectDefaults.DefaultProjectSlug,
+                Status = "active",
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
 
         dbContext.AdminAccounts.Add(new AdminAccountRecord
         {

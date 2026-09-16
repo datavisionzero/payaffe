@@ -5,7 +5,7 @@ public interface IAdminIntegrationApiCredentialStore
     Task<IReadOnlyList<AdminIntegrationApiCredentialReadModel>> ListAsync(
         CancellationToken cancellationToken);
 
-    Task<AdminIntegrationApiCredentialReadModel> CreateAsync(
+    Task<AdminIntegrationApiCredentialReadModel?> CreateAsync(
         AdminIntegrationApiCredentialDraft credential,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken);

@@ -1,8 +1,10 @@
 using Payaffe.Application;
 using Payaffe.Application.Payments;
 using Payaffe.Infrastructure;
+using Payaffe.Infrastructure.Auth;
 using Payaffe.Infrastructure.Payments;
 using Payaffe.Infrastructure.Persistence;
+using Payaffe.Infrastructure.Persistence.Records;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -193,6 +195,136 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
 
         Assert.Contains("differ", exception.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Credentials_derive_project_scope_for_creation_idempotency_and_reads()
+    {
+        var connectionString = await postgres.CreateDatabaseAsync();
+        await using var provider = BuildProvider(connectionString);
+        await SchemaMigrator.ApplyAsync(provider, CancellationToken.None);
+
+        var otherProjectId = Guid.NewGuid();
+        var disabledProjectId = Guid.NewGuid();
+        var firstCredentialId = Guid.NewGuid();
+        var peerCredentialId = Guid.NewGuid();
+        var otherCredentialId = Guid.NewGuid();
+        var disabledCredentialId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await using var scope = provider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        dbContext.Projects.AddRange(
+            Project(otherProjectId, "other", "active", now),
+            Project(disabledProjectId, "disabled", "disabled", now));
+        dbContext.IntegrationApiCredentials.AddRange(
+            Credential(ProjectDefaults.DefaultProjectId, firstCredentialId, "first-token", now),
+            Credential(ProjectDefaults.DefaultProjectId, peerCredentialId, "peer-token", now),
+            Credential(otherProjectId, otherCredentialId, "other-token", now),
+            Credential(disabledProjectId, disabledCredentialId, "disabled-token", now));
+        await dbContext.SaveChangesAsync();
+
+        var store = scope.ServiceProvider.GetRequiredService<IPaymentStore>();
+        var firstPaymentId = Guid.NewGuid();
+        var otherPaymentId = Guid.NewGuid();
+        var first = await store.CreateAsync(
+            firstCredentialId,
+            "same-key",
+            "same-hash",
+            Payment(firstPaymentId, firstCredentialId, "first-page", now),
+            [],
+            [],
+            [],
+            CancellationToken.None);
+        var other = await store.CreateAsync(
+            otherCredentialId,
+            "same-key",
+            "same-hash",
+            Payment(otherPaymentId, otherCredentialId, "other-page", now),
+            [],
+            [],
+            [],
+            CancellationToken.None);
+        var disabled = await store.CreateAsync(
+            disabledCredentialId,
+            "disabled-key",
+            "disabled-hash",
+            Payment(Guid.NewGuid(), disabledCredentialId, "disabled-page", now),
+            [],
+            [],
+            [],
+            CancellationToken.None);
+
+        Assert.Equal(CreatePaymentStoreResultKind.Created, first.Kind);
+        Assert.Equal(CreatePaymentStoreResultKind.Created, other.Kind);
+        Assert.Equal(CreatePaymentStoreResultKind.ProjectUnavailable, disabled.Kind);
+        Assert.NotNull(await store.FindAsync(peerCredentialId, firstPaymentId, CancellationToken.None));
+        Assert.Null(await store.FindAsync(otherCredentialId, firstPaymentId, CancellationToken.None));
+        Assert.Equal(
+            [ProjectDefaults.DefaultProjectId, otherProjectId],
+            await dbContext.Payments
+                .OrderBy(payment => payment.PayerPageId)
+                .Select(payment => payment.ProjectId)
+                .ToArrayAsync());
+
+        var authenticator = scope.ServiceProvider.GetRequiredService<IIntegrationApiCredentialAuthenticator>();
+        var principal = await authenticator.AuthenticateAsync("other-token", CancellationToken.None);
+        Assert.NotNull(principal);
+        Assert.Equal(otherProjectId, principal.ProjectId);
+        Assert.Equal("active", principal.ProjectStatus);
+    }
+
+    private static ProjectRecord Project(
+        Guid id,
+        string slug,
+        string status,
+        DateTimeOffset now) =>
+        new()
+        {
+            Id = id,
+            Name = slug,
+            Slug = slug,
+            Status = status,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+    private static IntegrationApiCredentialRecord Credential(
+        Guid projectId,
+        Guid id,
+        string token,
+        DateTimeOffset now) =>
+        new()
+        {
+            ProjectId = projectId,
+            Id = id,
+            Name = token,
+            TokenHash = IntegrationApiCredentialTokenHasher.HashToken(token),
+            Status = "active",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+    private static PaymentDraft Payment(
+        Guid id,
+        Guid credentialId,
+        string payerPageId,
+        DateTimeOffset now) =>
+        new(
+            id,
+            credentialId,
+            "shared-reference",
+            "EUR",
+            100,
+            "pending_currency_selection",
+            payerPageId,
+            now.AddHours(1),
+            now.AddHours(25),
+            ContextUsername: null,
+            ContextCustomerNumber: null,
+            ContextCartName: null,
+            ContextNote: null,
+            ReturnUrl: null,
+            now,
+            now);
 
     private static ServiceProvider BuildProvider(
         string connectionString,
