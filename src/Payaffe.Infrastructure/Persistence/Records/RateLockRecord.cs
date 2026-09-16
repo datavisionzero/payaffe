@@ -2,6 +2,8 @@ namespace Payaffe.Infrastructure.Persistence.Records;
 
 public sealed class RateLockRecord
 {
+    public Guid ProjectId { get; set; } = ProjectDefaults.DefaultProjectId;
+
     public Guid PaymentId { get; set; }
 
     public string SupportedCurrency { get; set; } = string.Empty;

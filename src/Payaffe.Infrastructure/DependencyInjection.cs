@@ -32,6 +32,7 @@ public static class DependencyInjection
         bool applySchemaOnStartup = false)
     {
         services.AddDbContext<PayaffeDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddOptions<PaymentApplicationOptions>();
 
         // A host that does not migrate takes the schema as given, so its
         // workers must not wait for a migration that is never going to run

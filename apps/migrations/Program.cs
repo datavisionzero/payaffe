@@ -1,6 +1,8 @@
 using Payaffe.Application;
+using Payaffe.Application.Payments;
 using Payaffe.Migrations;
 using Payaffe.Infrastructure;
+using Payaffe.Infrastructure.Payments;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -9,6 +11,8 @@ var builder = Host.CreateApplicationBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Payaffe")
     ?? throw new InvalidOperationException("Connection string 'Payaffe' is required for migration runs.");
 
+builder.Services.Configure<PaymentApplicationOptions>(builder.Configuration.GetSection("Payments"));
+builder.Services.Configure<PaymentAddressOptions>(builder.Configuration.GetSection("PaymentAddresses"));
 builder.Services.AddPayaffeApplication();
 builder.Services.AddPayaffeInfrastructure(connectionString);
 builder.Services.AddScoped<AdminBootstrapService>();

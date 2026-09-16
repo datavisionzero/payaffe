@@ -58,6 +58,8 @@ public static class SchemaMigrator
                     await database.MigrateAsync(cancellationToken);
                 }
 
+                await DefaultProjectUpgrade.ApplyAsync(scope.ServiceProvider, cancellationToken);
+
                 return pending;
             }
             finally

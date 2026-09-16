@@ -2,6 +2,8 @@ namespace Payaffe.Infrastructure.Persistence.Records;
 
 public sealed class PaymentCreationIdempotencyRecord
 {
+    public Guid ProjectId { get; set; } = ProjectDefaults.DefaultProjectId;
+
     public Guid IntegrationApiCredentialId { get; set; }
 
     public string IdempotencyKey { get; set; } = string.Empty;

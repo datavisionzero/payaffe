@@ -41,6 +41,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 "app.payment_event_history",
                 "app.payment_options",
                 "app.payments",
+                "app.project_configuration",
+                "app.projects",
                 "app.rate_cache",
                 "app.rate_locks",
                 "app.reorg_alerts",
@@ -66,6 +68,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             """);
 
         Assert.Equal("uuid", paymentColumns["id"]);
+        Assert.Equal("uuid", paymentColumns["project_id"]);
         Assert.Equal("uuid", paymentColumns["integration_api_credential_id"]);
         Assert.Equal("bigint", paymentColumns["fiat_amount_minor"]);
         Assert.Equal("timestamp with time zone", paymentColumns["expires_at"]);
@@ -266,6 +269,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             """);
 
         Assert.Equal("uuid", auditLogColumns["event_id"]);
+        Assert.Equal("uuid", auditLogColumns["project_id"]);
         Assert.Equal("timestamp with time zone", auditLogColumns["occurred_at"]);
         Assert.Equal("text", auditLogColumns["event_type"]);
         Assert.Equal("text", auditLogColumns["outcome"]);
@@ -304,11 +308,12 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             from pg_indexes
             where schemaname = 'app'
               and tablename = 'payment_creation_idempotency'
-              and indexname = 'uq_payment_creation_idempotency_credential_key'
+              and indexname = 'uq_payment_creation_idempotency_project_credential_key'
             """;
 
         var indexDefinition = Assert.IsType<string>(await command.ExecuteScalarAsync());
         Assert.Contains("UNIQUE", indexDefinition, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("project_id", indexDefinition, StringComparison.Ordinal);
         Assert.Contains("integration_api_credential_id", indexDefinition, StringComparison.Ordinal);
         Assert.Contains("idempotency_key", indexDefinition, StringComparison.Ordinal);
     }

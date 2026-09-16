@@ -72,6 +72,10 @@ docker compose --profile operations run --rm migrations
 - The applied migration level matches the recorded application version.
 - Payment counts and a representative Payment's Event History agree with the
   source.
+- Project and Project configuration counts agree with the source, and every
+  Project-owned row still has the same `project_id` as its parent. In
+  particular, sample a Payment together with its credential, Payment Address,
+  Webhook Events, and Delivery attempts.
 - Webhook Outbox status counts, delivery attempts, and terminal failures agree.
 - Integration API Credentials, Webhook Endpoints, Admin Accounts, Admin
   sessions, and Audit Log counts agree.
@@ -84,6 +88,32 @@ docker compose --profile operations run --rm migrations
 - No secret value appears in the restore logs or the backup metadata.
 
 Delete the drill database once the evidence is recorded.
+
+## Multi-Project Upgrade Failure Recovery
+
+The first multi-Project migration is transactional. It creates the default
+Project, backfills ownership, replaces ordinary foreign keys with
+Project-preserving relationships, and records one Audit Log entry. If a
+constraint or data validation fails, PostgreSQL rolls the migration back and
+readiness stays unavailable; do not delete, renumber, or manually reassign
+product rows to make a retry pass.
+
+Before retrying:
+
+1. Keep the API and worker stopped so neither can change the database during
+   diagnosis.
+2. Save the migration error and take a fresh backup of the failed database.
+3. Confirm that every starting host uses identical legacy `Payments` and
+   `PaymentAddresses` settings. A mismatch is rejected deliberately so two
+   hosts cannot materialize different default-Project policy.
+4. Resolve only the reported configuration or pre-existing data conflict, then
+   run `docker compose --profile operations run --rm migrations` again.
+5. Verify that there is exactly one active `default` Project, every migrated
+   Project-owned row carries its ID, and existing public IDs, timestamps,
+   address assignments, Webhook Event state, and worker leases are unchanged.
+
+The migration is safe to retry after rollback. Once it succeeds, rerunning it
+does not create a second Project or a second migration Audit Log entry.
 
 ## Production Restore
 
