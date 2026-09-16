@@ -15,7 +15,7 @@ import {
 } from "./admin-harness";
 
 const nav = vi.hoisted(() => ({ search: "", replace: vi.fn(), push: vi.fn() }));
-vi.mock("next/navigation", () => ({
+vi.mock("../lib/navigation", () => ({
   useRouter: () => ({
     back: vi.fn(),
     forward: vi.fn(),

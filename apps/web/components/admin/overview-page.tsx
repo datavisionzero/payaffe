@@ -1,9 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
-import type { Route } from "next";
+import Link from "../../lib/link";
+import { useTranslations } from "../../lib/english";
 import { cn } from "../../lib/utils";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage, StatusPill } from "./common";
 import { formatDateTime, formatFiatAmount } from "./format";
@@ -125,7 +124,7 @@ function Tile({
 }: {
   attention: boolean;
   children?: React.ReactNode;
-  href: Route;
+  href: string;
   linkLabel: string;
   title: string;
   value: string;

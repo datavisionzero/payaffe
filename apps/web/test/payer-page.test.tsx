@@ -3,10 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { NextIntlClientProvider } from "next-intl";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PayerPage } from "../components/payer-page";
-import messages from "../messages/en.json";
 
 const pendingPayment = {
   paymentId: "78d8a09b-1c4a-4b6e-9f94-f8acbd4278f1",
@@ -157,10 +155,8 @@ function renderPayerPage() {
   });
 
   return render(
-    <NextIntlClientProvider locale="en" messages={messages}>
-      <QueryClientProvider client={queryClient}>
-        <PayerPage payerPageId="fixed-payer-page-id" />
-      </QueryClientProvider>
-    </NextIntlClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <PayerPage payerPageId="fixed-payer-page-id" />
+    </QueryClientProvider>
   );
 }

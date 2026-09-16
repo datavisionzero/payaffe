@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useRouter } from "../../lib/navigation";
+import { useTranslations } from "../../lib/english";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import {

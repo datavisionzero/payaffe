@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import Link from "../../lib/link";
+import { usePathname, useRouter } from "../../lib/navigation";
+import { useTranslations } from "../../lib/english";
 import { useEffect, useState } from "react";
 import {
   defaultAdminProjectId,

@@ -82,10 +82,9 @@ migration step to run and no order to remember. Upgrading is `pull` and `up`.
 Back up the database before an upgrade: there is no downgrade, so that artifact
 is the rollback.
 
-Put a reverse proxy in front of it to terminate TLS and serve everything from
-one address. It needs two rules: `/api/` and `/health/` go to the API host,
-everything else to the web host. Both published ports bind to `127.0.0.1` for
-exactly that reason. A complete Caddy configuration is in
+Put a reverse proxy in front of it to terminate TLS. The API host serves the
+built web application, `/api/`, and `/health/` from one address, and its
+published port binds to `127.0.0.1`. A complete Caddy configuration is in
 [docs/operations/docker-compose.md](docs/operations/docker-compose.md).
 
 Then create the first admin. There is no first-run registration page, on purpose

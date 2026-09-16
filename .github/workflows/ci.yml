@@ -103,7 +103,7 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
 
-      - run: docker compose build migrations api worker web
+      - run: docker compose build migrations api worker
       - run: docker build -f apps/mcp/Dockerfile -t payaffe-mcp:ci .
 
       # The deployment file names published images, so there is nothing here to
@@ -137,7 +137,7 @@ jobs:
       # diagnose.
       fail-fast: false
       matrix:
-        image: [api, worker, web, migrations, mcp]
+        image: [api, worker, migrations, mcp]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -151,7 +151,7 @@ jobs:
 
       # amd64 only, unlike a release. A release ships both architectures because
       # an operator may be on either (release.yml says why); `:main` is followed
-      # by our own staging installation, which is x86. Emulating arm64 for five
+      # by our own staging installation, which is x86. Emulating arm64 for four
       # images on every trunk push would spend minutes per push on an image
       # nothing pulls.
       - name: Build and publish

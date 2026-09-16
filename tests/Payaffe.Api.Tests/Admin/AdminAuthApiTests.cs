@@ -1,12 +1,12 @@
+using System.Buffers.Binary;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
-using System.Buffers.Binary;
+using Microsoft.Extensions.DependencyInjection;
+using Payaffe.Api.Tests.Payments;
 using Payaffe.Infrastructure.Auth;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
-using Payaffe.Api.Tests.Payments;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Payaffe.Api.Tests.Admin;
 
@@ -1401,7 +1401,7 @@ public sealed class AdminAuthApiTests
     }
 
     [Fact]
-    public async Task Admin_browser_api_allows_configured_web_origin_with_credentials()
+    public async Task Admin_browser_api_does_not_enable_cross_origin_credentials_by_default()
     {
         await using var factory = new PaymentApiFactory();
         using var client = factory.CreateClient();
@@ -1411,11 +1411,8 @@ public sealed class AdminAuthApiTests
 
         var response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
-        Assert.Equal("http://localhost:3000", Assert.Single(origins));
-        Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Credentials", out var credentials));
-        Assert.Equal("true", Assert.Single(credentials));
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Credentials"));
     }
 
     [Fact]

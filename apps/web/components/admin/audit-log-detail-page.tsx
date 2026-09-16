@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import Link from "../../lib/link";
+import { useTranslations } from "../../lib/english";
 import type { AdminAuditLogEntryDetail } from "../../lib/admin-api";
 import { ErrorMessage, InfoItem, PageHeader, Panel, StateMessage } from "./common";
 import { formatDateTime } from "./format";

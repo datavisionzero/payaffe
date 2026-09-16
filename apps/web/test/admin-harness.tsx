@@ -3,9 +3,8 @@ import { render } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import type { JsonBodyType } from "msw";
 import { setupServer } from "msw/node";
-import { NextIntlClientProvider } from "next-intl";
 import type React from "react";
-import messages from "../messages/en.json";
+import { MemoryRouter } from "react-router";
 import { defaultAdminProjectId, setSelectedAdminProjectId } from "../lib/admin-api";
 
 export const session = {
@@ -352,8 +351,8 @@ export function renderAdmin(ui: React.ReactNode) {
   });
 
   return render(
-    <NextIntlClientProvider locale="en" messages={messages}>
+    <MemoryRouter>
       <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
-    </NextIntlClientProvider>
+    </MemoryRouter>
   );
 }

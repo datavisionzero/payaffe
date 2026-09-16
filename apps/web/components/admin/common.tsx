@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useTranslations } from "../../lib/english";
 import type React from "react";
 import { useId } from "react";
 import type { useForm } from "react-hook-form";

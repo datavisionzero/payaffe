@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useTranslations } from "../../lib/english";
 import type { AdminObservationHealth, AdminReorgAlert } from "../../lib/admin-api";
 import {
   AdminSection,

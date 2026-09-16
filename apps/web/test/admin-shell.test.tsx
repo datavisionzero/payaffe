@@ -6,7 +6,7 @@ import { AdminOverviewPage } from "../components/admin/overview-page";
 import { adminServer, renderAdmin, resetAdminState, state } from "./admin-harness";
 
 const nav = vi.hoisted(() => ({ pathname: "/admin", replace: vi.fn(), push: vi.fn() }));
-vi.mock("next/navigation", () => ({
+vi.mock("../lib/navigation", () => ({
   useRouter: () => ({
     back: vi.fn(),
     forward: vi.fn(),

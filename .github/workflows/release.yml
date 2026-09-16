@@ -57,9 +57,9 @@ jobs:
           fi
 
           # The images carry no VERSION build argument: a .NET host reports what
-          # Directory.Build.props stamped into it, and the web app reports
-          # NEXT_PUBLIC_RELEASE. So the tag and that file have to agree, or the
-          # release would publish an image that reports a version nobody tagged.
+          # Directory.Build.props stamped into it. So the tag and that file have
+          # to agree, or the release would publish an image that reports a
+          # version nobody tagged.
           # This is the check that keeps the note in Directory.Build.props — bump
           # it in the same commit the tag points at — from being a thing someone
           # has to remember.
@@ -118,14 +118,14 @@ jobs:
       contents: read
       packages: write
     strategy:
-      # Five images from one commit. They are a matrix rather than five steps so
+      # Four images from one commit. They are a matrix rather than four steps so
       # that a failure names which one failed, and `fail-fast: false` so a
-      # broken web build does not leave the four .NET images unpublished for a
-      # release that is otherwise fine — an incomplete release is easier to
-      # finish than to diagnose.
+      # one broken image does not leave the others unpublished for a release
+      # that is otherwise fine — an incomplete release is easier to finish than
+      # to diagnose.
       fail-fast: false
       matrix:
-        image: [api, worker, web, migrations, mcp]
+        image: [api, worker, migrations, mcp]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -163,9 +163,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # No build arguments. The .NET hosts report the version Directory.Build.props
-      # stamped into them, and the web bundle carries neither a version nor an
-      # API address on purpose -- both would pin the published image to one
-      # installation (ADR 0024).
+      # stamped into them, and the web bundle inside the API image carries no
+      # API address on purpose -- one static build works at every installation
+      # origin (ADR 0030).
       - name: Build and publish
         uses: docker/build-push-action@v7
         with:

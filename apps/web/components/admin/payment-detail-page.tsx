@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import Link from "../../lib/link";
+import { useTranslations } from "../../lib/english";
 import { useForm } from "react-hook-form";
 import {
   type AdminPaymentDetail,

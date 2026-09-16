@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import Link from "../../lib/link";
+import { useSearchParams } from "../../lib/navigation";
+import { useTranslations } from "../../lib/english";
 import { useEffect, useId, useState } from "react";
 import type { AdminPaymentSummary } from "../../lib/admin-api";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage } from "./common";

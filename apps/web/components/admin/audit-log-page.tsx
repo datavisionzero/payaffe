@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import Link from "../../lib/link";
+import { useTranslations } from "../../lib/english";
 import { useState } from "react";
 import { type AdminAuditLogExport, exportAdminAuditLog } from "../../lib/admin-api";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage } from "./common";

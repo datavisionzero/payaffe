@@ -1,3 +1,15 @@
+FROM node:24-bookworm AS web
+WORKDIR /repo
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/package.json
+RUN pnpm install --frozen-lockfile
+
+COPY docs/contracts/web/openapi.json docs/contracts/web/openapi.json
+COPY apps/web apps/web
+RUN pnpm --filter @payaffe/web build
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -22,5 +34,6 @@ RUN apt-get update \
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 COPY --from=build /app/publish .
+COPY --from=web /repo/apps/api/wwwroot ./wwwroot
 USER $APP_UID
 ENTRYPOINT ["dotnet", "Payaffe.Api.dll"]

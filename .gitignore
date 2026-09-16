@@ -11,6 +11,7 @@ TestResults/
 # Node and frontend build output
 node_modules/
 .next/
+/apps/api/wwwroot/
 coverage/
 playwright-report/
 test-results/

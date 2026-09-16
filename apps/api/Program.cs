@@ -3,6 +3,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.OpenApi;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Payaffe.Application;
 using Payaffe.Application.Admin;
 using Payaffe.Application.Payments;
@@ -12,14 +20,6 @@ using Payaffe.Infrastructure.Payments;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Telemetry;
 using Payaffe.Infrastructure.Webhooks;
-using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using Microsoft.OpenApi;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddPayaffeTelemetry(
@@ -267,6 +267,18 @@ if (webAllowedOrigins.Length > 0)
 {
     app.UseCors("WebBrowser");
 }
+
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        context.Context.Response.Headers.CacheControl =
+            context.Context.Request.Path.StartsWithSegments("/assets")
+                ? "public,max-age=31536000,immutable"
+                : "no-cache";
+    },
+});
 
 app.UseRateLimiter();
 
@@ -628,6 +640,10 @@ adminApi.MapPost("/auth/logout", LogoutAdminAsync)
     .WithTags("Admin Authentication")
     .Produces<AdminLogoutHttpResponse>(StatusCodes.Status200OK)
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json");
+
+// Only browser document navigations reach the SPA. Backend namespaces,
+// non-document requests and missing assets retain a real 404.
+app.MapFallback(SpaFallback.ServeIndexAsync);
 
 app.Run();
 
