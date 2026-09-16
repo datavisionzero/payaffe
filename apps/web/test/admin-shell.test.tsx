@@ -3,9 +3,13 @@ import axe from "axe-core";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "../components/admin/admin-shell";
 import { AdminOverviewPage } from "../components/admin/overview-page";
-import { adminServer, renderAdmin, resetAdminState, state } from "./admin-harness";
+import { adminServer, projectId, renderAdmin, resetAdminState, state } from "./admin-harness";
 
-const nav = vi.hoisted(() => ({ pathname: "/admin", replace: vi.fn(), push: vi.fn() }));
+const nav = vi.hoisted(() => ({
+  pathname: "/admin/projects/00000000-0000-0000-0000-000000000001",
+  replace: vi.fn(),
+  push: vi.fn()
+}));
 vi.mock("../lib/navigation", () => ({
   useRouter: () => ({
     back: vi.fn(),
@@ -22,7 +26,7 @@ vi.mock("../lib/navigation", () => ({
 beforeAll(() => adminServer.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   resetAdminState();
-  nav.pathname = "/admin";
+  nav.pathname = `/admin/projects/${projectId}`;
   nav.replace.mockClear();
   nav.push.mockClear();
   vi.restoreAllMocks();
@@ -53,6 +57,7 @@ describe("AdminShell", () => {
     expect(await screen.findByText("Protected content")).toBeInTheDocument();
     const navigation = screen.getByRole("navigation", { name: "Admin sections" });
     for (const name of [
+      "Projects",
       "Overview",
       "Payments",
       "Monitoring",
@@ -73,7 +78,7 @@ describe("AdminShell", () => {
 
   it("marks the owning section for a nested route", async () => {
     state.authenticated = true;
-    nav.pathname = `/admin/payments/${"03a26b78-c1f3-4230-99d7-9852cedcc181"}`;
+    nav.pathname = `/admin/projects/${projectId}/payments/${"03a26b78-c1f3-4230-99d7-9852cedcc181"}`;
     renderAdmin(
       <AdminShell>
         <p>Protected content</p>
@@ -89,6 +94,58 @@ describe("AdminShell", () => {
     expect(within(navigation).getByRole("link", { name: "Overview" })).not.toHaveAttribute(
       "aria-current"
     );
+  });
+
+  it("preserves the equivalent view when switching Projects", async () => {
+    const secondProjectId = "ebc46c0b-c785-47d5-a2b6-5d417374bd79";
+    state.authenticated = true;
+    state.projects.push({
+      ...state.projects[0],
+      projectId: secondProjectId,
+      name: "Second Project",
+      slug: "second"
+    });
+    nav.pathname = `/admin/projects/${projectId}/payments`;
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    await screen.findByText("Protected content");
+    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), {
+      target: { value: secondProjectId }
+    });
+
+    await vi.waitFor(() =>
+      expect(nav.push).toHaveBeenCalledWith(`/admin/projects/${secondProjectId}/payments`)
+    );
+  });
+
+  it("does not render Project data when the route Project is unavailable", async () => {
+    state.authenticated = true;
+    nav.pathname = "/admin/projects/ebc46c0b-c785-47d5-a2b6-5d417374bd79/payments";
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    expect(await screen.findByText(/This Project is unavailable/)).toBeInTheDocument();
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+
+  it("makes an archived Project read-only", async () => {
+    state.authenticated = true;
+    state.projects[0] = { ...state.projects[0], status: "archived" };
+    renderAdmin(
+      <AdminShell>
+        <button type="button">Mutating action</button>
+      </AdminShell>
+    );
+
+    expect(await screen.findByText("Archived Projects are read-only.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mutating action" })).toBeDisabled();
   });
 
   it("applies and stores an explicit color theme", async () => {

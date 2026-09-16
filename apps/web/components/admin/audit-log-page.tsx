@@ -4,6 +4,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "../../lib/link";
 import { useTranslations } from "../../lib/english";
 import { useState } from "react";
+import { useEffect } from "react";
+import { useSearchParams } from "../../lib/navigation";
 import { type AdminAuditLogExport, exportAdminAuditLog } from "../../lib/admin-api";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage } from "./common";
 import { formatDateTime } from "./format";
@@ -11,16 +13,28 @@ import { adminQueries } from "./queries";
 
 export function AdminAuditLogPage() {
   const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.auditLog());
+  const searchParams = useSearchParams();
+  const [projectId, setProjectId] = useState(() => searchParams.get("projectId") ?? "");
+  const projects = useQuery(adminQueries.projects());
+  const query = useQuery(adminQueries.auditLog(projectId || undefined));
   const [exportResult, setExportResult] = useState<AdminAuditLogExport | null>(null);
   const exportMutation = useMutation({
-    mutationFn: exportAdminAuditLog,
+    mutationFn: () => exportAdminAuditLog(projectId || undefined),
     onSuccess: (result) => {
       setExportResult(result);
       downloadAuditLogExport(result);
     }
   });
   const entries = query.data ?? [];
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (projectId) {
+      params.set("projectId", projectId);
+    }
+    const search = params.toString();
+    window.history.replaceState(null, "", `/admin/audit-log${search ? `?${search}` : ""}`);
+  }, [projectId]);
 
   return (
     <div className="space-y-6">
@@ -40,9 +54,29 @@ export function AdminAuditLogPage() {
             </button>
           </>
         }
-        description={t("auditLogDescription")}
+        description={`Installation-wide. ${t("auditLogDescription")}`}
         title={t("auditLogTitle")}
       />
+      <Panel>
+        <label className="block max-w-sm text-sm font-medium">
+          <span>Project filter</span>
+          <select
+            className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
+            onChange={(event) => {
+              setExportResult(null);
+              setProjectId(event.target.value);
+            }}
+            value={projectId}
+          >
+            <option value="">All Projects and installation events</option>
+            {projects.data?.map((project) => (
+              <option key={project.projectId} value={project.projectId}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </Panel>
       {query.isPending ? <StateMessage>{t("auditLogLoading")}</StateMessage> : null}
       {query.isError ? <ErrorMessage error={query.error} /> : null}
       {exportMutation.isError ? <ErrorMessage error={exportMutation.error} /> : null}
@@ -64,6 +98,7 @@ export function AdminAuditLogPage() {
                   <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">
                     <th className="py-2 pr-4 font-medium">{t("auditOccurredAt")}</th>
                     <th className="py-2 pr-4 font-medium">{t("auditEventType")}</th>
+                    <th className="py-2 pr-4 font-medium">Project</th>
                     <th className="py-2 pr-4 font-medium">{t("auditOutcome")}</th>
                     <th className="py-2 pr-4 font-medium">{t("auditActor")}</th>
                     <th className="py-2 pr-4 font-medium">{t("auditSubject")}</th>
@@ -80,10 +115,16 @@ export function AdminAuditLogPage() {
                       <td className="max-w-[220px] break-words py-3 pr-4 font-medium">
                         <Link
                           className="text-[var(--brand-ink)] hover:text-[var(--brand-ink)]"
-                          href={`/admin/audit-log/${entry.eventId}`}
+                          href={`/admin/audit-log/${entry.eventId}${entry.projectId ? `?projectId=${entry.projectId}` : ""}`}
                         >
                           {entry.eventType}
                         </Link>
+                      </td>
+                      <td className="max-w-[180px] break-words py-3 pr-4">
+                        {entry.projectId
+                          ? projects.data?.find((project) => project.projectId === entry.projectId)
+                              ?.name ?? entry.projectId
+                          : "Installation-wide"}
                       </td>
                       <td className="py-3 pr-4">
                         <span className="inline-flex rounded-md bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium">

@@ -16,17 +16,27 @@ export type AdminAttention = {
   addressesLowCapacity: boolean;
 };
 
-export function useAdminAttention(): AdminAttention {
-  const reorgAlerts = useQuery({ ...adminQueries.reorgAlerts(), staleTime: BADGE_STALE_TIME });
+export function useAdminAttention(projectId: string | null): AdminAttention {
+  const projectQueriesEnabled = projectId !== null;
+  const reorgAlerts = useQuery({
+    ...adminQueries.reorgAlerts(projectId ?? ""),
+    enabled: projectQueriesEnabled,
+    staleTime: BADGE_STALE_TIME
+  });
   const observationHealth = useQuery({
     ...adminQueries.observationHealth(),
     staleTime: BADGE_STALE_TIME
   });
   const webhookDeliveries = useQuery({
-    ...adminQueries.webhookDeliveries(),
+    ...adminQueries.webhookDeliveries(projectId ?? ""),
+    enabled: projectQueriesEnabled,
     staleTime: BADGE_STALE_TIME
   });
-  const addressPool = useQuery({ ...adminQueries.addressPool(), staleTime: BADGE_STALE_TIME });
+  const addressPool = useQuery({
+    ...adminQueries.addressPool(projectId ?? ""),
+    enabled: projectQueriesEnabled,
+    staleTime: BADGE_STALE_TIME
+  });
 
   const degradedCurrencies = (observationHealth.data ?? []).filter(
     (health) => health.status !== "available"

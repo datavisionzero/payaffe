@@ -255,6 +255,12 @@
         "not_found": "The Webhook Delivery was not found.",
         "not_resendable": "The Webhook Delivery cannot be resent."
       },
+      "project": {
+        "slug_conflict": "That Project slug is already in use.",
+        "status_transition_invalid": "That Project status change is not allowed.",
+        "has_active_work": "The Project still has active payment or delivery work and cannot be archived.",
+        "not_found": "The Project is no longer available."
+      },
       "rateLimited": "Too many requests. Wait before retrying.",
       "forbidden": "You are not authorized to perform this action.",
       "concurrency": "The resource changed. Refresh and retry.",
@@ -279,6 +285,7 @@
     },
     "items": {
       "overview": "Overview",
+      "projects": "Projects",
       "payments": "Payments",
       "monitoring": "Monitoring",
       "webhooks": "Webhooks",

@@ -251,6 +251,14 @@ export function getAdminErrorMessage(
       return t("errors.webhook_delivery.not_found");
     case "webhook_delivery.not_resendable":
       return t("errors.webhook_delivery.not_resendable");
+    case "project.slug_conflict":
+      return t("errors.project.slug_conflict");
+    case "project.status_transition_invalid":
+      return t("errors.project.status_transition_invalid");
+    case "project.has_active_work":
+      return t("errors.project.has_active_work");
+    case "project.not_found":
+      return t("errors.project.not_found");
     case "admin_rate_limit.exceeded":
       return t("errors.rateLimited");
     case "concurrency.conflict":

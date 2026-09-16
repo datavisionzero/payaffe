@@ -11,17 +11,20 @@ import {
 } from "../../lib/admin-api";
 import { ErrorMessage, InfoItem, PageHeader, Panel, StateMessage, SubmitButton } from "./common";
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
+import { useAdminProject } from "./project-context";
 
 export function AdminAddressesPage() {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
   const form = useForm<AddressPoolImportFormInput>({ defaultValues: { addresses: "" } });
-  const query = useQuery(adminQueries.addressPool());
+  const query = useQuery(adminQueries.addressPool(projectId));
   const mutation = useMutation({
-    mutationFn: importAdminNativeEthAddressPool,
+    mutationFn: (addresses: string[]) => importAdminNativeEthAddressPool(projectId, addresses),
     onSuccess: async () => {
       form.reset();
-      await invalidateAdminConfiguration(queryClient);
+      await invalidateAdminConfiguration(queryClient, projectId);
     }
   });
   const submit = form.handleSubmit((values) => {

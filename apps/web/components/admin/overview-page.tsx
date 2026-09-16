@@ -7,15 +7,21 @@ import { cn } from "../../lib/utils";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage, StatusPill } from "./common";
 import { formatDateTime, formatFiatAmount } from "./format";
 import { adminQueries } from "./queries";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
 
 const RECENT_PAYMENT_COUNT = 5;
 
 export function AdminOverviewPage() {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
 
   return (
     <div className="space-y-6">
-      <PageHeader description={t("overviewDescription")} title={t("overviewTitle")} />
+      <PageHeader
+        description={`${project.name} · ${project.status}`}
+        title={t("overviewTitle")}
+      />
       {/* The four signals an operator would otherwise have to go looking for,
           in the order they cost money if missed. */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -33,12 +39,13 @@ function ObservationTile() {
   const t = useTranslations("AdminPage");
   const query = useQuery(adminQueries.observationHealth());
   const currencies = query.data ?? [];
+  const project = useAdminProject();
   const available = currencies.filter((health) => health.status === "available").length;
 
   return (
     <Tile
       attention={currencies.length > 0 && available < currencies.length}
-      href="/admin/monitoring"
+      href={adminProjectPath(project.projectId, "/monitoring")}
       linkLabel={t("viewMonitoring")}
       title={t("observationHealthTitle")}
       value={
@@ -63,13 +70,14 @@ function ObservationTile() {
 
 function ReorgAlertTile() {
   const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.reorgAlerts());
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.reorgAlerts(project.projectId));
   const count = query.data?.length ?? 0;
 
   return (
     <Tile
       attention={count > 0}
-      href="/admin/monitoring"
+      href={adminProjectPath(project.projectId, "/monitoring")}
       linkLabel={t("viewMonitoring")}
       title={t("reorgAlertsTitle")}
       value={query.data ? t("reorgAlertsSummary", { count }) : t("notAvailable")}
@@ -79,13 +87,14 @@ function ReorgAlertTile() {
 
 function WebhookDeliveryTile() {
   const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.webhookDeliveries());
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.webhookDeliveries(project.projectId));
   const count = query.data?.length ?? 0;
 
   return (
     <Tile
       attention={count > 0}
-      href="/admin/webhooks?view=deliveries"
+      href={`${adminProjectPath(project.projectId, "/webhooks")}?view=deliveries`}
       linkLabel={t("viewWebhooks")}
       title={t("webhookDeliveriesTitle")}
       value={query.data ? t("webhookDeliveriesSummary", { count }) : t("notAvailable")}
@@ -95,12 +104,13 @@ function WebhookDeliveryTile() {
 
 function AddressPoolTile() {
   const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.addressPool());
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.addressPool(project.projectId));
 
   return (
     <Tile
       attention={query.data?.isLowCapacity ?? false}
-      href="/admin/addresses"
+      href={adminProjectPath(project.projectId, "/addresses")}
       linkLabel={t("viewAddresses")}
       title={t("addressPoolTitle")}
       value={
@@ -155,14 +165,18 @@ function Tile({
 
 function RecentPayments() {
   const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.payments());
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.payments(project.projectId));
   const payments = (query.data ?? []).slice(0, RECENT_PAYMENT_COUNT);
 
   return (
     <Panel>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-xl font-semibold">{t("paymentsTitle")}</h2>
-        <Link className="text-sm font-medium text-[var(--brand-ink)]" href="/admin/payments">
+        <Link
+          className="text-sm font-medium text-[var(--brand-ink)]"
+          href={adminProjectPath(project.projectId, "/payments")}
+        >
           {t("viewPayments")}
         </Link>
       </div>
@@ -188,7 +202,7 @@ function RecentPayments() {
                   <td className="max-w-[220px] break-words py-3 pr-4 font-medium">
                     <Link
                       className="text-[var(--brand-ink)] hover:text-[var(--brand-ink)]"
-                      href={`/admin/payments/${payment.paymentId}`}
+                      href={adminProjectPath(project.projectId, `/payments/${payment.paymentId}`)}
                     >
                       {payment.externalReference}
                     </Link>

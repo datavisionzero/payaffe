@@ -9,6 +9,8 @@ import type { AdminPaymentSummary } from "../../lib/admin-api";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage, StatusPill } from "./common";
 import { formatDateTime, formatFiatAmount } from "./format";
 import { adminQueries } from "./queries";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
 
 const PAYMENT_STATUSES = [
   "pending_currency_selection",
@@ -21,10 +23,11 @@ const PAYMENT_STATUSES = [
 
 export function AdminPaymentsPage() {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
   const searchParams = useSearchParams();
   const statusFieldId = useId();
   const searchFieldId = useId();
-  const query = useQuery(adminQueries.payments());
+  const query = useQuery(adminQueries.payments(project.projectId));
   const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
 
@@ -111,14 +114,16 @@ export function AdminPaymentsPage() {
           {payments.length > 0 && filtered.length === 0 ? (
             <EmptyMessage>{t("paymentsFilteredEmpty")}</EmptyMessage>
           ) : null}
-          {filtered.length > 0 ? <PaymentTable payments={filtered} /> : null}
+          {filtered.length > 0 ? (
+            <PaymentTable payments={filtered} projectId={project.projectId} />
+          ) : null}
         </Panel>
       ) : null}
     </div>
   );
 }
 
-function PaymentTable({ payments }: { payments: AdminPaymentSummary[] }) {
+function PaymentTable({ payments, projectId }: { payments: AdminPaymentSummary[]; projectId: string }) {
   const t = useTranslations("AdminPage");
   return (
     <div className="overflow-x-auto">
@@ -139,7 +144,7 @@ function PaymentTable({ payments }: { payments: AdminPaymentSummary[] }) {
               <td className="max-w-[220px] break-words py-3 pr-4 font-medium">
                 <Link
                   className="text-[var(--brand-ink)] hover:text-[var(--brand-ink)]"
-                  href={`/admin/payments/${payment.paymentId}`}
+                  href={adminProjectPath(projectId, `/payments/${payment.paymentId}`)}
                 >
                   {payment.externalReference}
                 </Link>

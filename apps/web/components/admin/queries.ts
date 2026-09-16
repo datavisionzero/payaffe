@@ -5,7 +5,6 @@ import {
   getAdminObservationHealth,
   getAdminPayment,
   getAdminSession,
-  getSelectedAdminProjectId,
   listAdminAuditLog,
   listAdminIntegrationApiCredentials,
   listAdminPayments,
@@ -21,44 +20,44 @@ import {
 export const adminQueries = {
   session: () => ({ queryKey: ["admin-session"], queryFn: getAdminSession, retry: false }),
   projects: () => ({ queryKey: ["admin-projects"], queryFn: listAdminProjects, retry: false }),
-  payments: () => ({
-    queryKey: ["admin-payments", getSelectedAdminProjectId()],
-    queryFn: listAdminPayments,
+  payments: (projectId: string) => ({
+    queryKey: ["admin-project", projectId, "payments"],
+    queryFn: () => listAdminPayments(projectId),
     retry: false
   }),
-  payment: (paymentId: string) => ({
-    queryKey: ["admin-payment", getSelectedAdminProjectId(), paymentId],
-    queryFn: () => getAdminPayment(paymentId),
+  payment: (projectId: string, paymentId: string) => ({
+    queryKey: ["admin-project", projectId, "payment", paymentId],
+    queryFn: () => getAdminPayment(projectId, paymentId),
     retry: false
   }),
-  auditLog: () => ({
-    queryKey: ["admin-audit-log", getSelectedAdminProjectId()],
-    queryFn: listAdminAuditLog,
+  auditLog: (projectId?: string) => ({
+    queryKey: ["admin-audit-log", projectId ?? "all"],
+    queryFn: () => listAdminAuditLog(projectId),
     retry: false
   }),
-  auditLogEntry: (eventId: string) => ({
-    queryKey: ["admin-audit-log-entry", getSelectedAdminProjectId(), eventId],
-    queryFn: () => getAdminAuditLogEntry(eventId),
+  auditLogEntry: (eventId: string, projectId?: string) => ({
+    queryKey: ["admin-audit-log-entry", projectId ?? "all", eventId],
+    queryFn: () => getAdminAuditLogEntry(eventId, projectId),
     retry: false
   }),
-  webhookDeliveries: () => ({
-    queryKey: ["admin-webhook-deliveries", getSelectedAdminProjectId()],
-    queryFn: listAdminWebhookDeliveries,
+  webhookDeliveries: (projectId: string) => ({
+    queryKey: ["admin-project", projectId, "webhook-deliveries"],
+    queryFn: () => listAdminWebhookDeliveries(projectId),
     retry: false
   }),
-  webhookEndpoints: () => ({
-    queryKey: ["admin-webhook-endpoints", getSelectedAdminProjectId()],
-    queryFn: listAdminWebhookEndpoints,
+  webhookEndpoints: (projectId: string) => ({
+    queryKey: ["admin-project", projectId, "webhook-endpoints"],
+    queryFn: () => listAdminWebhookEndpoints(projectId),
     retry: false
   }),
-  credentials: () => ({
-    queryKey: ["admin-integration-api-credentials", getSelectedAdminProjectId()],
-    queryFn: listAdminIntegrationApiCredentials,
+  credentials: (projectId: string) => ({
+    queryKey: ["admin-project", projectId, "integration-api-credentials"],
+    queryFn: () => listAdminIntegrationApiCredentials(projectId),
     retry: false
   }),
-  addressPool: () => ({
-    queryKey: ["admin-native-eth-address-pool", getSelectedAdminProjectId()],
-    queryFn: getAdminNativeEthAddressPool,
+  addressPool: (projectId: string) => ({
+    queryKey: ["admin-project", projectId, "native-eth-address-pool"],
+    queryFn: () => getAdminNativeEthAddressPool(projectId),
     retry: false
   }),
   observationHealth: () => ({
@@ -67,18 +66,18 @@ export const adminQueries = {
     refetchInterval: 30_000,
     retry: false
   }),
-  reorgAlerts: () => ({
-    queryKey: ["admin-reorg-alerts", getSelectedAdminProjectId()],
-    queryFn: listAdminReorgAlerts,
+  reorgAlerts: (projectId: string) => ({
+    queryKey: ["admin-project", projectId, "reorg-alerts"],
+    queryFn: () => listAdminReorgAlerts(projectId),
     retry: false
   })
 } as const;
 
-export async function invalidateAdminConfiguration(queryClient: QueryClient) {
+export async function invalidateAdminConfiguration(queryClient: QueryClient, projectId: string) {
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: adminQueries.credentials().queryKey }),
-    queryClient.invalidateQueries({ queryKey: adminQueries.webhookEndpoints().queryKey }),
-    queryClient.invalidateQueries({ queryKey: adminQueries.addressPool().queryKey }),
-    queryClient.invalidateQueries({ queryKey: adminQueries.auditLog().queryKey })
+    queryClient.invalidateQueries({ queryKey: adminQueries.credentials(projectId).queryKey }),
+    queryClient.invalidateQueries({ queryKey: adminQueries.webhookEndpoints(projectId).queryKey }),
+    queryClient.invalidateQueries({ queryKey: adminQueries.addressPool(projectId).queryKey }),
+    queryClient.invalidateQueries({ queryKey: adminQueries.auditLog(projectId).queryKey })
   ]);
 }

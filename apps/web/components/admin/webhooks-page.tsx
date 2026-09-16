@@ -31,6 +31,8 @@ import {
 } from "./common";
 import { formatDateTime } from "./format";
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
 
 const WEBHOOK_EVENT_TYPES = [
   "payment.created",
@@ -43,6 +45,8 @@ const WEBHOOK_EVENT_TYPES = [
 
 export function AdminWebhooksPage() {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const webhookPath = adminProjectPath(project.projectId, "/webhooks");
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "deliveries" ? "deliveries" : "endpoints";
 
@@ -54,10 +58,10 @@ export function AdminWebhooksPage() {
           of them can be linked to directly. */}
       <nav aria-label={t("webhookViews")}>
         <ul className="flex flex-wrap gap-2 border-b border-[var(--border)]">
-          <ViewTab active={view === "endpoints"} href="/admin/webhooks">
+          <ViewTab active={view === "endpoints"} href={webhookPath}>
             {t("webhookEndpointsTab")}
           </ViewTab>
-          <ViewTab active={view === "deliveries"} href="/admin/webhooks?view=deliveries">
+          <ViewTab active={view === "deliveries"} href={`${webhookPath}?view=deliveries`}>
             {t("webhookDeliveriesTab")}
           </ViewTab>
         </ul>
@@ -74,7 +78,7 @@ function ViewTab({
 }: {
   active: boolean;
   children: React.ReactNode;
-  href: "/admin/webhooks" | "/admin/webhooks?view=deliveries";
+  href: string;
 }) {
   return (
     <li>
@@ -96,9 +100,11 @@ function ViewTab({
 
 function WebhookEndpointSection() {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
-  const credentials = useQuery(adminQueries.credentials());
-  const query = useQuery(adminQueries.webhookEndpoints());
+  const credentials = useQuery(adminQueries.credentials(projectId));
+  const query = useQuery(adminQueries.webhookEndpoints(projectId));
   const form = useForm<WebhookEndpointForm>({
     defaultValues: {
       integrationApiCredentialId: "",
@@ -108,10 +114,10 @@ function WebhookEndpointSection() {
     }
   });
   const mutation = useMutation({
-    mutationFn: createAdminWebhookEndpoint,
+    mutationFn: (command: WebhookEndpointForm) => createAdminWebhookEndpoint(projectId, command),
     onSuccess: async () => {
       form.reset();
-      await invalidateAdminConfiguration(queryClient);
+      await invalidateAdminConfiguration(queryClient, projectId);
     }
   });
   const submit = form.handleSubmit((values) => {
@@ -193,26 +199,28 @@ function EventTypeFields({
 
 function WebhookEndpointItem({ endpoint }: { endpoint: AdminWebhookEndpoint }) {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
   const form = useForm<{ url: string; secretReference: string }>({
     defaultValues: { url: endpoint.url, secretReference: "" }
   });
   const updateMutation = useMutation({
     mutationFn: (url: string) =>
-      updateAdminWebhookEndpoint(endpoint, { url, eventTypes: endpoint.eventTypes }),
-    onSuccess: async () => invalidateAdminConfiguration(queryClient)
+      updateAdminWebhookEndpoint(projectId, endpoint, { url, eventTypes: endpoint.eventTypes }),
+    onSuccess: async () => invalidateAdminConfiguration(queryClient, projectId)
   });
   const rotateMutation = useMutation({
     mutationFn: (secretReference: string) =>
-      rotateAdminWebhookEndpointSecret(endpoint, secretReference),
+      rotateAdminWebhookEndpointSecret(projectId, endpoint, secretReference),
     onSuccess: async () => {
       form.reset({ url: endpoint.url, secretReference: "" });
-      await invalidateAdminConfiguration(queryClient);
+      await invalidateAdminConfiguration(queryClient, projectId);
     }
   });
   const disableMutation = useMutation({
-    mutationFn: () => disableAdminWebhookEndpoint(endpoint),
-    onSuccess: async () => invalidateAdminConfiguration(queryClient)
+    mutationFn: () => disableAdminWebhookEndpoint(projectId, endpoint),
+    onSuccess: async () => invalidateAdminConfiguration(queryClient, projectId)
   });
 
   return (
@@ -261,16 +269,18 @@ function WebhookEndpointItem({ endpoint }: { endpoint: AdminWebhookEndpoint }) {
 
 function WebhookDeliverySection() {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
-  const query = useQuery(adminQueries.webhookDeliveries());
+  const query = useQuery(adminQueries.webhookDeliveries(projectId));
   const [resentDelivery, setResentDelivery] = useState<AdminWebhookDeliveryResend | null>(null);
   const resendMutation = useMutation({
-    mutationFn: resendAdminWebhookDelivery,
+    mutationFn: (eventId: string) => resendAdminWebhookDelivery(projectId, eventId),
     onSuccess: async (result) => {
       setResentDelivery(result);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminQueries.webhookDeliveries().queryKey }),
-        queryClient.invalidateQueries({ queryKey: adminQueries.auditLog().queryKey })
+        queryClient.invalidateQueries({ queryKey: adminQueries.webhookDeliveries(projectId).queryKey }),
+        queryClient.invalidateQueries({ queryKey: adminQueries.auditLog(projectId).queryKey })
       ]);
     }
   });

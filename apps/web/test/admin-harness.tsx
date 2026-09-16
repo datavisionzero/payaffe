@@ -5,7 +5,7 @@ import type { JsonBodyType } from "msw";
 import { setupServer } from "msw/node";
 import type React from "react";
 import { MemoryRouter } from "react-router";
-import { defaultAdminProjectId, setSelectedAdminProjectId } from "../lib/admin-api";
+import { AdminProjectProvider } from "../components/admin/project-context";
 import { ThemeProvider } from "../components/theme-provider";
 
 export const session = {
@@ -22,7 +22,16 @@ export const paymentId = "03a26b78-c1f3-4230-99d7-9852cedcc181";
 export const auditEventId = "02ba688c-2a8d-4a20-b783-41a0c2e6a6fa";
 export const webhookEventId = "4c5b4f2a-df57-4804-8a6f-dce55b2e680a";
 export const credentialId = "8a42f394-d565-40ae-8ce4-7df12d9e0323";
-export const projectId = defaultAdminProjectId;
+export const projectId = "00000000-0000-0000-0000-000000000001";
+export const project = {
+  projectId,
+  name: "Default Project",
+  slug: "default",
+  status: "active",
+  createdAt: "2026-07-05T10:00:00Z",
+  updatedAt: "2026-07-05T10:00:00Z",
+  version: 1
+};
 
 export const payments = {
   payments: [
@@ -116,6 +125,7 @@ export const webhookDeliveries = {
 // only about what it rendered afterwards.
 export const state = {
   authenticated: false,
+  projects: [{ ...project }],
   stepUpAuthenticatedAt: session.stepUpAuthenticatedAt as string,
   csrf: {} as Record<string, string | null>,
   mfaRequestBody: null as { challengeId?: string; totpCode?: string; recoveryCode?: string } | null,
@@ -144,9 +154,9 @@ export const state = {
 };
 
 export function resetAdminState() {
-  setSelectedAdminProjectId(defaultAdminProjectId);
   window.localStorage?.clear();
   state.authenticated = false;
+  state.projects = [{ ...project }];
   state.stepUpAuthenticatedAt = session.stepUpAuthenticatedAt;
   state.csrf = {};
   state.mfaRequestBody = null;
@@ -189,19 +199,44 @@ function capture(name: string, request: Request) {
 export const adminServer = setupServer(
   http.get("/api/admin/projects", () =>
     guarded({
-      projects: [
-        {
-          projectId,
-          name: "Default Project",
-          slug: "default",
-          status: "active",
-          createdAt: "2026-07-05T10:00:00Z",
-          updatedAt: "2026-07-05T10:00:00Z",
-          version: 1
-        }
-      ]
+      projects: state.projects
     })
   ),
+  http.post("/api/admin/projects", async ({ request }) => {
+    if (!state.authenticated) {
+      return unauthorized();
+    }
+    capture("createProject", request);
+    const body = (await request.json()) as { name: string; slug: string };
+    const created = {
+      projectId: "2a683f48-acde-4b22-bc3f-468d283296af",
+      name: body.name,
+      slug: body.slug,
+      status: "active",
+      createdAt: "2026-07-05T12:00:00Z",
+      updatedAt: "2026-07-05T12:00:00Z",
+      version: 1
+    };
+    state.projects.push(created);
+    return HttpResponse.json({ project: created }, { status: 201 });
+  }),
+  http.post("/api/admin/projects/:projectId/status", async ({ params, request }) => {
+    if (!state.authenticated) {
+      return unauthorized();
+    }
+    capture("changeProjectStatus", request);
+    const body = (await request.json()) as { expectedVersion: number; status: string };
+    const index = state.projects.findIndex((candidate) => candidate.projectId === params.projectId);
+    const current = state.projects[index];
+    const updated = {
+      ...current,
+      status: body.status,
+      updatedAt: "2026-07-05T12:05:00Z",
+      version: Number(current.version) + 1
+    };
+    state.projects[index] = updated;
+    return HttpResponse.json({ project: updated });
+  }),
   http.get("/api/admin/session", () =>
     guarded({ ...session, stepUpAuthenticatedAt: state.stepUpAuthenticatedAt })
   ),
@@ -354,7 +389,9 @@ export function renderAdmin(ui: React.ReactNode) {
   return render(
     <ThemeProvider>
       <MemoryRouter>
-        <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+        <QueryClientProvider client={queryClient}>
+          <AdminProjectProvider project={project}>{ui}</AdminProjectProvider>
+        </QueryClientProvider>
       </MemoryRouter>
     </ThemeProvider>
   );

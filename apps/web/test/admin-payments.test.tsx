@@ -3,7 +3,7 @@ import { HttpResponse, http } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminPaymentDetailPage } from "../components/admin/payment-detail-page";
 import { AdminPaymentsPage } from "../components/admin/payments-page";
-import { setSelectedAdminProjectId, settleAdminPayment } from "../lib/admin-api";
+import { settleAdminPayment } from "../lib/admin-api";
 import {
   adminServer,
   paymentDetail,
@@ -47,7 +47,7 @@ describe("AdminPaymentsPage", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Payments" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "order-123" })).toHaveAttribute(
       "href",
-      `/admin/payments/${paymentId}`
+      `/admin/projects/${projectId}/payments/${paymentId}`
     );
     expect(screen.getByRole("link", { name: "order-124" })).toBeInTheDocument();
     // The status filter offers the same words, so this asks the table itself.
@@ -99,6 +99,25 @@ describe("AdminPaymentsPage", () => {
     expect(await screen.findByRole("link", { name: "order-124" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "order-123" })).not.toBeInTheDocument();
   });
+
+  it("shows a safe authorization state when Project access is denied", async () => {
+    state.authenticated = true;
+    adminServer.use(
+      http.get("/api/admin/payments", () =>
+        HttpResponse.json(
+          { title: "Forbidden.", code: "admin.forbidden", detail: "internal policy detail" },
+          { status: 403 }
+        )
+      )
+    );
+    renderAdmin(<AdminPaymentsPage />);
+
+    expect(
+      await screen.findByText("You are not authorized to perform this action.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("internal policy detail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "order-123" })).not.toBeInTheDocument();
+  });
 });
 
 describe("AdminPaymentDetailPage", () => {
@@ -114,7 +133,7 @@ describe("AdminPaymentDetailPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to payments" })).toHaveAttribute(
       "href",
-      "/admin/payments"
+      `/admin/projects/${projectId}/payments`
     );
   });
 
@@ -158,6 +177,7 @@ describe("AdminPaymentDetailPage", () => {
 
   it("keeps the initiating Project when selection changes while CSRF is loading", async () => {
     const otherProjectId = "ebc46c0b-c785-47d5-a2b6-5d417374bd79";
+    let selectedProjectId = projectId;
     let releaseCsrf!: () => void;
     const csrfGate = new Promise<void>((resolve) => {
       releaseCsrf = resolve;
@@ -180,9 +200,8 @@ describe("AdminPaymentDetailPage", () => {
       })
     );
 
-    setSelectedAdminProjectId(projectId);
-    const settlement = settleAdminPayment(paymentId, 3, "Captured Project");
-    setSelectedAdminProjectId(otherProjectId);
+    const settlement = settleAdminPayment(selectedProjectId, paymentId, 3, "Captured Project");
+    selectedProjectId = otherProjectId;
     releaseCsrf();
     await settlement;
 

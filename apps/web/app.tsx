@@ -12,6 +12,11 @@ import { AdminPaymentDetailPage } from "./components/admin/payment-detail-page";
 import { AdminPaymentsPage } from "./components/admin/payments-page";
 import { AdminShell } from "./components/admin/admin-shell";
 import { AdminWebhooksPage } from "./components/admin/webhooks-page";
+import {
+  AdminLandingPage,
+  AdminProjectsPage,
+  LegacyProjectRedirect
+} from "./components/admin/projects-page";
 import { PayerPage } from "./components/payer-page";
 import Link from "./lib/link";
 import { reportClientError } from "./lib/client-errors";
@@ -24,16 +29,27 @@ export function App() {
         <Route path="/pay/:payerPageId" element={<PayerRoute />} />
         <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route path="/admin" element={<AdminShellRoute />}>
-          <Route index element={<AdminOverviewPage />} />
-          <Route path="payments" element={<AdminPaymentsPage />} />
-          <Route path="payments/:paymentId" element={<AdminPaymentRoute />} />
-          <Route path="monitoring" element={<AdminMonitoringPage />} />
-          <Route path="webhooks" element={<AdminWebhooksPage />} />
-          <Route path="integrations" element={<AdminIntegrationsPage />} />
-          <Route path="addresses" element={<AdminAddressesPage />} />
+          <Route index element={<AdminLandingPage />} />
+          <Route path="projects" element={<AdminProjectsPage />} />
+          <Route path="projects/:projectId">
+            <Route index element={<AdminOverviewPage />} />
+            <Route path="payments" element={<AdminPaymentsPage />} />
+            <Route path="payments/:paymentId" element={<AdminPaymentRoute />} />
+            <Route path="monitoring" element={<AdminMonitoringPage />} />
+            <Route path="webhooks" element={<AdminWebhooksPage />} />
+            <Route path="integrations" element={<AdminIntegrationsPage />} />
+            <Route path="addresses" element={<AdminAddressesPage />} />
+          </Route>
+          <Route path="payments" element={<LegacyProjectRedirect suffix="/payments" />} />
+          <Route path="payments/:paymentId" element={<LegacyPaymentRoute />} />
+          <Route path="monitoring" element={<LegacyProjectRedirect suffix="/monitoring" />} />
+          <Route path="webhooks" element={<LegacyProjectRedirect suffix="/webhooks" />} />
+          <Route path="integrations" element={<LegacyProjectRedirect suffix="/integrations" />} />
+          <Route path="addresses" element={<LegacyProjectRedirect suffix="/addresses" />} />
           <Route path="audit-log" element={<AdminAuditLogPage />} />
           <Route path="audit-log/:eventId" element={<AdminAuditLogRoute />} />
           <Route path="account" element={<AdminAccountPage />} />
+          <Route path="*" element={<AdminNotFoundPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
@@ -73,6 +89,11 @@ function AdminPaymentRoute() {
   return paymentId ? <AdminPaymentDetailPage paymentId={paymentId} /> : <Navigate replace to="/admin" />;
 }
 
+function LegacyPaymentRoute() {
+  const { paymentId } = useParams();
+  return <LegacyProjectRedirect suffix={paymentId ? `/payments/${paymentId}` : "/payments"} />;
+}
+
 function AdminAuditLogRoute() {
   const { eventId } = useParams();
   return eventId ? <AdminAuditLogDetailPage eventId={eventId} /> : <Navigate replace to="/admin/audit-log" />;
@@ -89,6 +110,20 @@ function NotFoundPage() {
         Return home
       </Link>
     </main>
+  );
+}
+
+function AdminNotFoundPage() {
+  return (
+    <div className="mx-auto max-w-xl py-8">
+      <h1 className="text-2xl font-semibold">Admin page not found</h1>
+      <p className="mt-3 text-sm text-[var(--muted-foreground)]">
+        The address does not identify an Admin view.
+      </p>
+      <Link className="mt-5 inline-block text-sm font-medium text-[var(--brand-ink)]" href="/admin/projects">
+        View Projects
+      </Link>
+    </div>
   );
 }
 

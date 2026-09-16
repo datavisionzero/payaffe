@@ -115,6 +115,15 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
             createdAt: "2026-07-05T10:00:00Z",
             updatedAt: "2026-07-05T10:00:00Z",
             version: 1
+          },
+          {
+            projectId: "ebc46c0b-c785-47d5-a2b6-5d417374bd79",
+            name: "Second Project",
+            slug: "second",
+            status: "active",
+            createdAt: "2026-07-05T10:00:00Z",
+            updatedAt: "2026-07-05T10:00:00Z",
+            version: 1
           }
         ]
       },
@@ -155,8 +164,15 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
   await expect(page.getByRole("button", { name: "Sign in" })).toBeFocused();
   await page.keyboard.press("Enter");
 
-  // Sign-in lands on the overview, and the sections are reachable from there.
+  // A multi-Project installation requires an explicit route choice.
   await expect(page).toHaveURL(/\/admin$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Installation overview" })
+  ).toBeVisible();
+  await page.getByRole("link", { name: /Default Project/ }).click();
+  await expect(page).toHaveURL(
+    /\/admin\/projects\/00000000-0000-0000-0000-000000000001$/
+  );
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   const navigation = page.getByRole("navigation", { name: "Admin sections" });
   await expect(navigation.getByRole("link", { name: "Overview" })).toHaveAttribute(
@@ -166,7 +182,9 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
   await navigation.getByRole("link", { name: "Integrations" }).click();
-  await expect(page).toHaveURL(/\/admin\/integrations$/);
+  await expect(page).toHaveURL(
+    /\/admin\/projects\/00000000-0000-0000-0000-000000000001\/integrations$/
+  );
   await expect(
     page.getByRole("heading", { level: 1, name: "Integration API Credentials" })
   ).toBeVisible();
@@ -184,6 +202,14 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
   await expect(page.getByText("payaffe_playwright_one_time_token")).toBeVisible();
   expect(csrfHeader).toBe("csrf-token");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  await page.getByRole("combobox", { name: "Project" }).selectOption(
+    "ebc46c0b-c785-47d5-a2b6-5d417374bd79"
+  );
+  await expect(page).toHaveURL(
+    /\/admin\/projects\/ebc46c0b-c785-47d5-a2b6-5d417374bd79\/integrations$/
+  );
+  await expect(page.getByText("payaffe_playwright_one_time_token")).not.toBeVisible();
 
   await page.setViewportSize({ width: 320, height: 720 });
   await page.getByRole("button", { name: "Menu" }).click();

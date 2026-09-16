@@ -38,6 +38,7 @@ export function AdminAccountPage() {
         predicate: (candidate) => candidate.queryKey[0] !== "admin-session"
       });
       queryClient.setQueryData(adminQueries.session().queryKey, null);
+      window.localStorage?.removeItem("payaffe:selected-project-id");
     }
   });
   const stepUpMutation = useMutation({

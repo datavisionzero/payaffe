@@ -7,10 +7,13 @@ import type { AdminAuditLogEntryDetail } from "../../lib/admin-api";
 import { ErrorMessage, InfoItem, PageHeader, Panel, StateMessage } from "./common";
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
+import { useSearchParams } from "../../lib/navigation";
 
 export function AdminAuditLogDetailPage({ eventId }: { eventId: string }) {
   const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.auditLogEntry(eventId));
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId") ?? undefined;
+  const query = useQuery(adminQueries.auditLogEntry(eventId, projectId));
 
   return (
     <div className="space-y-6">
@@ -37,6 +40,7 @@ function AuditLogDetailContent({ entry }: { entry: AdminAuditLogEntryDetail }) {
   return (
     <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <InfoItem label={t("auditEventId")} value={entry.eventId} />
+      <InfoItem label="Project" value={entry.projectId ?? "Installation-wide"} />
       <InfoItem label={t("auditOccurredAt")} value={formatDateTime(entry.occurredAt)} />
       <InfoItem label={t("auditEventType")} value={entry.eventType} />
       <InfoItem label={t("auditOutcome")} value={entry.outcome} />

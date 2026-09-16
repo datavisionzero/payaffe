@@ -9,43 +9,62 @@ import {
   BlocksIcon,
   CreditCardIcon,
   GaugeIcon,
+  FolderKanbanIcon,
   KeyRoundIcon,
   ListChecksIcon,
   UserRoundIcon,
   WalletCardsIcon
 } from "lucide-react";
 import { type AdminAttention, useAdminAttention } from "./attention";
+import { adminProjectPath } from "./project-routes";
 
-const NAV_GROUPS = [
-  {
-    key: "operations",
-    items: [
-      { key: "overview", href: "/admin", icon: GaugeIcon },
-      { key: "payments", href: "/admin/payments", icon: CreditCardIcon },
-      { key: "monitoring", href: "/admin/monitoring", icon: ActivityIcon },
-      { key: "webhooks", href: "/admin/webhooks", icon: BlocksIcon }
-    ]
-  },
-  {
-    key: "configuration",
-    items: [
-      { key: "integrations", href: "/admin/integrations", icon: KeyRoundIcon },
-      { key: "addresses", href: "/admin/addresses", icon: WalletCardsIcon }
-    ]
-  },
-  {
-    key: "security",
-    items: [
-      { key: "auditLog", href: "/admin/audit-log", icon: ListChecksIcon },
-      { key: "account", href: "/admin/account", icon: UserRoundIcon }
-    ]
-  }
-] as const;
-
-export function AdminNav({ onNavigate, open }: { onNavigate: () => void; open: boolean }) {
+export function AdminNav({
+  onNavigate,
+  open,
+  projectId
+}: {
+  onNavigate: () => void;
+  open: boolean;
+  projectId: string | null;
+}) {
   const t = useTranslations("AdminNav");
   const pathname = usePathname();
-  const attention = useAdminAttention();
+  const attention = useAdminAttention(projectId);
+  const projectPath = projectId ? adminProjectPath(projectId) : null;
+  const groups = [
+    {
+      key: "operations",
+      items: [
+        { key: "projects", href: "/admin/projects", icon: FolderKanbanIcon },
+        ...(projectPath
+          ? [
+              { key: "overview", href: projectPath, icon: GaugeIcon },
+              { key: "payments", href: `${projectPath}/payments`, icon: CreditCardIcon },
+              { key: "monitoring", href: `${projectPath}/monitoring`, icon: ActivityIcon },
+              { key: "webhooks", href: `${projectPath}/webhooks`, icon: BlocksIcon }
+            ]
+          : [])
+      ]
+    },
+    ...(projectPath
+      ? [
+          {
+            key: "configuration",
+            items: [
+              { key: "integrations", href: `${projectPath}/integrations`, icon: KeyRoundIcon },
+              { key: "addresses", href: `${projectPath}/addresses`, icon: WalletCardsIcon }
+            ]
+          }
+        ]
+      : []),
+    {
+      key: "security",
+      items: [
+        { key: "auditLog", href: "/admin/audit-log", icon: ListChecksIcon },
+        { key: "account", href: "/admin/account", icon: UserRoundIcon }
+      ]
+    }
+  ];
 
   return (
     <nav
@@ -56,7 +75,7 @@ export function AdminNav({ onNavigate, open }: { onNavigate: () => void; open: b
       )}
       id="admin-navigation"
     >
-      {NAV_GROUPS.map((group) => (
+      {groups.map((group) => (
         <div className="mb-6 last:mb-0" key={group.key}>
           <p
             className="px-3 text-xs font-semibold tracking-wide text-[var(--muted-foreground)] uppercase"
@@ -75,11 +94,19 @@ export function AdminNav({ onNavigate, open }: { onNavigate: () => void; open: b
                     // would otherwise run the two together. Saying it once,
                     // starting with the visible label, keeps both readings
                     // right.
-                    aria-current={isActive(pathname, item.href) ? "page" : undefined}
+                    aria-current={
+                      isActive(pathname, item.href, item.key === "overview" || item.key === "projects")
+                        ? "page"
+                        : undefined
+                    }
                     aria-label={badge ? `${label}, ${badge.label}` : undefined}
                     className={cn(
                       "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
-                      isActive(pathname, item.href)
+                      isActive(
+                        pathname,
+                        item.href,
+                        item.key === "overview" || item.key === "projects"
+                      )
                         ? "bg-[var(--brand-soft)] text-[var(--foreground)]"
                         : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
                     )}
@@ -131,11 +158,11 @@ function badgeFor(
   return { label: `${count} ${t("needsAttention")}`, text: String(count) };
 }
 
-// `/admin` is the overview and must not light up for every page beneath it;
-// every other entry owns its subtree, so a Payment detail keeps Payments marked.
-function isActive(pathname: string, href: string): boolean {
-  if (href === "/admin") {
-    return pathname === "/admin";
+// Project and overview entries are exact views; every other entry owns its
+// subtree, so a Payment detail keeps Payments marked.
+function isActive(pathname: string, href: string, exact = false): boolean {
+  if (exact) {
+    return pathname === href;
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

@@ -14,13 +14,18 @@ import {
 } from "./common";
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
+import { useAdminProject } from "./project-context";
 
 export function AdminMonitoringPage() {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
 
   return (
     <div className="space-y-6">
-      <PageHeader description={t("monitoringDescription")} title={t("monitoringTitle")} />
+      <PageHeader
+        description={`${project.name} · ${t("monitoringDescription")}`}
+        title={t("monitoringTitle")}
+      />
       <ObservationSection />
       <ReorgAlertSection />
     </div>
@@ -34,7 +39,7 @@ function ObservationSection() {
   return (
     <AdminSection
       description={t("observationHealthDescription")}
-      title={t("observationHealthTitle")}
+      title={`Installation-wide ${t("observationHealthTitle")}`}
     >
       {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
       {query.isError ? <ErrorMessage error={query.error} /> : null}
@@ -78,7 +83,8 @@ function ObservationSection() {
 
 function ReorgAlertSection() {
   const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.reorgAlerts());
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.reorgAlerts(project.projectId));
 
   return (
     <AdminSection description={t("reorgAlertsDescription")} title={t("reorgAlertsTitle")}>

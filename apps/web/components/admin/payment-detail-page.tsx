@@ -21,10 +21,13 @@ import {
 } from "./common";
 import { formatDateTime, formatFiatAmount } from "./format";
 import { adminQueries } from "./queries";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
 
 export function AdminPaymentDetailPage({ paymentId }: { paymentId: string }) {
   const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.payment(paymentId));
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.payment(project.projectId, paymentId));
 
   return (
     <div className="space-y-6">
@@ -32,7 +35,10 @@ export function AdminPaymentDetailPage({ paymentId }: { paymentId: string }) {
         description={t("paymentDetailDescription")}
         title={query.data?.externalReference ?? t("paymentDetailTitle")}
       />
-      <Link className="inline-block text-sm font-medium text-[var(--brand-ink)]" href="/admin/payments">
+      <Link
+        className="inline-block text-sm font-medium text-[var(--brand-ink)]"
+        href={adminProjectPath(project.projectId, "/payments")}
+      >
         {t("backToPayments")}
       </Link>
       {query.isPending ? <StateMessage>{t("paymentDetailLoading")}</StateMessage> : null}
@@ -44,17 +50,19 @@ export function AdminPaymentDetailPage({ paymentId }: { paymentId: string }) {
 
 function PaymentDetailContent({ payment }: { payment: AdminPaymentDetail }) {
   const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
   const form = useForm<SettlementForm>({ defaultValues: { reason: "" } });
   const mutation = useMutation({
     mutationFn: (values: SettlementForm) =>
-      settleAdminPayment(payment.paymentId, payment.version, values.reason),
+      settleAdminPayment(projectId, payment.paymentId, payment.version, values.reason),
     onSuccess: async (result) => {
       form.reset();
-      queryClient.setQueryData(adminQueries.payment(payment.paymentId).queryKey, result);
+      queryClient.setQueryData(adminQueries.payment(projectId, payment.paymentId).queryKey, result);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminQueries.payments().queryKey }),
-        queryClient.invalidateQueries({ queryKey: adminQueries.auditLog().queryKey })
+        queryClient.invalidateQueries({ queryKey: adminQueries.payments(projectId).queryKey }),
+        queryClient.invalidateQueries({ queryKey: adminQueries.auditLog(projectId).queryKey })
       ]);
     }
   });
