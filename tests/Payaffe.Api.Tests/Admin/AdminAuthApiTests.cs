@@ -1008,6 +1008,60 @@ public sealed class AdminAuthApiTests
     }
 
     [Fact]
+    public async Task Audit_export_filters_by_Project_and_global_export_is_explicit()
+    {
+        await using var factory = new PaymentApiFactory();
+        var adminAccountId = await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecret: TotpSecret);
+        var firstProjectId = await factory.SeedProjectAsync();
+        var secondProjectId = await factory.SeedProjectAsync();
+        var firstEventId = await SeedAuditEntryAsync(
+            factory,
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            "admin.payment.settle",
+            "success",
+            adminAccountId,
+            "payment.settled",
+            projectId: firstProjectId);
+        var secondEventId = await SeedAuditEntryAsync(
+            factory,
+            DateTimeOffset.UtcNow,
+            "admin.payment.settle",
+            "denied",
+            adminAccountId,
+            "payment.not_found",
+            projectId: secondProjectId);
+        using var client = factory.CreateClient();
+        var sessionCookie = await SignInAndGetSessionCookieAsync(client);
+        var rawSessionToken = ExtractCookieValue(sessionCookie);
+        var csrf = await GetAdminCsrfAsync(factory, rawSessionToken);
+        using var sessionClient = CreateHttpsClient(factory);
+        sessionClient.DefaultRequestHeaders.Add(
+            "Cookie",
+            $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
+        sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
+
+        var filteredResponse = await sessionClient.PostAsJsonAsync(
+            "/api/admin/audit-log/export",
+            new { projectId = firstProjectId, limit = 100 });
+        filteredResponse.EnsureSuccessStatusCode();
+        var filtered = await filteredResponse.Content.ReadFromJsonAsync<AdminAuditLogExportResponse>();
+        Assert.Contains(filtered!.Entries, entry => entry.EventId == firstEventId);
+        Assert.DoesNotContain(filtered.Entries, entry => entry.EventId == secondEventId);
+        Assert.All(filtered.Entries, entry => Assert.Equal(firstProjectId, entry.ProjectId));
+
+        var globalResponse = await sessionClient.PostAsJsonAsync(
+            "/api/admin/audit-log/export",
+            new { projectId = (Guid?)null, limit = 100 });
+        globalResponse.EnsureSuccessStatusCode();
+        var global = await globalResponse.Content.ReadFromJsonAsync<AdminAuditLogExportResponse>();
+        Assert.Contains(global!.Entries, entry => entry.EventId == firstEventId);
+        Assert.Contains(global.Entries, entry => entry.EventId == secondEventId);
+    }
+
+    [Fact]
     public async Task Generate_admin_recovery_codes_with_session_cookie_requires_csrf_evidence()
     {
         await using var factory = new PaymentApiFactory();
@@ -2477,13 +2531,15 @@ public sealed class AdminAuthApiTests
         Guid adminAccountId,
         string reasonCode,
         string? sourceIp = null,
-        string? userAgent = null)
+        string? userAgent = null,
+        Guid? projectId = null)
     {
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
         var eventId = Guid.NewGuid();
         dbContext.AuditLogEntries.Add(new AuditLogEntryRecord
         {
+            ProjectId = projectId,
             EventId = eventId,
             OccurredAt = occurredAt,
             EventType = eventType,
@@ -2576,6 +2632,7 @@ public sealed class AdminAuthApiTests
         DateTimeOffset UpdatedAt);
 
     private sealed record AdminAuditLogEntryResponse(
+        Guid? ProjectId,
         Guid EventId,
         DateTimeOffset OccurredAt,
         string EventType,
@@ -2587,6 +2644,7 @@ public sealed class AdminAuthApiTests
         string SubjectId);
 
     private sealed record AdminAuditLogEntryDetailResponse(
+        Guid? ProjectId,
         Guid EventId,
         DateTimeOffset OccurredAt,
         string EventType,

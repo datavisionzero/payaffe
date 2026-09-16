@@ -70,13 +70,16 @@ docker compose --profile operations run --rm migrations
 
 - `/health/ready` succeeds against the restored database.
 - The applied migration level matches the recorded application version.
-- Payment counts and a representative Payment's Event History agree with the
-  source.
+- Payment counts by status agree with the source. Sample at least one active,
+  one expired, and one completed Payment together with its complete Event
+  History.
 - Project and Project configuration counts agree with the source, and every
   Project-owned row still has the same `project_id` as its parent. In
   particular, sample a Payment together with its credential, Payment Address,
   Webhook Events, and Delivery attempts.
 - Webhook Outbox status counts, delivery attempts, and terminal failures agree.
+  Record the IDs of pending and retryable Webhook Events before the backup and
+  confirm that the same events remain pending or retryable after the restore.
 - Integration API Credentials, Webhook Endpoints, Admin Accounts, Admin
   sessions, and Audit Log counts agree.
 - BTC and LTC derivation cursors are preserved, including their source
@@ -110,7 +113,8 @@ Before retrying:
    run `docker compose --profile operations run --rm migrations` again.
 5. Verify that there is exactly one active `default` Project, every migrated
    Project-owned row carries its ID, and existing public IDs, timestamps,
-   address assignments, Webhook Event state, and worker leases are unchanged.
+   active, expired, and completed Payment state, Event History, address
+   assignments, pending Webhook Event state, and worker leases are unchanged.
 
 The migration is safe to retry after rollback. Once it succeeds, rerunning it
 does not create a second Project or a second migration Audit Log entry.
@@ -121,6 +125,12 @@ A production restore needs a declared maintenance window, a named incident
 owner, an explicit rollback decision, and a fresh backup of the failed database
 before it is replaced. Follow [incident-response.md](incident-response.md) for
 the surrounding process.
+
+Keep the API and worker stopped until the restored data passes the verification
+checklist. Start the API first and confirm readiness, then start the worker and
+watch Webhook Delivery and address-pool telemetry. At-least-once Webhook
+Delivery means a restored pending attempt may be sent again; receivers must
+deduplicate it by Webhook Event ID.
 
 Re-assigning an address that a Payer may already have paid to is the one
 outcome a restore must never produce. When in doubt about the age of a backup

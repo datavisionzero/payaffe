@@ -45,7 +45,7 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
     }
 
     [Fact]
-    public async Task Populated_upgrade_preserves_ids_history_addresses_webhooks_and_leases()
+    public async Task Populated_upgrade_and_restore_preserve_payment_states_history_addresses_webhooks_and_leases()
     {
         var connectionString = await postgres.CreateDatabaseAsync();
         await using var provider = BuildProvider(connectionString);
@@ -73,7 +73,9 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
             ("address_migration_id", "202609160002_AddProjectPaymentConfigurationAndAddressSources"));
 
         var credentialId = Guid.NewGuid();
-        var paymentId = Guid.NewGuid();
+        var activePaymentId = Guid.NewGuid();
+        var expiredPaymentId = Guid.NewGuid();
+        var completedPaymentId = Guid.NewGuid();
         var paymentEventId = Guid.NewGuid();
         var webhookEventId = Guid.NewGuid();
         var now = DateTimeOffset.Parse("2026-09-16T12:00:00Z");
@@ -87,29 +89,38 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
             insert into app.payments
                 (id, integration_api_credential_id, external_reference, fiat_currency, fiat_amount_minor,
                  status, payer_page_id, expires_at, late_acceptance_ends_at, created_at, updated_at, version)
-            values (@payment_id, @credential_id, 'legacy-reference', 'EUR', 1500,
-                    'waiting_for_payment', 'legacy-page', @now + interval '1 hour',
-                    @now + interval '25 hours', @now, @now, 1);
+            values
+                (@active_payment_id, @credential_id, 'legacy-active', 'EUR', 1500,
+                 'waiting_for_payment', 'legacy-active-page', @now + interval '1 hour',
+                 @now + interval '25 hours', @now, @now, 1),
+                (@expired_payment_id, @credential_id, 'legacy-expired', 'EUR', 2500,
+                 'expired', 'legacy-expired-page', @now - interval '2 hours',
+                 @now - interval '1 hour', @now - interval '26 hours', @now, 2),
+                (@completed_payment_id, @credential_id, 'legacy-completed', 'USD', 3500,
+                 'completed', 'legacy-completed-page', @now - interval '3 hours',
+                 @now + interval '21 hours', @now - interval '4 hours', @now, 3);
 
             insert into app.payment_event_history (id, payment_id, event_type, occurred_at, details)
-            values (@payment_event_id, @payment_id, 'payment.created', @now, '{"legacy":true}'::jsonb);
+            values (@payment_event_id, @active_payment_id, 'payment.created', @now, '{"legacy":true}'::jsonb);
 
             insert into app.payment_address_assignments (payment_id, supported_currency, payment_address, assigned_at)
-            values (@payment_id, 'BTC', 'legacy-address', @now);
+            values (@active_payment_id, 'BTC', 'legacy-address', @now);
 
             insert into outbox.webhook_events
                 (id, payment_id, integration_api_credential_id, event_type, event_version, payload_version,
                  resource_type, resource_id, status, occurred_at, created_at, next_attempt_at,
                  attempt_count, correlation_id)
-            values (@webhook_event_id, @payment_id, @credential_id, 'payment.created', '1', 1,
-                    'payment', @payment_id::text, 'pending', @now, @now, @now, 0, 'legacy-correlation');
+            values (@webhook_event_id, @active_payment_id, @credential_id, 'payment.created', '1', 1,
+                    'payment', @active_payment_id::text, 'pending', @now, @now, @now, 0, 'legacy-correlation');
 
             insert into app.background_worker_leases
                 (worker_name, consecutive_failure_count, updated_at, version)
             values ('legacy-worker', 0, @now, 1);
             """,
             ("credential_id", credentialId),
-            ("payment_id", paymentId),
+            ("active_payment_id", activePaymentId),
+            ("expired_payment_id", expiredPaymentId),
+            ("completed_payment_id", completedPaymentId),
             ("payment_event_id", paymentEventId),
             ("webhook_event_id", webhookEventId),
             ("now", now));
@@ -126,9 +137,11 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
                 (select count(*) from app.payment_event_history where id = @payment_event_id),
                 (select payment_address from app.payment_address_assignments where payment_id = @payment_id),
                 (select status from outbox.webhook_events where id = @webhook_event_id),
-                (select worker_name from app.background_worker_leases where worker_name = 'legacy-worker')
+                (select worker_name from app.background_worker_leases where worker_name = 'legacy-worker'),
+                (select count(*) from app.payments),
+                (select string_agg(status, ',' order by status) from app.payments)
             """;
-        command.Parameters.AddWithValue("payment_id", paymentId);
+        command.Parameters.AddWithValue("payment_id", activePaymentId);
         command.Parameters.AddWithValue("payment_event_id", paymentEventId);
         command.Parameters.AddWithValue("webhook_event_id", webhookEventId);
         await using var reader = await command.ExecuteReaderAsync();
@@ -138,6 +151,31 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
         Assert.Equal("legacy-address", reader.GetString(2));
         Assert.Equal("pending", reader.GetString(3));
         Assert.Equal("legacy-worker", reader.GetString(4));
+        Assert.Equal(3, reader.GetInt64(5));
+        Assert.Equal("completed,expired,waiting_for_payment", reader.GetString(6));
+        await reader.DisposeAsync();
+        await connection.DisposeAsync();
+
+        NpgsqlConnection.ClearAllPools();
+        var restoredConnectionString = await postgres.CloneDatabaseAsync(connectionString);
+        await using var restoredProvider = BuildProvider(restoredConnectionString);
+        await SchemaMigrator.ApplyAsync(restoredProvider, CancellationToken.None);
+        await using var restoredScope = restoredProvider.CreateAsyncScope();
+        var restoredDb = restoredScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Equal(
+            new[]
+            {
+                (activePaymentId, "waiting_for_payment"),
+                (expiredPaymentId, "expired"),
+                (completedPaymentId, "completed"),
+            }.OrderBy(payment => payment.Item1),
+            await restoredDb.Payments
+                .OrderBy(payment => payment.Id)
+                .Select(payment => new ValueTuple<Guid, string>(payment.Id, payment.Status))
+                .ToArrayAsync());
+        Assert.All(restoredDb.Payments, payment => Assert.Equal(ProjectDefaults.DefaultProjectId, payment.ProjectId));
+        Assert.Equal("legacy-address", Assert.Single(restoredDb.PaymentAddressAssignments).PaymentAddress);
+        Assert.Equal("pending", Assert.Single(restoredDb.WebhookOutboxEvents).Status);
     }
 
     [Fact]

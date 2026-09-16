@@ -37,6 +37,9 @@ public sealed class OperationalMetricsHostedServiceTests(PostgreSqlFixture postg
         Assert.Equal(2, measurements["payaffe.address_pool.available|currency=ETH"]);
         Assert.Equal(0, measurements["payaffe.reorg_alerts.open|"]);
         Assert.Equal(0, measurements["payaffe.webhook.terminal_failures|"]);
+        Assert.DoesNotContain(
+            measurements.Keys,
+            key => key.Contains("project", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
