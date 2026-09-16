@@ -8,10 +8,12 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
     : IAdminIntegrationApiCredentialStore
 {
     public async Task<IReadOnlyList<AdminIntegrationApiCredentialReadModel>> ListAsync(
+        Guid projectId,
         CancellationToken cancellationToken)
     {
         return await dbContext.IntegrationApiCredentials
             .AsNoTracking()
+            .Where(credential => credential.ProjectId == projectId)
             .OrderBy(credential => credential.Name)
             .ThenBy(credential => credential.Id)
             .Select(credential => new AdminIntegrationApiCredentialReadModel(
@@ -58,6 +60,7 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
     }
 
     public async Task<AdminIntegrationApiCredentialStoreResult> RotateAsync(
+        Guid projectId,
         Guid credentialId,
         long expectedVersion,
         string tokenHash,
@@ -66,7 +69,9 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
         CancellationToken cancellationToken)
     {
         var credential = await dbContext.IntegrationApiCredentials
-            .SingleOrDefaultAsync(candidate => candidate.Id == credentialId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == projectId && candidate.Id == credentialId,
+                cancellationToken);
         if (credential is null)
         {
             return AdminIntegrationApiCredentialStoreResult.NotFound();
@@ -91,6 +96,7 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
     }
 
     public async Task<AdminIntegrationApiCredentialStoreResult> DisableAsync(
+        Guid projectId,
         Guid credentialId,
         long expectedVersion,
         DateTimeOffset occurredAt,
@@ -98,7 +104,9 @@ public sealed class EfAdminIntegrationApiCredentialStore(PayaffeDbContext dbCont
         CancellationToken cancellationToken)
     {
         var credential = await dbContext.IntegrationApiCredentials
-            .SingleOrDefaultAsync(candidate => candidate.Id == credentialId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == projectId && candidate.Id == credentialId,
+                cancellationToken);
         if (credential is null)
         {
             return AdminIntegrationApiCredentialStoreResult.NotFound();

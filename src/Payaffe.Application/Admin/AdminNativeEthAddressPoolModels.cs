@@ -1,6 +1,7 @@
 namespace Payaffe.Application.Admin;
 
 public sealed record AdminNativeEthAddressPoolSummary(
+    Guid ProjectId,
     int UnusedCount,
     int AssignedCount,
     int RetiredCount,
@@ -24,6 +25,9 @@ public sealed record AdminNativeEthAddressPoolImportResult(
 
     public static AdminNativeEthAddressPoolImportResult DuplicateAddress() =>
         new(AdminNativeEthAddressPoolImportResultKind.DuplicateAddress, null, 0, null);
+
+    public static AdminNativeEthAddressPoolImportResult ProjectUnavailable() =>
+        new(AdminNativeEthAddressPoolImportResultKind.ProjectUnavailable, null, 0, null);
 }
 
 public enum AdminNativeEthAddressPoolImportResultKind
@@ -31,9 +35,11 @@ public enum AdminNativeEthAddressPoolImportResultKind
     Success,
     InvalidInput,
     DuplicateAddress,
+    ProjectUnavailable,
 }
 
 public sealed record AdminNativeEthAddressPoolImportDraft(
+    Guid ProjectId,
     Guid ImportId,
     Guid ImportedByAdminAccountId,
     IReadOnlyList<string> Addresses,

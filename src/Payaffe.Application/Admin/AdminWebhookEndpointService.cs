@@ -20,11 +20,15 @@ public sealed class AdminWebhookEndpointService(
     ];
 
     public Task<IReadOnlyList<AdminWebhookEndpointReadModel>> ListAsync(
+        Guid projectId,
         Guid? integrationApiCredentialId,
         CancellationToken cancellationToken) =>
-        store.ListAsync(integrationApiCredentialId, cancellationToken);
+        projectId == Guid.Empty
+            ? Task.FromResult<IReadOnlyList<AdminWebhookEndpointReadModel>>([])
+            : store.ListAsync(projectId, integrationApiCredentialId, cancellationToken);
 
     public async Task<AdminWebhookEndpointResult> CreateAsync(
+        Guid projectId,
         Guid integrationApiCredentialId,
         string? url,
         string? secretReference,
@@ -35,7 +39,7 @@ public sealed class AdminWebhookEndpointService(
         var normalizedUrl = NormalizeUrl(url);
         var normalizedSecretReference = secretReference?.Trim();
         var normalizedEventTypes = NormalizeEventTypes(eventTypes);
-        if (integrationApiCredentialId == Guid.Empty ||
+        if (projectId == Guid.Empty || integrationApiCredentialId == Guid.Empty ||
             normalizedUrl is null ||
             string.IsNullOrWhiteSpace(normalizedSecretReference) ||
             normalizedEventTypes.Invalid)
@@ -43,7 +47,7 @@ public sealed class AdminWebhookEndpointService(
             return AdminWebhookEndpointResult.InvalidInput();
         }
 
-        if (await secretResolver.ResolveAsync(normalizedSecretReference, cancellationToken) is not { Length: > 0 })
+        if (await secretResolver.ResolveForProjectAsync(projectId, normalizedSecretReference, cancellationToken) is not { Length: > 0 })
         {
             return AdminWebhookEndpointResult.SecretUnavailable();
         }
@@ -51,6 +55,7 @@ public sealed class AdminWebhookEndpointService(
         var occurredAt = clock.UtcNow;
         var endpointId = Guid.NewGuid();
         var result = await store.CreateAsync(
+            projectId,
             new AdminWebhookEndpointDraft(
                 endpointId,
                 integrationApiCredentialId,
@@ -69,6 +74,7 @@ public sealed class AdminWebhookEndpointService(
     }
 
     public async Task<AdminWebhookEndpointResult> UpdateAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         string? url,
@@ -78,7 +84,7 @@ public sealed class AdminWebhookEndpointService(
     {
         var normalizedUrl = NormalizeUrl(url);
         var normalizedEventTypes = NormalizeEventTypes(eventTypes);
-        if (endpointId == Guid.Empty ||
+        if (projectId == Guid.Empty || endpointId == Guid.Empty ||
             expectedVersion <= 0 ||
             normalizedUrl is null ||
             normalizedEventTypes.Invalid)
@@ -88,6 +94,7 @@ public sealed class AdminWebhookEndpointService(
 
         var occurredAt = clock.UtcNow;
         var result = await store.UpdateAsync(
+            projectId,
             endpointId,
             expectedVersion,
             new AdminWebhookEndpointUpdate(normalizedUrl, normalizedEventTypes.Serialized),
@@ -103,6 +110,7 @@ public sealed class AdminWebhookEndpointService(
     }
 
     public async Task<AdminWebhookEndpointResult> RotateSecretAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         string? secretReference,
@@ -110,20 +118,21 @@ public sealed class AdminWebhookEndpointService(
         CancellationToken cancellationToken)
     {
         var normalizedSecretReference = secretReference?.Trim();
-        if (endpointId == Guid.Empty ||
+        if (projectId == Guid.Empty || endpointId == Guid.Empty ||
             expectedVersion <= 0 ||
             string.IsNullOrWhiteSpace(normalizedSecretReference))
         {
             return AdminWebhookEndpointResult.InvalidInput();
         }
 
-        if (await secretResolver.ResolveAsync(normalizedSecretReference, cancellationToken) is not { Length: > 0 })
+        if (await secretResolver.ResolveForProjectAsync(projectId, normalizedSecretReference, cancellationToken) is not { Length: > 0 })
         {
             return AdminWebhookEndpointResult.SecretUnavailable();
         }
 
         var occurredAt = clock.UtcNow;
         var result = await store.RotateSecretAsync(
+            projectId,
             endpointId,
             expectedVersion,
             normalizedSecretReference,
@@ -139,18 +148,20 @@ public sealed class AdminWebhookEndpointService(
     }
 
     public async Task<AdminWebhookEndpointResult> DisableAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         AdminOperationContext context,
         CancellationToken cancellationToken)
     {
-        if (endpointId == Guid.Empty || expectedVersion <= 0)
+        if (projectId == Guid.Empty || endpointId == Guid.Empty || expectedVersion <= 0)
         {
             return AdminWebhookEndpointResult.InvalidInput();
         }
 
         var occurredAt = clock.UtcNow;
         var result = await store.DisableAsync(
+            projectId,
             endpointId,
             expectedVersion,
             occurredAt,

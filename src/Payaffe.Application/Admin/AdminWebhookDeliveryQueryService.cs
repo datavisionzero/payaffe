@@ -6,10 +6,13 @@ public sealed class AdminWebhookDeliveryQueryService(IAdminWebhookDeliveryStore 
     private const int MaxLimit = 100;
 
     public async Task<IReadOnlyList<AdminWebhookDeliveryReadModel>> ListResendableDeliveriesAsync(
+        Guid projectId,
         int? requestedLimit,
         CancellationToken cancellationToken)
     {
         var limit = Math.Clamp(requestedLimit ?? DefaultLimit, 1, MaxLimit);
-        return await store.ListResendableDeliveriesAsync(limit, cancellationToken);
+        return projectId == Guid.Empty
+            ? []
+            : await store.ListResendableDeliveriesAsync(projectId, limit, cancellationToken);
     }
 }

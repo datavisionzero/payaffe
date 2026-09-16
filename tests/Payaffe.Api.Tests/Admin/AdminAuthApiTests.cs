@@ -483,7 +483,8 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync("/api/admin/payments?limit=1");
+        var response = await sessionClient.GetAsync(
+            $"/api/admin/payments?projectId={ProjectDefaults.DefaultProjectId:D}&limit=1");
 
         response.EnsureSuccessStatusCode();
         var adminPayments = await response.Content.ReadFromJsonAsync<AdminPaymentsResponse>();
@@ -498,6 +499,119 @@ public sealed class AdminAuthApiTests
         Assert.Equal("btc-test-address", payment.PaymentAddress);
         var body = await response.Content.ReadAsStringAsync();
         Assert.DoesNotContain(rawSessionToken, body, StringComparison.Ordinal);
+
+        var missingProjectResponse = await sessionClient.GetAsync("/api/admin/payments");
+        Assert.Equal(HttpStatusCode.BadRequest, missingProjectResponse.StatusCode);
+        Assert.Contains(
+            "project_id.required",
+            await missingProjectResponse.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Admin_payment_reads_reject_a_payment_from_another_Project()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecret: TotpSecret);
+        var credentialId = await factory.SeedCredentialAsync("integration-token");
+        var paymentId = await SeedPaymentAsync(
+            factory,
+            credentialId,
+            "project-isolated-order",
+            "waiting_for_payment",
+            DateTimeOffset.UtcNow);
+        var otherProjectId = await factory.SeedProjectAsync();
+        using var signInClient = factory.CreateClient();
+        var sessionCookie = await SignInAndGetSessionCookieAsync(signInClient);
+        var rawSessionToken = ExtractCookieValue(sessionCookie);
+        var csrf = await GetAdminCsrfAsync(factory, rawSessionToken);
+        using var sessionClient = CreateHttpsClient(factory);
+        sessionClient.DefaultRequestHeaders.Add(
+            "Cookie",
+            $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
+        sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
+
+        var listResponse = await sessionClient.GetAsync(
+            $"/api/admin/payments?projectId={otherProjectId:D}");
+        listResponse.EnsureSuccessStatusCode();
+        var listed = await listResponse.Content.ReadFromJsonAsync<AdminPaymentsResponse>();
+        Assert.Empty(listed!.Payments);
+
+        var detailResponse = await sessionClient.GetAsync(
+            $"/api/admin/payments/{paymentId:D}?projectId={otherProjectId:D}");
+        Assert.Equal(HttpStatusCode.NotFound, detailResponse.StatusCode);
+
+        var settleResponse = await sessionClient.PostAsJsonAsync(
+            $"/api/admin/payments/{paymentId:D}/settle",
+            new { projectId = otherProjectId, expectedVersion = 1, reason = "Wrong Project" });
+        Assert.Equal(HttpStatusCode.NotFound, settleResponse.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Contains(dbContext.AuditLogEntries, entry =>
+            entry.EventType == "admin.payment.settle" &&
+            entry.Outcome == "denied" &&
+            entry.ProjectId == otherProjectId &&
+            entry.SubjectId == paymentId.ToString("D"));
+    }
+
+    [Fact]
+    public async Task Admin_can_create_list_and_transition_a_Project_with_audit_attribution()
+    {
+        await using var factory = new PaymentApiFactory();
+        var adminAccountId = await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecret: TotpSecret);
+        using var loginClient = factory.CreateClient();
+        var sessionCookie = await SignInAndGetSessionCookieAsync(loginClient);
+        var rawSessionToken = ExtractCookieValue(sessionCookie);
+        var csrf = await GetAdminCsrfAsync(factory, rawSessionToken);
+        using var sessionClient = CreateHttpsClient(factory);
+        sessionClient.DefaultRequestHeaders.Add(
+            "Cookie",
+            $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
+        sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
+
+        var createResponse = await sessionClient.PostAsJsonAsync(
+            "/api/admin/projects",
+            new { name = "Second Shop", slug = "second-shop" });
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var created = await createResponse.Content.ReadFromJsonAsync<AdminProjectResponse>();
+        Assert.NotNull(created);
+        Assert.Equal("active", created.Project.Status);
+        Assert.Equal(1, created.Project.Version);
+
+        var listResponse = await sessionClient.GetAsync("/api/admin/projects");
+        listResponse.EnsureSuccessStatusCode();
+        var projects = await listResponse.Content.ReadFromJsonAsync<AdminProjectsResponse>();
+        Assert.Contains(projects!.Projects, project => project.ProjectId == created.Project.ProjectId);
+
+        var disableResponse = await sessionClient.PostAsJsonAsync(
+            $"/api/admin/projects/{created.Project.ProjectId:D}/status",
+            new { expectedVersion = 1, status = "disabled" });
+        disableResponse.EnsureSuccessStatusCode();
+        var disabled = await disableResponse.Content.ReadFromJsonAsync<AdminProjectResponse>();
+        Assert.Equal("disabled", disabled!.Project.Status);
+        Assert.Equal(2, disabled.Project.Version);
+
+        var archiveResponse = await sessionClient.PostAsJsonAsync(
+            $"/api/admin/projects/{created.Project.ProjectId:D}/status",
+            new { expectedVersion = 2, status = "archived" });
+        archiveResponse.EnsureSuccessStatusCode();
+        var archived = await archiveResponse.Content.ReadFromJsonAsync<AdminProjectResponse>();
+        Assert.Equal("archived", archived!.Project.Status);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var auditEntries = dbContext.AuditLogEntries
+            .Where(entry => entry.ProjectId == created.Project.ProjectId)
+            .ToArray();
+        Assert.Equal(3, auditEntries.Length);
+        Assert.All(auditEntries, entry => Assert.Equal(adminAccountId.ToString("D"), entry.ActorId));
     }
 
     [Fact]
@@ -526,7 +640,8 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={ExtractCookieValue(sessionCookie)}");
 
-        var response = await sessionClient.GetAsync($"/api/admin/payments/{Guid.NewGuid()}");
+        var response = await sessionClient.GetAsync(
+            $"/api/admin/payments/{Guid.NewGuid()}?projectId={ProjectDefaults.DefaultProjectId:D}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -560,7 +675,8 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync($"/api/admin/payments/{paymentId}");
+        var response = await sessionClient.GetAsync(
+            $"/api/admin/payments/{paymentId}?projectId={ProjectDefaults.DefaultProjectId:D}");
 
         response.EnsureSuccessStatusCode();
         var payment = await response.Content.ReadFromJsonAsync<AdminPaymentDetailResponse>();
@@ -1080,7 +1196,9 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsync($"/api/admin/webhook-deliveries/{eventId}/resend", content: null);
+        var response = await sessionClient.PostAsync(
+            $"/api/admin/webhook-deliveries/{eventId}/resend?projectId={ProjectDefaults.DefaultProjectId:D}",
+            content: null);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -1117,7 +1235,9 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
-        var response = await sessionClient.PostAsync($"/api/admin/webhook-deliveries/{eventId}/resend", content: null);
+        var response = await sessionClient.PostAsync(
+            $"/api/admin/webhook-deliveries/{eventId}/resend?projectId={ProjectDefaults.DefaultProjectId:D}",
+            content: null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -1184,7 +1304,8 @@ public sealed class AdminAuthApiTests
         using var sessionClient = factory.CreateClient();
         sessionClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={rawSessionToken}");
 
-        var response = await sessionClient.GetAsync("/api/admin/webhook-deliveries?limit=10");
+        var response = await sessionClient.GetAsync(
+            $"/api/admin/webhook-deliveries?projectId={ProjectDefaults.DefaultProjectId:D}&limit=10");
 
         response.EnsureSuccessStatusCode();
         var webhookDeliveries = await response.Content.ReadFromJsonAsync<AdminWebhookDeliveriesResponse>();
@@ -1625,7 +1746,8 @@ public sealed class AdminAuthApiTests
                 audit.SubjectId == stored.Id.ToString("D"));
         }
 
-        var listResponse = await sessionClient.GetAsync("/api/admin/integration-api-credentials");
+        var listResponse = await sessionClient.GetAsync(
+            $"/api/admin/integration-api-credentials?projectId={projectId:D}");
         listResponse.EnsureSuccessStatusCode();
         var listBody = await listResponse.Content.ReadAsStringAsync();
         Assert.DoesNotContain(created.Token, listBody, StringComparison.Ordinal);
@@ -1715,7 +1837,7 @@ public sealed class AdminAuthApiTests
 
         var rotateResponse = await sessionClient.PostAsJsonAsync(
             $"/api/admin/integration-api-credentials/{credentialId:D}/rotate",
-            new { expectedVersion = 1 });
+            new { projectId = ProjectDefaults.DefaultProjectId, expectedVersion = 1 });
 
         rotateResponse.EnsureSuccessStatusCode();
         var rotated = await rotateResponse.Content
@@ -1779,7 +1901,7 @@ public sealed class AdminAuthApiTests
 
         var conflictResponse = await sessionClient.PostAsJsonAsync(
             $"/api/admin/integration-api-credentials/{credentialId:D}/disable",
-            new { expectedVersion = 7 });
+            new { projectId = ProjectDefaults.DefaultProjectId, expectedVersion = 7 });
 
         Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
         var conflictBody = await conflictResponse.Content.ReadAsStringAsync();
@@ -1788,7 +1910,7 @@ public sealed class AdminAuthApiTests
 
         var disableResponse = await sessionClient.PostAsJsonAsync(
             $"/api/admin/integration-api-credentials/{credentialId:D}/disable",
-            new { expectedVersion = 1 });
+            new { projectId = ProjectDefaults.DefaultProjectId, expectedVersion = 1 });
 
         disableResponse.EnsureSuccessStatusCode();
         var disabled = await disableResponse.Content
@@ -1844,6 +1966,7 @@ public sealed class AdminAuthApiTests
             "/api/admin/webhook-endpoints",
             new
             {
+                projectId,
                 integrationApiCredentialId = credentialId,
                 url = "https://partner.example.test/payaffe",
                 secretReference = firstSecretReference,
@@ -1865,6 +1988,7 @@ public sealed class AdminAuthApiTests
             $"/api/admin/webhook-endpoints/{created.Endpoint.Id:D}/update",
             new
             {
+                projectId,
                 expectedVersion = 1,
                 url = "https://partner.example.test/hooks/payments",
                 eventTypes = Array.Empty<string>(),
@@ -1879,6 +2003,7 @@ public sealed class AdminAuthApiTests
             $"/api/admin/webhook-endpoints/{created.Endpoint.Id:D}/rotate-secret",
             new
             {
+                projectId,
                 expectedVersion = 2,
                 secretReference = secondSecretReference,
             });
@@ -1892,14 +2017,14 @@ public sealed class AdminAuthApiTests
             StringComparison.Ordinal);
 
         var listResponse = await sessionClient.GetAsync(
-            $"/api/admin/webhook-endpoints?integrationApiCredentialId={credentialId:D}");
+            $"/api/admin/webhook-endpoints?projectId={projectId:D}&integrationApiCredentialId={credentialId:D}");
         listResponse.EnsureSuccessStatusCode();
         var listed = await listResponse.Content.ReadFromJsonAsync<AdminWebhookEndpointsResponse>();
         Assert.Equal(created.Endpoint.Id, Assert.Single(listed!.Endpoints).Id);
 
         var disableResponse = await sessionClient.PostAsJsonAsync(
             $"/api/admin/webhook-endpoints/{created.Endpoint.Id:D}/disable",
-            new { expectedVersion = 3 });
+            new { projectId, expectedVersion = 3 });
         disableResponse.EnsureSuccessStatusCode();
         var disabled = await disableResponse.Content.ReadFromJsonAsync<AdminWebhookEndpointResponse>();
         Assert.Equal("disabled", disabled!.Endpoint.Status);
@@ -1953,6 +2078,7 @@ public sealed class AdminAuthApiTests
             "/api/admin/webhook-endpoints",
             new
             {
+                projectId = ProjectDefaults.DefaultProjectId,
                 integrationApiCredentialId = credentialId,
                 url = "https://partner.example.test/hooks",
                 secretReference = "configuration:Webhooks:EndpointSecrets:missing",
@@ -1968,6 +2094,7 @@ public sealed class AdminAuthApiTests
             "/api/admin/webhook-endpoints",
             new
             {
+                projectId = ProjectDefaults.DefaultProjectId,
                 integrationApiCredentialId = credentialId,
                 url = "https://partner.example.test/hooks",
                 secretReference = "configuration:Webhooks:EndpointSecrets:configured",
@@ -2037,7 +2164,11 @@ public sealed class AdminAuthApiTests
 
         var importResponse = await sessionClient.PostAsJsonAsync(
             "/api/admin/native-eth-address-pool/import",
-            new { addresses = new[] { firstAddress.ToUpperInvariant(), secondAddress } });
+            new
+            {
+                projectId = ProjectDefaults.DefaultProjectId,
+                addresses = new[] { firstAddress.ToUpperInvariant(), secondAddress },
+            });
 
         Assert.Equal(HttpStatusCode.Created, importResponse.StatusCode);
         var imported = await importResponse.Content
@@ -2049,14 +2180,15 @@ public sealed class AdminAuthApiTests
 
         var duplicateResponse = await sessionClient.PostAsJsonAsync(
             "/api/admin/native-eth-address-pool/import",
-            new { addresses = new[] { firstAddress } });
+            new { projectId = ProjectDefaults.DefaultProjectId, addresses = new[] { firstAddress } });
         Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
         Assert.Contains(
             "native_eth_address_pool.duplicate",
             await duplicateResponse.Content.ReadAsStringAsync(),
             StringComparison.Ordinal);
 
-        var summaryResponse = await sessionClient.GetAsync("/api/admin/native-eth-address-pool");
+        var summaryResponse = await sessionClient.GetAsync(
+            $"/api/admin/native-eth-address-pool?projectId={ProjectDefaults.DefaultProjectId:D}");
         summaryResponse.EnsureSuccessStatusCode();
         var summary = await summaryResponse.Content
             .ReadFromJsonAsync<AdminNativeEthAddressPoolSummaryResponse>();
@@ -2148,7 +2280,12 @@ public sealed class AdminAuthApiTests
 
         var response = await sessionClient.PostAsJsonAsync(
             $"/api/admin/payments/{paymentId:D}/settle",
-            new { expectedVersion = 1, reason = "Late payment verified by operator." });
+            new
+            {
+                projectId = ProjectDefaults.DefaultProjectId,
+                expectedVersion = 1,
+                reason = "Late payment verified by operator.",
+            });
 
         response.EnsureSuccessStatusCode();
         var settled = await response.Content.ReadFromJsonAsync<AdminPaymentDetailResponse>();
@@ -2406,6 +2543,19 @@ public sealed class AdminAuthApiTests
         DateTimeOffset IdleExpiresAt);
 
     private sealed record AdminPaymentsResponse(IReadOnlyList<AdminPaymentSummaryResponse> Payments);
+
+    private sealed record AdminProjectsResponse(IReadOnlyList<AdminProjectResponseModel> Projects);
+
+    private sealed record AdminProjectResponse(AdminProjectResponseModel Project);
+
+    private sealed record AdminProjectResponseModel(
+        Guid ProjectId,
+        string Name,
+        string Slug,
+        string Status,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt,
+        long Version);
 
     private sealed record AdminAuditLogResponse(IReadOnlyList<AdminAuditLogEntryResponse> Entries);
 

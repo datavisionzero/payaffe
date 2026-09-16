@@ -13,4 +13,5 @@ public sealed record AdminAuditEntry(
     string CorrelationId,
     string ReasonCode,
     string SubjectType,
-    string SubjectId);
+    string SubjectId,
+    Guid? ProjectId = null);

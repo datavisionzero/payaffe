@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddSingleton<IIntegrationApiCredentialTokenService, IntegrationApiCredentialTokenService>();
         services.AddScoped<IAdminTotpSecretResolver, ConfigurationAdminTotpSecretResolver>();
         services.AddScoped<IAdminSecurityStore, EfAdminSecurityStore>();
+        services.AddScoped<IAdminProjectStore, EfAdminProjectStore>();
         services.AddScoped<IAdminPaymentStore, EfAdminPaymentStore>();
         services.AddScoped<IAdminAuditLogStore, EfAdminAuditLogStore>();
         services.AddScoped<IAdminWebhookDeliveryStore, EfAdminWebhookDeliveryStore>();

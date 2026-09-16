@@ -266,6 +266,8 @@
     "menu": "Menu",
     "skipToContent": "Skip to content",
     "signedInAs": "Signed in as",
+    "project": "Project",
+    "loadingProjects": "Loading projects",
     "checkingSession": "Checking session",
     "redirecting": "Taking you to sign-in.",
     "needsAttention": "needs attention",

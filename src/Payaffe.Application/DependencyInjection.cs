@@ -23,6 +23,8 @@ public static class DependencyInjection
         services.TryAddScoped<IAdminTotpSecretResolver, UnavailableAdminTotpSecretResolver>();
         services.AddScoped<PaymentApplicationService>();
         services.AddScoped<AdminAuthenticationService>();
+        services.AddScoped<AdminProjectService>();
+        services.AddOptions<AdminProjectDefaultsOptions>();
         services.AddScoped<AdminPaymentQueryService>();
         services.AddScoped<AdminAuditLogQueryService>();
         services.AddScoped<AdminWebhookDeliveryQueryService>();

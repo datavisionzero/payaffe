@@ -5,9 +5,11 @@ import {
   getAdminObservationHealth,
   getAdminPayment,
   getAdminSession,
+  getSelectedAdminProjectId,
   listAdminAuditLog,
   listAdminIntegrationApiCredentials,
   listAdminPayments,
+  listAdminProjects,
   listAdminReorgAlerts,
   listAdminWebhookDeliveries,
   listAdminWebhookEndpoints
@@ -18,35 +20,44 @@ import {
 // what keeps that from doubling every request.
 export const adminQueries = {
   session: () => ({ queryKey: ["admin-session"], queryFn: getAdminSession, retry: false }),
-  payments: () => ({ queryKey: ["admin-payments"], queryFn: listAdminPayments, retry: false }),
+  projects: () => ({ queryKey: ["admin-projects"], queryFn: listAdminProjects, retry: false }),
+  payments: () => ({
+    queryKey: ["admin-payments", getSelectedAdminProjectId()],
+    queryFn: listAdminPayments,
+    retry: false
+  }),
   payment: (paymentId: string) => ({
-    queryKey: ["admin-payment", paymentId],
+    queryKey: ["admin-payment", getSelectedAdminProjectId(), paymentId],
     queryFn: () => getAdminPayment(paymentId),
     retry: false
   }),
-  auditLog: () => ({ queryKey: ["admin-audit-log"], queryFn: listAdminAuditLog, retry: false }),
+  auditLog: () => ({
+    queryKey: ["admin-audit-log", getSelectedAdminProjectId()],
+    queryFn: listAdminAuditLog,
+    retry: false
+  }),
   auditLogEntry: (eventId: string) => ({
-    queryKey: ["admin-audit-log-entry", eventId],
+    queryKey: ["admin-audit-log-entry", getSelectedAdminProjectId(), eventId],
     queryFn: () => getAdminAuditLogEntry(eventId),
     retry: false
   }),
   webhookDeliveries: () => ({
-    queryKey: ["admin-webhook-deliveries"],
+    queryKey: ["admin-webhook-deliveries", getSelectedAdminProjectId()],
     queryFn: listAdminWebhookDeliveries,
     retry: false
   }),
   webhookEndpoints: () => ({
-    queryKey: ["admin-webhook-endpoints"],
+    queryKey: ["admin-webhook-endpoints", getSelectedAdminProjectId()],
     queryFn: listAdminWebhookEndpoints,
     retry: false
   }),
   credentials: () => ({
-    queryKey: ["admin-integration-api-credentials"],
+    queryKey: ["admin-integration-api-credentials", getSelectedAdminProjectId()],
     queryFn: listAdminIntegrationApiCredentials,
     retry: false
   }),
   addressPool: () => ({
-    queryKey: ["admin-native-eth-address-pool"],
+    queryKey: ["admin-native-eth-address-pool", getSelectedAdminProjectId()],
     queryFn: getAdminNativeEthAddressPool,
     retry: false
   }),
@@ -57,7 +68,7 @@ export const adminQueries = {
     retry: false
   }),
   reorgAlerts: () => ({
-    queryKey: ["admin-reorg-alerts"],
+    queryKey: ["admin-reorg-alerts", getSelectedAdminProjectId()],
     queryFn: listAdminReorgAlerts,
     retry: false
   })

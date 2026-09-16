@@ -8,10 +8,12 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
     : IAdminWebhookEndpointStore
 {
     public async Task<IReadOnlyList<AdminWebhookEndpointReadModel>> ListAsync(
+        Guid projectId,
         Guid? integrationApiCredentialId,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.WebhookEndpoints.AsNoTracking();
+        var query = dbContext.WebhookEndpoints.AsNoTracking()
+            .Where(endpoint => endpoint.ProjectId == projectId);
         if (integrationApiCredentialId is not null)
         {
             query = query.Where(endpoint =>
@@ -26,25 +28,27 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
     }
 
     public async Task<AdminWebhookEndpointStoreResult> CreateAsync(
+        Guid projectId,
         AdminWebhookEndpointDraft endpoint,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var projectId = await dbContext.IntegrationApiCredentials
+        var credentialProjectId = await dbContext.IntegrationApiCredentials
             .Where(
                 credential =>
+                    credential.ProjectId == projectId &&
                     credential.Id == endpoint.IntegrationApiCredentialId &&
                     credential.Status == "active")
             .Select(credential => (Guid?)credential.ProjectId)
             .SingleOrDefaultAsync(cancellationToken);
-        if (projectId is null)
+        if (credentialProjectId is null)
         {
             return AdminWebhookEndpointStoreResult.ParentCredentialUnavailable();
         }
 
         var record = new WebhookEndpointRecord
         {
-            ProjectId = projectId.Value,
+            ProjectId = credentialProjectId.Value,
             Id = endpoint.Id,
             IntegrationApiCredentialId = endpoint.IntegrationApiCredentialId,
             Url = endpoint.Url,
@@ -55,12 +59,13 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
             UpdatedAt = endpoint.CreatedAt,
         };
         dbContext.WebhookEndpoints.Add(record);
-        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, projectId.Value));
+        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, credentialProjectId.Value));
         await dbContext.SaveChangesAsync(cancellationToken);
         return AdminWebhookEndpointStoreResult.Updated(ToReadModel(record));
     }
 
     public async Task<AdminWebhookEndpointStoreResult> UpdateAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         AdminWebhookEndpointUpdate update,
@@ -68,7 +73,7 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var endpoint = await FindMutableAsync(endpointId, expectedVersion, cancellationToken);
+        var endpoint = await FindMutableAsync(projectId, endpointId, expectedVersion, cancellationToken);
         if (endpoint.Result is not null)
         {
             return endpoint.Result;
@@ -83,6 +88,7 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
     }
 
     public async Task<AdminWebhookEndpointStoreResult> RotateSecretAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         string secretReference,
@@ -90,7 +96,7 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var endpoint = await FindMutableAsync(endpointId, expectedVersion, cancellationToken);
+        var endpoint = await FindMutableAsync(projectId, endpointId, expectedVersion, cancellationToken);
         if (endpoint.Result is not null)
         {
             return endpoint.Result;
@@ -104,13 +110,14 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
     }
 
     public async Task<AdminWebhookEndpointStoreResult> DisableAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         DateTimeOffset occurredAt,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var endpoint = await FindMutableAsync(endpointId, expectedVersion, cancellationToken);
+        var endpoint = await FindMutableAsync(projectId, endpointId, expectedVersion, cancellationToken);
         if (endpoint.Result is not null)
         {
             return endpoint.Result;
@@ -124,12 +131,15 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
     }
 
     private async Task<(WebhookEndpointRecord? Record, AdminWebhookEndpointStoreResult? Result)> FindMutableAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         CancellationToken cancellationToken)
     {
         var endpoint = await dbContext.WebhookEndpoints
-            .SingleOrDefaultAsync(candidate => candidate.Id == endpointId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == projectId && candidate.Id == endpointId,
+                cancellationToken);
         if (endpoint is null)
         {
             return (null, AdminWebhookEndpointStoreResult.NotFound());

@@ -7,6 +7,7 @@ import {
   adminServer,
   paymentDetail,
   paymentId,
+  projectId,
   renderAdmin,
   resetAdminState,
   state
@@ -145,7 +146,11 @@ describe("AdminPaymentDetailPage", () => {
     await vi.waitFor(() => {
       expect(state.settlementRequest).toEqual({
         csrf: "csrf-token",
-        body: { expectedVersion: 3, reason: "Confirmed with the partner." }
+        body: {
+          projectId,
+          expectedVersion: 3,
+          reason: "Confirmed with the partner."
+        }
       });
     });
   });

@@ -8,15 +8,18 @@ namespace Payaffe.Infrastructure.Persistence;
 public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaymentStore
 {
     public async Task<IReadOnlyList<AdminPaymentSummaryReadModel>> ListRecentPaymentsAsync(
+        Guid projectId,
         int limit,
         CancellationToken cancellationToken)
     {
         return await dbContext.Payments
             .AsNoTracking()
+            .Where(payment => payment.ProjectId == projectId)
             .OrderByDescending(payment => payment.CreatedAt)
             .ThenBy(payment => payment.Id)
             .Take(limit)
             .Select(payment => new AdminPaymentSummaryReadModel(
+                payment.ProjectId,
                 payment.Id,
                 payment.ExternalReference,
                 payment.FiatCurrency,
@@ -33,12 +36,15 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
     }
 
     public async Task<AdminPaymentDetailReadModel?> FindPaymentAsync(
+        Guid projectId,
         Guid paymentId,
         CancellationToken cancellationToken)
     {
         var payment = await dbContext.Payments
             .AsNoTracking()
-            .SingleOrDefaultAsync(candidate => candidate.Id == paymentId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == projectId && candidate.Id == paymentId,
+                cancellationToken);
         if (payment is null)
         {
             return null;
@@ -48,6 +54,7 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
     }
 
     public async Task<AdminPaymentSettlementResult> SettleAsync(
+        Guid projectId,
         Guid paymentId,
         long expectedVersion,
         string reason,
@@ -59,7 +66,7 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
             : null;
         var payment = await dbContext.Payments.SingleOrDefaultAsync(
-            candidate => candidate.Id == paymentId,
+            candidate => candidate.ProjectId == projectId && candidate.Id == paymentId,
             cancellationToken);
         if (payment is null)
         {
@@ -73,7 +80,10 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
         }
 
         var hasObservation = await dbContext.MatchingBlockchainTransactions
-            .AnyAsync(transaction => transaction.PaymentId == paymentId, cancellationToken);
+            .AnyAsync(
+                blockchainTransaction => blockchainTransaction.ProjectId == projectId &&
+                                         blockchainTransaction.PaymentId == paymentId,
+                cancellationToken);
         if (payment.Status is not ("observed" or "expired") || !hasObservation)
         {
             return AdminPaymentSettlementResult.NotSettleable(
@@ -86,6 +96,7 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
         payment.Version++;
         dbContext.PaymentEventHistory.Add(new PaymentEventHistoryRecord
         {
+            ProjectId = projectId,
             Id = Guid.NewGuid(),
             PaymentId = payment.Id,
             EventType = "payment.settled",
@@ -94,6 +105,7 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
         });
         dbContext.WebhookOutboxEvents.Add(new WebhookOutboxEventRecord
         {
+            ProjectId = projectId,
             Id = Guid.NewGuid(),
             PaymentId = payment.Id,
             IntegrationApiCredentialId = payment.IntegrationApiCredentialId,
@@ -111,6 +123,7 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
         });
         dbContext.AuditLogEntries.Add(new AuditLogEntryRecord
         {
+            ProjectId = projectId,
             EventId = auditEntry.EventId,
             OccurredAt = auditEntry.OccurredAt,
             EventType = auditEntry.EventType,
@@ -136,15 +149,18 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
     }
 
     public async Task<IReadOnlyList<AdminReorgAlertReadModel>> ListReorgAlertsAsync(
+        Guid projectId,
         int limit,
         CancellationToken cancellationToken)
     {
         return await dbContext.ReorgAlerts
             .AsNoTracking()
+            .Where(alert => alert.ProjectId == projectId)
             .OrderByDescending(alert => alert.CreatedAt)
             .ThenBy(alert => alert.Id)
             .Take(limit)
             .Select(alert => new AdminReorgAlertReadModel(
+                alert.ProjectId,
                 alert.Id,
                 alert.PaymentId,
                 alert.SupportedCurrency,
@@ -166,8 +182,9 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
         Records.PaymentRecord payment,
         CancellationToken cancellationToken)
     {
-        var observedTotal = await CalculateObservedTotalAsync(payment.Id, cancellationToken);
+        var observedTotal = await CalculateObservedTotalAsync(payment.ProjectId, payment.Id, cancellationToken);
         return new AdminPaymentDetailReadModel(
+            payment.ProjectId,
             payment.Id,
             payment.ExternalReference,
             payment.FiatCurrency,
@@ -189,12 +206,13 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
     }
 
     private async Task<string?> CalculateObservedTotalAsync(
+        Guid projectId,
         Guid paymentId,
         CancellationToken cancellationToken)
     {
         var observedAmounts = await dbContext.MatchingBlockchainTransactions
             .AsNoTracking()
-            .Where(transaction => transaction.PaymentId == paymentId)
+            .Where(transaction => transaction.ProjectId == projectId && transaction.PaymentId == paymentId)
             .Select(transaction => transaction.ObservedAmount)
             .ToListAsync(cancellationToken);
         if (observedAmounts.Count == 0)

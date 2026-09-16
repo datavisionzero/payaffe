@@ -8,6 +8,7 @@ public sealed class AdminPaymentQueryService(IAdminPaymentStore store, IClock cl
     private const int MaxLimit = 100;
 
     public async Task<IReadOnlyList<AdminPaymentSummaryReadModel>> ListRecentPaymentsAsync(
+        Guid projectId,
         int? requestedLimit,
         CancellationToken cancellationToken)
     {
@@ -15,22 +16,26 @@ public sealed class AdminPaymentQueryService(IAdminPaymentStore store, IClock cl
             ? DefaultLimit
             : Math.Min(requestedLimit.Value, MaxLimit);
 
-        return await store.ListRecentPaymentsAsync(limit, cancellationToken);
+        return projectId == Guid.Empty
+            ? []
+            : await store.ListRecentPaymentsAsync(projectId, limit, cancellationToken);
     }
 
     public async Task<AdminPaymentDetailReadModel?> FindPaymentAsync(
+        Guid projectId,
         Guid paymentId,
         CancellationToken cancellationToken)
     {
-        if (paymentId == Guid.Empty)
+        if (projectId == Guid.Empty || paymentId == Guid.Empty)
         {
             return null;
         }
 
-        return await store.FindPaymentAsync(paymentId, cancellationToken);
+        return await store.FindPaymentAsync(projectId, paymentId, cancellationToken);
     }
 
     public Task<AdminPaymentSettlementResult> SettleAsync(
+        Guid projectId,
         Guid paymentId,
         long expectedVersion,
         string? reason,
@@ -38,7 +43,7 @@ public sealed class AdminPaymentQueryService(IAdminPaymentStore store, IClock cl
         CancellationToken cancellationToken)
     {
         var normalizedReason = reason?.Trim();
-        if (paymentId == Guid.Empty ||
+        if (projectId == Guid.Empty || paymentId == Guid.Empty ||
             expectedVersion <= 0 ||
             string.IsNullOrWhiteSpace(normalizedReason) ||
             normalizedReason.Length > 500)
@@ -48,6 +53,7 @@ public sealed class AdminPaymentQueryService(IAdminPaymentStore store, IClock cl
 
         var settledAt = clock.UtcNow;
         return store.SettleAsync(
+            projectId,
             paymentId,
             expectedVersion,
             normalizedReason,
@@ -70,12 +76,15 @@ public sealed class AdminPaymentQueryService(IAdminPaymentStore store, IClock cl
     }
 
     public Task<IReadOnlyList<AdminReorgAlertReadModel>> ListReorgAlertsAsync(
+        Guid projectId,
         int? requestedLimit,
         CancellationToken cancellationToken)
     {
         var limit = requestedLimit is null or <= 0
             ? DefaultLimit
             : Math.Min(requestedLimit.Value, MaxLimit);
-        return store.ListReorgAlertsAsync(limit, cancellationToken);
+        return projectId == Guid.Empty
+            ? Task.FromResult<IReadOnlyList<AdminReorgAlertReadModel>>([])
+            : store.ListReorgAlertsAsync(projectId, limit, cancellationToken);
     }
 }

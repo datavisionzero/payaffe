@@ -6,6 +6,7 @@ import { setupServer } from "msw/node";
 import { NextIntlClientProvider } from "next-intl";
 import type React from "react";
 import messages from "../messages/en.json";
+import { defaultAdminProjectId, setSelectedAdminProjectId } from "../lib/admin-api";
 
 export const session = {
   status: "authenticated",
@@ -21,6 +22,7 @@ export const paymentId = "03a26b78-c1f3-4230-99d7-9852cedcc181";
 export const auditEventId = "02ba688c-2a8d-4a20-b783-41a0c2e6a6fa";
 export const webhookEventId = "4c5b4f2a-df57-4804-8a6f-dce55b2e680a";
 export const credentialId = "8a42f394-d565-40ae-8ce4-7df12d9e0323";
+export const projectId = defaultAdminProjectId;
 
 export const payments = {
   payments: [
@@ -118,7 +120,7 @@ export const state = {
   csrf: {} as Record<string, string | null>,
   mfaRequestBody: null as { challengeId?: string; totpCode?: string; recoveryCode?: string } | null,
   settlementRequest: null as
-    | { csrf: string | null; body: { expectedVersion?: number; reason?: string } }
+    | { csrf: string | null; body: { projectId?: string; expectedVersion?: number; reason?: string } }
     | null,
   webhookResendEventId: null as string | null,
   addressPool: {
@@ -142,6 +144,8 @@ export const state = {
 };
 
 export function resetAdminState() {
+  setSelectedAdminProjectId(defaultAdminProjectId);
+  window.localStorage?.clear();
   state.authenticated = false;
   state.stepUpAuthenticatedAt = session.stepUpAuthenticatedAt;
   state.csrf = {};
@@ -183,6 +187,21 @@ function capture(name: string, request: Request) {
 }
 
 export const adminServer = setupServer(
+  http.get("/api/admin/projects", () =>
+    guarded({
+      projects: [
+        {
+          projectId,
+          name: "Default Project",
+          slug: "default",
+          status: "active",
+          createdAt: "2026-07-05T10:00:00Z",
+          updatedAt: "2026-07-05T10:00:00Z",
+          version: 1
+        }
+      ]
+    })
+  ),
   http.get("/api/admin/session", () =>
     guarded({ ...session, stepUpAuthenticatedAt: state.stepUpAuthenticatedAt })
   ),

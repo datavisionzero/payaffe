@@ -116,6 +116,7 @@ builder.Services.AddOptions<RateCacheRefreshWorkerOptions>()
 builder.Services.AddOptions<PaymentAddressOptions>()
     .Bind(builder.Configuration.GetSection("PaymentAddresses"))
     .ValidateOnStart();
+builder.Services.Configure<AdminProjectDefaultsOptions>(builder.Configuration.GetSection("PaymentAddresses"));
 builder.Services.AddOptions<BlockchainObservationOptions>()
     .Bind(builder.Configuration.GetSection("BlockchainObservation"))
     .ValidateOnStart();
@@ -369,6 +370,33 @@ payerApi.MapPost("/payments/{payerPageId}/currency-selection", SelectPayerPaymen
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json");
 
 var adminApi = app.MapGroup("/api/admin");
+
+adminApi.MapGet("/projects", ListAdminProjectsAsync)
+    .WithName("ListAdminProjects")
+    .WithTags("Admin")
+    .Produces<AdminProjectsHttpResponse>(StatusCodes.Status200OK)
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json");
+
+adminApi.MapPost("/projects", CreateAdminProjectAsync)
+    .WithName("CreateAdminProject")
+    .RequireRateLimiting("AdminAuthentication")
+    .WithTags("Admin")
+    .Produces<AdminProjectHttpResponse>(StatusCodes.Status201Created)
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status400BadRequest, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status403Forbidden, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json");
+
+adminApi.MapPost("/projects/{projectId:guid}/status", ChangeAdminProjectStatusAsync)
+    .WithName("ChangeAdminProjectStatus")
+    .RequireRateLimiting("AdminAuthentication")
+    .WithTags("Admin")
+    .Produces<AdminProjectHttpResponse>(StatusCodes.Status200OK)
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status400BadRequest, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status403Forbidden, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json");
 
 adminApi.MapGet("/csrf", GetAdminCsrfAsync)
     .WithName("GetAdminCsrf")
@@ -904,8 +932,106 @@ static async Task<IResult> GetAdminSessionAsync(
     };
 }
 
+static async Task<IResult> ListAdminProjectsAsync(
+    HttpContext httpContext,
+    AdminAuthenticationService adminAuthentication,
+    AdminProjectService projects,
+    CancellationToken cancellationToken)
+{
+    var admin = await AuthenticateAdminSessionAsync(httpContext, adminAuthentication, cancellationToken);
+    if (admin.Result is not null)
+    {
+        return admin.Result;
+    }
+
+    return Results.Ok(new AdminProjectsHttpResponse(await projects.ListAsync(cancellationToken)));
+}
+
+static async Task<IResult> CreateAdminProjectAsync(
+    HttpContext httpContext,
+    AdminProjectCreateHttpRequest? request,
+    AdminAuthenticationService adminAuthentication,
+    AdminProjectService projects,
+    IAntiforgery antiforgery,
+    IClock clock,
+    IOptions<AdminAuthenticationOptions> adminOptions,
+    CancellationToken cancellationToken)
+{
+    var admin = await AuthorizeSensitiveAdminMutationAsync(
+        httpContext, adminAuthentication, antiforgery, clock, adminOptions.Value,
+        "admin.project.create", "project", "new", cancellationToken);
+    if (admin.Result is not null)
+    {
+        return admin.Result;
+    }
+
+    var result = await projects.CreateAsync(
+        request?.Name,
+        request?.Slug,
+        CreateAdminOperationContext(httpContext, admin.Principal!),
+        cancellationToken);
+    return result.Kind switch
+    {
+        AdminProjectResultKind.Updated => Results.Created(
+            $"/api/admin/projects/{result.Project!.ProjectId:D}",
+            new AdminProjectHttpResponse(result.Project)),
+        AdminProjectResultKind.InvalidInput => IntegrationApiProblem.Validation(
+            httpContext,
+            new Dictionary<string, string[]> { ["project"] = ["project.invalid"] }),
+        AdminProjectResultKind.SlugConflict => IntegrationApiProblem.Create(
+            httpContext, StatusCodes.Status409Conflict, "Project slug already exists.", "project.slug_conflict"),
+        _ => throw new InvalidOperationException($"Unsupported project create result {result.Kind}."),
+    };
+}
+
+static async Task<IResult> ChangeAdminProjectStatusAsync(
+    HttpContext httpContext,
+    Guid projectId,
+    AdminProjectStatusHttpRequest? request,
+    AdminAuthenticationService adminAuthentication,
+    AdminProjectService projects,
+    IAntiforgery antiforgery,
+    IClock clock,
+    IOptions<AdminAuthenticationOptions> adminOptions,
+    CancellationToken cancellationToken)
+{
+    var admin = await AuthorizeSensitiveAdminMutationAsync(
+        httpContext, adminAuthentication, antiforgery, clock, adminOptions.Value,
+        "admin.project.change_status", "project", projectId.ToString("D"), cancellationToken,
+        projectId);
+    if (admin.Result is not null)
+    {
+        return admin.Result;
+    }
+
+    var result = await projects.ChangeStatusAsync(
+        projectId,
+        request?.ExpectedVersion ?? 0,
+        request?.Status,
+        CreateAdminOperationContext(httpContext, admin.Principal!),
+        cancellationToken);
+    return result.Kind switch
+    {
+        AdminProjectResultKind.Updated => Results.Ok(new AdminProjectHttpResponse(result.Project!)),
+        AdminProjectResultKind.InvalidInput => IntegrationApiProblem.Validation(
+            httpContext,
+            new Dictionary<string, string[]> { ["project"] = ["project.invalid"] }),
+        AdminProjectResultKind.NotFound => IntegrationApiProblem.Create(
+            httpContext, StatusCodes.Status404NotFound, "Project was not found.", "project.not_found"),
+        AdminProjectResultKind.InvalidTransition => IntegrationApiProblem.Create(
+            httpContext, StatusCodes.Status409Conflict, "Project status transition is invalid.", "project.status_transition_invalid"),
+        AdminProjectResultKind.HasActiveWork => IntegrationApiProblem.Create(
+            httpContext, StatusCodes.Status409Conflict, "Project still has active work.", "project.has_active_work"),
+        AdminProjectResultKind.ConcurrencyConflict => IntegrationApiProblem.Create(
+            httpContext, StatusCodes.Status409Conflict, "Project changed concurrently.", "project.concurrency_conflict",
+            new Dictionary<string, object?> { ["currentVersion"] = result.Project!.Version }),
+        _ => throw new InvalidOperationException($"Unsupported project status result {result.Kind}."),
+    };
+}
+
 static async Task<IResult> ListAdminIntegrationApiCredentialsAsync(
     HttpContext httpContext,
+    Guid? projectId,
     AdminAuthenticationService adminAuthentication,
     AdminIntegrationApiCredentialService credentials,
     CancellationToken cancellationToken)
@@ -916,7 +1042,12 @@ static async Task<IResult> ListAdminIntegrationApiCredentialsAsync(
         return admin.Result;
     }
 
-    var result = await credentials.ListAsync(cancellationToken);
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
+    var result = await credentials.ListAsync(projectId ?? Guid.Empty, cancellationToken);
     return Results.Ok(new AdminIntegrationApiCredentialsHttpResponse(result));
 }
 
@@ -939,14 +1070,20 @@ static async Task<IResult> CreateAdminIntegrationApiCredentialAsync(
         "admin.integration_api_credential.create",
         "integration_api_credential",
         "new",
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await credentials.CreateAsync(
-        request?.ProjectId ?? ProjectDefaults.DefaultProjectId,
+        request?.ProjectId ?? Guid.Empty,
         request?.Name,
         CreateAdminOperationContext(httpContext, admin.Principal!),
         cancellationToken);
@@ -995,13 +1132,20 @@ static async Task<IResult> RotateAdminIntegrationApiCredentialAsync(
         "admin.integration_api_credential.rotate",
         "integration_api_credential",
         credentialId.ToString("D"),
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await credentials.RotateAsync(
+        request?.ProjectId ?? Guid.Empty,
         credentialId,
         request?.ExpectedVersion ?? 0,
         CreateAdminOperationContext(httpContext, admin.Principal!),
@@ -1029,13 +1173,20 @@ static async Task<IResult> DisableAdminIntegrationApiCredentialAsync(
         "admin.integration_api_credential.disable",
         "integration_api_credential",
         credentialId.ToString("D"),
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await credentials.DisableAsync(
+        request?.ProjectId ?? Guid.Empty,
         credentialId,
         request?.ExpectedVersion ?? 0,
         CreateAdminOperationContext(httpContext, admin.Principal!),
@@ -1045,6 +1196,7 @@ static async Task<IResult> DisableAdminIntegrationApiCredentialAsync(
 
 static async Task<IResult> ListAdminWebhookEndpointsAsync(
     HttpContext httpContext,
+    Guid? projectId,
     Guid? integrationApiCredentialId,
     AdminAuthenticationService adminAuthentication,
     AdminWebhookEndpointService endpoints,
@@ -1056,7 +1208,12 @@ static async Task<IResult> ListAdminWebhookEndpointsAsync(
         return admin.Result;
     }
 
-    var result = await endpoints.ListAsync(integrationApiCredentialId, cancellationToken);
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
+    var result = await endpoints.ListAsync(projectId ?? Guid.Empty, integrationApiCredentialId, cancellationToken);
     return Results.Ok(new AdminWebhookEndpointsHttpResponse(result));
 }
 
@@ -1079,13 +1236,20 @@ static async Task<IResult> CreateAdminWebhookEndpointAsync(
         "admin.webhook_endpoint.create",
         "webhook_endpoint",
         "new",
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await endpoints.CreateAsync(
+        request?.ProjectId ?? Guid.Empty,
         request?.IntegrationApiCredentialId ?? Guid.Empty,
         request?.Url,
         request?.SecretReference,
@@ -1119,13 +1283,20 @@ static async Task<IResult> UpdateAdminWebhookEndpointAsync(
         "admin.webhook_endpoint.update",
         "webhook_endpoint",
         endpointId.ToString("D"),
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await endpoints.UpdateAsync(
+        request?.ProjectId ?? Guid.Empty,
         endpointId,
         request?.ExpectedVersion ?? 0,
         request?.Url,
@@ -1157,13 +1328,20 @@ static async Task<IResult> RotateAdminWebhookEndpointSecretAsync(
         "admin.webhook_endpoint.rotate_secret",
         "webhook_endpoint",
         endpointId.ToString("D"),
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await endpoints.RotateSecretAsync(
+        request?.ProjectId ?? Guid.Empty,
         endpointId,
         request?.ExpectedVersion ?? 0,
         request?.SecretReference,
@@ -1194,13 +1372,20 @@ static async Task<IResult> DisableAdminWebhookEndpointAsync(
         "admin.webhook_endpoint.disable",
         "webhook_endpoint",
         endpointId.ToString("D"),
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await endpoints.DisableAsync(
+        request?.ProjectId ?? Guid.Empty,
         endpointId,
         request?.ExpectedVersion ?? 0,
         CreateAdminOperationContext(httpContext, admin.Principal!),
@@ -1212,6 +1397,7 @@ static async Task<IResult> DisableAdminWebhookEndpointAsync(
 
 static async Task<IResult> GetAdminNativeEthAddressPoolAsync(
     HttpContext httpContext,
+    Guid? projectId,
     AdminAuthenticationService adminAuthentication,
     AdminNativeEthAddressPoolService addressPool,
     IOptions<PaymentAddressOptions> addressOptions,
@@ -1226,7 +1412,13 @@ static async Task<IResult> GetAdminNativeEthAddressPoolAsync(
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var summary = await addressPool.GetSummaryAsync(
+        projectId ?? Guid.Empty,
         addressOptions.Value.NativeEthLowCapacityThreshold,
         cancellationToken);
     return Results.Ok(summary);
@@ -1252,13 +1444,20 @@ static async Task<IResult> ImportAdminNativeEthAddressPoolAsync(
         "admin.native_eth_address_pool.import",
         "address_pool_import",
         "new",
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await addressPool.ImportAsync(
+        request?.ProjectId ?? Guid.Empty,
         request?.Addresses,
         addressOptions.Value.NativeEthLowCapacityThreshold,
         CreateAdminOperationContext(httpContext, admin.Principal!),
@@ -1283,6 +1482,12 @@ static async Task<IResult> ImportAdminNativeEthAddressPoolAsync(
                 StatusCodes.Status409Conflict,
                 "Native ETH Address Pool import contains an existing address.",
                 "native_eth_address_pool.duplicate"),
+        AdminNativeEthAddressPoolImportResultKind.ProjectUnavailable =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Project is not accepting Address Pool configuration.",
+                "project.not_active"),
         _ => throw new InvalidOperationException(
             $"Unsupported native ETH Address Pool import result {result.Kind}."),
     };
@@ -1290,6 +1495,7 @@ static async Task<IResult> ImportAdminNativeEthAddressPoolAsync(
 
 static async Task<IResult> ListAdminPaymentsAsync(
     HttpContext httpContext,
+    Guid? projectId,
     int? limit,
     AdminAuthenticationService adminAuthentication,
     AdminPaymentQueryService adminPayments,
@@ -1301,12 +1507,18 @@ static async Task<IResult> ListAdminPaymentsAsync(
         return admin.Result;
     }
 
-    var payments = await adminPayments.ListRecentPaymentsAsync(limit, cancellationToken);
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
+    var payments = await adminPayments.ListRecentPaymentsAsync(projectId ?? Guid.Empty, limit, cancellationToken);
     return Results.Ok(new AdminPaymentsHttpResponse(payments));
 }
 
 static async Task<IResult> GetAdminPaymentAsync(
     HttpContext httpContext,
+    Guid? projectId,
     Guid paymentId,
     AdminAuthenticationService adminAuthentication,
     AdminPaymentQueryService adminPayments,
@@ -1318,7 +1530,12 @@ static async Task<IResult> GetAdminPaymentAsync(
         return admin.Result;
     }
 
-    var payment = await adminPayments.FindPaymentAsync(paymentId, cancellationToken);
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
+    var payment = await adminPayments.FindPaymentAsync(projectId ?? Guid.Empty, paymentId, cancellationToken);
     return payment is null
         ? IntegrationApiProblem.Create(
             httpContext,
@@ -1348,18 +1565,48 @@ static async Task<IResult> SettleAdminPaymentAsync(
         "admin.payment.settle",
         "payment",
         paymentId.ToString("D"),
-        cancellationToken);
+        cancellationToken,
+        request?.ProjectId);
     if (admin.Result is not null)
     {
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, request?.ProjectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var result = await adminPayments.SettleAsync(
+        request?.ProjectId ?? Guid.Empty,
         paymentId,
         request?.ExpectedVersion ?? 0,
         request?.Reason,
         CreateAdminOperationContext(httpContext, admin.Principal!),
         cancellationToken);
+    if (result.Kind != AdminPaymentSettlementResultKind.Settled)
+    {
+        var denialCode = result.Kind switch
+        {
+            AdminPaymentSettlementResultKind.NotFound => "payment.not_found",
+            AdminPaymentSettlementResultKind.NotSettleable => "payment.not_settleable",
+            AdminPaymentSettlementResultKind.ConcurrencyConflict => "concurrency.conflict",
+            AdminPaymentSettlementResultKind.InvalidInput => "payment_settlement.invalid",
+            _ => "unexpected_error",
+        };
+        await adminAuthentication.RecordSecurityAuditAsync(
+            CreateAdminAuditEntry(
+                httpContext,
+                admin.Principal!,
+                clock.UtcNow,
+                "admin.payment.settle",
+                "denied",
+                denialCode,
+                "payment",
+                paymentId.ToString("D"),
+                request!.ProjectId),
+            cancellationToken);
+    }
     return result.Kind switch
     {
         AdminPaymentSettlementResultKind.Settled => Results.Ok(result.Payment),
@@ -1390,6 +1637,7 @@ static async Task<IResult> SettleAdminPaymentAsync(
 
 static async Task<IResult> ListAdminReorgAlertsAsync(
     HttpContext httpContext,
+    Guid? projectId,
     int? limit,
     AdminAuthenticationService adminAuthentication,
     AdminPaymentQueryService adminPayments,
@@ -1404,8 +1652,13 @@ static async Task<IResult> ListAdminReorgAlertsAsync(
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     return Results.Ok(new AdminReorgAlertsHttpResponse(
-        await adminPayments.ListReorgAlertsAsync(limit, cancellationToken)));
+        await adminPayments.ListReorgAlertsAsync(projectId ?? Guid.Empty, limit, cancellationToken)));
 }
 
 static async Task<IResult> GetAdminObservationHealthAsync(
@@ -1446,6 +1699,7 @@ static async Task<IResult> GetAdminObservationHealthAsync(
 
 static async Task<IResult> ListAdminAuditLogAsync(
     HttpContext httpContext,
+    Guid? projectId,
     int? limit,
     AdminAuthenticationService adminAuthentication,
     AdminAuditLogQueryService auditLog,
@@ -1466,8 +1720,10 @@ static async Task<IResult> ListAdminAuditLogAsync(
         "success",
         "audit_log.listed",
         "audit_log",
-        "recent");
+        "recent",
+        projectId);
     var entries = await auditLog.ListRecentEntriesAndRecordAccessAsync(
+        projectId,
         limit,
         accessAuditEntry,
         cancellationToken);
@@ -1477,6 +1733,7 @@ static async Task<IResult> ListAdminAuditLogAsync(
 
 static async Task<IResult> GetAdminAuditLogEntryAsync(
     HttpContext httpContext,
+    Guid? projectId,
     Guid eventId,
     AdminAuthenticationService adminAuthentication,
     AdminAuditLogQueryService auditLog,
@@ -1502,7 +1759,8 @@ static async Task<IResult> GetAdminAuditLogEntryAsync(
                 "denied",
                 "admin_step_up.required",
                 "audit_log",
-                eventId.ToString("D")),
+                eventId.ToString("D"),
+                projectId),
             cancellationToken);
 
         return IntegrationApiProblem.Create(
@@ -1513,6 +1771,7 @@ static async Task<IResult> GetAdminAuditLogEntryAsync(
     }
 
     var detail = await auditLog.FindEntryAndRecordAccessAsync(
+        projectId,
         eventId,
         CreateAdminAuditEntry(
             httpContext,
@@ -1522,7 +1781,8 @@ static async Task<IResult> GetAdminAuditLogEntryAsync(
             "success",
             "audit_log.detail_accessed",
             "audit_log",
-            eventId.ToString("D")),
+            eventId.ToString("D"),
+            projectId),
         cancellationToken);
     if (detail is null)
     {
@@ -1535,7 +1795,8 @@ static async Task<IResult> GetAdminAuditLogEntryAsync(
                 "failure",
                 "audit_log.not_found",
                 "audit_log",
-                eventId.ToString("D")),
+                eventId.ToString("D"),
+                projectId),
             cancellationToken);
 
         return IntegrationApiProblem.Create(
@@ -1585,7 +1846,8 @@ static async Task<IResult> ExportAdminAuditLogAsync(
                 "denied",
                 "admin_step_up.required",
                 "audit_log",
-                "recent"),
+                "recent",
+                request?.ProjectId),
             cancellationToken);
 
         return IntegrationApiProblem.Create(
@@ -1596,6 +1858,7 @@ static async Task<IResult> ExportAdminAuditLogAsync(
     }
 
     var entries = await auditLog.ExportRecentEntriesAndRecordAccessAsync(
+        request?.ProjectId,
         request?.Limit,
         CreateAdminAuditEntry(
             httpContext,
@@ -1605,7 +1868,8 @@ static async Task<IResult> ExportAdminAuditLogAsync(
             "success",
             "audit_log.exported",
             "audit_log",
-            "recent"),
+            "recent",
+            request?.ProjectId),
         cancellationToken);
 
     return Results.Ok(new AdminAuditLogExportHttpResponse(exportedAt, entries));
@@ -1613,6 +1877,7 @@ static async Task<IResult> ExportAdminAuditLogAsync(
 
 static async Task<IResult> ListAdminWebhookDeliveriesAsync(
     HttpContext httpContext,
+    Guid? projectId,
     int? limit,
     AdminAuthenticationService adminAuthentication,
     AdminWebhookDeliveryQueryService webhookDeliveries,
@@ -1624,7 +1889,12 @@ static async Task<IResult> ListAdminWebhookDeliveriesAsync(
         return admin.Result;
     }
 
-    var deliveries = await webhookDeliveries.ListResendableDeliveriesAsync(limit, cancellationToken);
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
+    var deliveries = await webhookDeliveries.ListResendableDeliveriesAsync(projectId ?? Guid.Empty, limit, cancellationToken);
     return Results.Ok(new AdminWebhookDeliveriesHttpResponse(deliveries));
 }
 
@@ -1808,6 +2078,7 @@ static async Task<IResult> GenerateAdminRecoveryCodesAsync(
 
 static async Task<IResult> ResendAdminWebhookDeliveryAsync(
     HttpContext httpContext,
+    Guid? projectId,
     Guid eventId,
     AdminAuthenticationService adminAuthentication,
     WebhookDeliveryProcessor webhookDelivery,
@@ -1831,6 +2102,11 @@ static async Task<IResult> ResendAdminWebhookDeliveryAsync(
         return admin.Result;
     }
 
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
     var occurredAt = clock.UtcNow;
     if (!HasRecentStepUp(admin.Principal!, occurredAt, adminOptions.Value))
     {
@@ -1843,7 +2119,8 @@ static async Task<IResult> ResendAdminWebhookDeliveryAsync(
                 "denied",
                 "admin_step_up.required",
                 "webhook_delivery",
-                eventId.ToString("D")),
+                eventId.ToString("D"),
+                projectId),
             cancellationToken);
 
         return IntegrationApiProblem.Create(
@@ -1853,7 +2130,7 @@ static async Task<IResult> ResendAdminWebhookDeliveryAsync(
             "admin_step_up.required");
     }
 
-    var result = await webhookDelivery.ResendAsync(eventId, cancellationToken);
+    var result = await webhookDelivery.ResendAsync(projectId ?? Guid.Empty, eventId, cancellationToken);
     var auditOutcome = result.Kind == WebhookManualResendResultKind.Resent ? "success" : "denied";
     var reasonCode = result.Kind switch
     {
@@ -1871,7 +2148,8 @@ static async Task<IResult> ResendAdminWebhookDeliveryAsync(
             auditOutcome,
             reasonCode,
             "webhook_delivery",
-            eventId.ToString("D")),
+            eventId.ToString("D"),
+            projectId),
         cancellationToken);
 
     return result.Kind switch
@@ -1939,7 +2217,8 @@ static async Task<AdminAuthenticationEndpointResult> AuthorizeSensitiveAdminMuta
     string auditEventType,
     string subjectType,
     string subjectId,
-    CancellationToken cancellationToken)
+    CancellationToken cancellationToken,
+    Guid? projectId = null)
 {
     if (httpContext.Request.Cookies.ContainsKey(AdminSessionCookieName))
     {
@@ -1971,7 +2250,8 @@ static async Task<AdminAuthenticationEndpointResult> AuthorizeSensitiveAdminMuta
             "denied",
             "admin_step_up.required",
             subjectType,
-            subjectId),
+            subjectId,
+            projectId),
         cancellationToken);
 
     return new AdminAuthenticationEndpointResult(
@@ -2090,6 +2370,13 @@ static IResult MapWebhookEndpointFailure(
     };
 }
 
+static IResult? ValidateProjectContext(HttpContext httpContext, Guid? projectId) =>
+    projectId.GetValueOrDefault() == Guid.Empty
+        ? IntegrationApiProblem.Validation(
+            httpContext,
+            new Dictionary<string, string[]> { ["projectId"] = ["project_id.required"] })
+        : null;
+
 static async Task<IResult?> ValidateAdminCsrfAsync(
     HttpContext httpContext,
     IAntiforgery antiforgery)
@@ -2150,7 +2437,8 @@ static AdminAuditEntry CreateAdminAuditEntry(
     string outcome,
     string reasonCode,
     string subjectType,
-    string subjectId)
+    string subjectId,
+    Guid? projectId = null)
 {
     return new AdminAuditEntry(
         Guid.NewGuid(),
@@ -2165,7 +2453,8 @@ static AdminAuditEntry CreateAdminAuditEntry(
         httpContext.TraceIdentifier,
         reasonCode,
         subjectType,
-        subjectId);
+        subjectId,
+        projectId);
 }
 
 static async Task<AuthenticationEndpointResult> AuthenticateAsync(
@@ -2651,7 +2940,7 @@ public sealed record AdminStepUpHttpResponse(
     DateTimeOffset? StepUpAuthenticatedAt,
     DateTimeOffset IdleExpiresAt);
 
-public sealed record AdminAuditLogExportHttpRequest(int? Limit);
+public sealed record AdminAuditLogExportHttpRequest(Guid? ProjectId, int? Limit);
 
 public sealed record AdminAuditLogExportHttpResponse(
     DateTimeOffset ExportedAt,
@@ -2663,7 +2952,7 @@ public sealed record AdminRecoveryCodesHttpResponse(
 
 public sealed record AdminIntegrationApiCredentialCreateHttpRequest(Guid? ProjectId, string? Name);
 
-public sealed record AdminIntegrationApiCredentialMutationHttpRequest(long? ExpectedVersion);
+public sealed record AdminIntegrationApiCredentialMutationHttpRequest(Guid? ProjectId, long? ExpectedVersion);
 
 public sealed record AdminIntegrationApiCredentialsHttpResponse(
     IReadOnlyList<AdminIntegrationApiCredentialReadModel> Credentials);
@@ -2676,17 +2965,20 @@ public sealed record AdminIntegrationApiCredentialSecretHttpResponse(
     string Token);
 
 public sealed record AdminWebhookEndpointCreateHttpRequest(
+    Guid? ProjectId,
     Guid? IntegrationApiCredentialId,
     string? Url,
     string? SecretReference,
     IReadOnlyList<string>? EventTypes);
 
 public sealed record AdminWebhookEndpointUpdateHttpRequest(
+    Guid? ProjectId,
     long? ExpectedVersion,
     string? Url,
     IReadOnlyList<string>? EventTypes);
 
 public sealed record AdminWebhookEndpointSecretRotationHttpRequest(
+    Guid? ProjectId,
     long? ExpectedVersion,
     string? SecretReference);
 
@@ -2695,7 +2987,7 @@ public sealed record AdminWebhookEndpointsHttpResponse(
 
 public sealed record AdminWebhookEndpointHttpResponse(AdminWebhookEndpointReadModel Endpoint);
 
-public sealed record AdminNativeEthAddressPoolImportHttpRequest(IReadOnlyList<string>? Addresses);
+public sealed record AdminNativeEthAddressPoolImportHttpRequest(Guid? ProjectId, IReadOnlyList<string>? Addresses);
 
 public sealed record AdminNativeEthAddressPoolImportHttpResponse(
     Guid ImportId,
@@ -2721,7 +3013,15 @@ public sealed record AdminSessionHttpResponse(
 
 public sealed record AdminPaymentsHttpResponse(IReadOnlyList<AdminPaymentSummaryReadModel> Payments);
 
-public sealed record AdminPaymentSettlementHttpRequest(long? ExpectedVersion, string? Reason);
+public sealed record AdminPaymentSettlementHttpRequest(Guid? ProjectId, long? ExpectedVersion, string? Reason);
+
+public sealed record AdminProjectCreateHttpRequest(string? Name, string? Slug);
+
+public sealed record AdminProjectStatusHttpRequest(long? ExpectedVersion, string? Status);
+
+public sealed record AdminProjectsHttpResponse(IReadOnlyList<AdminProjectReadModel> Projects);
+
+public sealed record AdminProjectHttpResponse(AdminProjectReadModel Project);
 
 public sealed record AdminReorgAlertsHttpResponse(IReadOnlyList<AdminReorgAlertReadModel> Alerts);
 

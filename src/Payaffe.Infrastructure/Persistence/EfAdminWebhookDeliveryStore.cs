@@ -6,12 +6,14 @@ namespace Payaffe.Infrastructure.Persistence;
 public sealed class EfAdminWebhookDeliveryStore(PayaffeDbContext dbContext) : IAdminWebhookDeliveryStore
 {
     public async Task<IReadOnlyList<AdminWebhookDeliveryReadModel>> ListResendableDeliveriesAsync(
+        Guid projectId,
         int limit,
         CancellationToken cancellationToken)
     {
         var events = await dbContext.WebhookOutboxEvents
             .AsNoTracking()
-            .Where(webhookEvent => webhookEvent.Status == "retry_pending" || webhookEvent.Status == "terminal_failed")
+            .Where(webhookEvent => webhookEvent.ProjectId == projectId &&
+                                   (webhookEvent.Status == "retry_pending" || webhookEvent.Status == "terminal_failed"))
             .Join(
                 dbContext.Payments.AsNoTracking(),
                 webhookEvent => new { webhookEvent.ProjectId, Id = webhookEvent.PaymentId },

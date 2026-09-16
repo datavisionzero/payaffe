@@ -1,6 +1,7 @@
 namespace Payaffe.Application.Admin;
 
 public sealed record AdminAuditLogEntryDetailReadModel(
+    Guid? ProjectId,
     Guid EventId,
     DateTimeOffset OccurredAt,
     string EventType,

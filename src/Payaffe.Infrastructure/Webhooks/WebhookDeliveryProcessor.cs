@@ -117,11 +117,14 @@ public sealed class WebhookDeliveryProcessor(
     }
 
     public async Task<WebhookManualResendResult> ResendAsync(
+        Guid projectId,
         Guid webhookEventId,
         CancellationToken cancellationToken)
     {
         var webhookEvent = await dbContext.WebhookOutboxEvents
-            .SingleOrDefaultAsync(candidate => candidate.Id == webhookEventId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == projectId && candidate.Id == webhookEventId,
+                cancellationToken);
         if (webhookEvent is null)
         {
             return WebhookManualResendResult.NotFound();

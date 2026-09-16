@@ -7,16 +7,22 @@ namespace Payaffe.Infrastructure.Persistence;
 public sealed class EfAdminAuditLogStore(PayaffeDbContext dbContext) : IAdminAuditLogStore
 {
     public async Task<IReadOnlyList<AdminAuditLogEntryReadModel>> ListRecentEntriesAndRecordAccessAsync(
+        Guid? projectId,
         int limit,
         AdminAuditEntry accessAuditEntry,
         CancellationToken cancellationToken)
     {
-        var entries = await dbContext.AuditLogEntries
-            .AsNoTracking()
+        var query = dbContext.AuditLogEntries.AsNoTracking();
+        if (projectId is not null)
+        {
+            query = query.Where(entry => entry.ProjectId == projectId.Value);
+        }
+        var entries = await query
             .OrderByDescending(entry => entry.OccurredAt)
             .ThenByDescending(entry => entry.EventId)
             .Take(limit)
             .Select(entry => new AdminAuditLogEntryReadModel(
+                entry.ProjectId,
                 entry.EventId,
                 entry.OccurredAt,
                 entry.EventType,
@@ -35,14 +41,17 @@ public sealed class EfAdminAuditLogStore(PayaffeDbContext dbContext) : IAdminAud
     }
 
     public async Task<AdminAuditLogEntryDetailReadModel?> FindEntryAndRecordAccessAsync(
+        Guid? projectId,
         Guid eventId,
         AdminAuditEntry accessAuditEntry,
         CancellationToken cancellationToken)
     {
         var entry = await dbContext.AuditLogEntries
             .AsNoTracking()
-            .Where(candidate => candidate.EventId == eventId)
+            .Where(candidate => candidate.EventId == eventId &&
+                                (projectId == null || candidate.ProjectId == projectId.Value))
             .Select(candidate => new AdminAuditLogEntryDetailReadModel(
+                candidate.ProjectId,
                 candidate.EventId,
                 candidate.OccurredAt,
                 candidate.EventType,
@@ -68,16 +77,22 @@ public sealed class EfAdminAuditLogStore(PayaffeDbContext dbContext) : IAdminAud
     }
 
     public async Task<IReadOnlyList<AdminAuditLogEntryDetailReadModel>> ExportRecentEntriesAndRecordAccessAsync(
+        Guid? projectId,
         int limit,
         AdminAuditEntry accessAuditEntry,
         CancellationToken cancellationToken)
     {
-        var entries = await dbContext.AuditLogEntries
-            .AsNoTracking()
+        var query = dbContext.AuditLogEntries.AsNoTracking();
+        if (projectId is not null)
+        {
+            query = query.Where(entry => entry.ProjectId == projectId.Value);
+        }
+        var entries = await query
             .OrderByDescending(entry => entry.OccurredAt)
             .ThenByDescending(entry => entry.EventId)
             .Take(limit)
             .Select(entry => new AdminAuditLogEntryDetailReadModel(
+                entry.ProjectId,
                 entry.EventId,
                 entry.OccurredAt,
                 entry.EventType,
@@ -111,6 +126,7 @@ public sealed class EfAdminAuditLogStore(PayaffeDbContext dbContext) : IAdminAud
     {
         dbContext.AuditLogEntries.Add(new AuditLogEntryRecord
         {
+            ProjectId = accessAuditEntry.ProjectId,
             EventId = accessAuditEntry.EventId,
             OccurredAt = accessAuditEntry.OccurredAt,
             EventType = accessAuditEntry.EventType,

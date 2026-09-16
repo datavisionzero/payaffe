@@ -20,11 +20,16 @@
           },
           "confirmed": {
             "type": "boolean"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
           }
         },
         "required": [
           "addresses",
-          "confirmed"
+          "confirmed",
+          "projectId"
         ],
         "type": "object"
       },
@@ -58,6 +63,10 @@
               "lowCapacityThreshold": {
                 "type": "integer"
               },
+              "projectId": {
+                "format": "uuid",
+                "type": "string"
+              },
               "retiredCount": {
                 "type": "integer"
               },
@@ -69,6 +78,7 @@
               "assignedCount",
               "isLowCapacity",
               "lowCapacityThreshold",
+              "projectId",
               "retiredCount",
               "unusedCount"
             ],
@@ -106,7 +116,15 @@
       },
       "description": "Returns native ETH Address Pool capacity without exposing any spending material.",
       "inputSchema": {
-        "properties": {},
+        "properties": {
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
         "type": "object"
       },
       "name": "address_pool.summarize",
@@ -129,6 +147,10 @@
               "lowCapacityThreshold": {
                 "type": "integer"
               },
+              "projectId": {
+                "format": "uuid",
+                "type": "string"
+              },
               "retiredCount": {
                 "type": "integer"
               },
@@ -140,6 +162,7 @@
               "assignedCount",
               "isLowCapacity",
               "lowCapacityThreshold",
+              "projectId",
               "retiredCount",
               "unusedCount"
             ],
@@ -176,6 +199,14 @@
           "limit": {
             "default": 25,
             "type": "integer"
+          },
+          "projectId": {
+            "default": null,
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "type": "object"
@@ -212,6 +243,13 @@
                 "outcome": {
                   "type": "string"
                 },
+                "projectId": {
+                  "format": "uuid",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "reasonCode": {
                   "type": "string"
                 },
@@ -229,6 +267,7 @@
                 "eventType",
                 "occurredAt",
                 "outcome",
+                "projectId",
                 "reasonCode",
                 "subjectId",
                 "subjectType"
@@ -271,22 +310,99 @@
       },
       "description": "Returns a safe operational configuration summary without secret values or references.",
       "inputSchema": {
-        "properties": {},
+        "properties": {
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
         "type": "object"
       },
       "name": "configuration.summarize",
       "outputSchema": {
         "properties": {
+          "btc": {
+            "properties": {
+              "confirmationRequirement": {
+                "type": "integer"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "reorgMonitoringDepth": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "confirmationRequirement",
+              "enabled",
+              "reorgMonitoringDepth"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
           "code": {
             "type": "string"
           },
           "correlationId": {
             "type": "string"
           },
+          "eth": {
+            "properties": {
+              "confirmationRequirement": {
+                "type": "integer"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "reorgMonitoringDepth": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "confirmationRequirement",
+              "enabled",
+              "reorgMonitoringDepth"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
           "lateAcceptanceWindow": {
             "$comment": "Represents a System.TimeSpan value.",
             "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ltc": {
+            "properties": {
+              "confirmationRequirement": {
+                "type": "integer"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "reorgMonitoringDepth": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "confirmationRequirement",
+              "enabled",
+              "reorgMonitoringDepth"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
           },
           "observationMode": {
             "type": "string"
@@ -294,10 +410,26 @@
           "paymentExpiration": {
             "$comment": "Represents a System.TimeSpan value.",
             "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "paymentTolerancePercent": {
-            "type": "number"
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "projectStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "status": {
             "type": "string"
@@ -307,12 +439,17 @@
           }
         },
         "required": [
+          "btc",
           "code",
           "correlationId",
+          "eth",
           "lateAcceptanceWindow",
+          "ltc",
           "observationMode",
           "paymentExpiration",
           "paymentTolerancePercent",
+          "projectId",
+          "projectStatus",
           "status",
           "summary"
         ],
@@ -333,10 +470,15 @@
           "paymentId": {
             "format": "uuid",
             "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
           }
         },
         "required": [
-          "paymentId"
+          "paymentId",
+          "projectId"
         ],
         "type": "object"
       },
@@ -410,6 +552,10 @@
                 "format": "uuid",
                 "type": "string"
               },
+              "projectId": {
+                "format": "uuid",
+                "type": "string"
+              },
               "selectedCurrency": {
                 "type": [
                   "null",
@@ -448,6 +594,7 @@
               "payerPageId",
               "paymentAddress",
               "paymentId",
+              "projectId",
               "selectedCurrency",
               "settledAt",
               "status",
@@ -490,8 +637,15 @@
           "limit": {
             "default": 25,
             "type": "integer"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
           }
         },
+        "required": [
+          "projectId"
+        ],
         "type": "object"
       },
       "name": "payment.search",
@@ -552,6 +706,10 @@
                   "format": "uuid",
                   "type": "string"
                 },
+                "projectId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
                 "selectedCurrency": {
                   "type": [
                     "null",
@@ -576,6 +734,7 @@
                 "fiatCurrency",
                 "paymentAddress",
                 "paymentId",
+                "projectId",
                 "selectedCurrency",
                 "status",
                 "updatedAt"
@@ -623,6 +782,10 @@
             "format": "uuid",
             "type": "string"
           },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
           "reason": {
             "type": "string"
           }
@@ -631,6 +794,7 @@
           "confirmed",
           "expectedVersion",
           "paymentId",
+          "projectId",
           "reason"
         ],
         "type": "object"
@@ -694,6 +858,86 @@
     {
       "annotations": {
         "destructive": false,
+        "idempotent": true,
+        "openWorld": false,
+        "readOnly": true
+      },
+      "description": "Lists Projects available to the installation-wide Admin.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project.list",
+      "outputSchema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "projects": {
+            "items": {
+              "properties": {
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "slug": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "createdAt",
+                "name",
+                "projectId",
+                "slug",
+                "status",
+                "updatedAt",
+                "version"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlationId",
+          "projects",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "title": "List Projects"
+    },
+    {
+      "annotations": {
+        "destructive": false,
         "idempotent": false,
         "openWorld": true,
         "readOnly": false
@@ -704,6 +948,10 @@
           "confirmed": {
             "type": "boolean"
           },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
           "webhookEventId": {
             "format": "uuid",
             "type": "string"
@@ -711,6 +959,7 @@
         },
         "required": [
           "confirmed",
+          "projectId",
           "webhookEventId"
         ],
         "type": "object"
@@ -761,8 +1010,15 @@
           "limit": {
             "default": 25,
             "type": "integer"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
           }
         },
+        "required": [
+          "projectId"
+        ],
         "type": "object"
       },
       "name": "webhook_delivery.search",

@@ -126,6 +126,207 @@
         }
       }
     },
+    "/api/admin/projects": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ListAdminProjects",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProjectsHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "CreateAdminProject",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminProjectCreateHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProjectHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/projects/{projectId}/status": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ChangeAdminProjectStatus",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminProjectStatusHttpRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProjectHttpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/csrf": {
       "get": {
         "tags": [
@@ -184,6 +385,14 @@
         "operationId": "ListAdminPayments",
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -227,6 +436,14 @@
         ],
         "operationId": "GetAdminPayment",
         "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "paymentId",
             "in": "path",
@@ -376,6 +593,14 @@
         "operationId": "ListAdminReorgAlerts",
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -450,6 +675,14 @@
         "operationId": "ListAdminAuditLog",
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -493,6 +726,14 @@
         ],
         "operationId": "GetAdminAuditLogEntry",
         "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "eventId",
             "in": "path",
@@ -555,6 +796,14 @@
         "operationId": "ListAdminWebhookDeliveries",
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -597,6 +846,16 @@
           "Admin"
         ],
         "operationId": "ListAdminIntegrationApiCredentials",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -886,6 +1145,14 @@
         ],
         "operationId": "ListAdminWebhookEndpoints",
         "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "integrationApiCredentialId",
             "in": "query",
@@ -1300,6 +1567,16 @@
           "Admin"
         ],
         "operationId": "GetAdminNativeEthAddressPool",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1463,6 +1740,14 @@
         ],
         "operationId": "ResendAdminWebhookDelivery",
         "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "eventId",
             "in": "path",
@@ -1780,6 +2065,7 @@
     "schemas": {
       "AdminAuditLogEntryDetailReadModel": {
         "required": [
+          "projectId",
           "eventId",
           "occurredAt",
           "eventType",
@@ -1796,6 +2082,13 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "eventId": {
             "type": "string",
             "format": "uuid"
@@ -1847,6 +2140,7 @@
       },
       "AdminAuditLogEntryReadModel": {
         "required": [
+          "projectId",
           "eventId",
           "occurredAt",
           "eventType",
@@ -1859,6 +2153,13 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "eventId": {
             "type": "string",
             "format": "uuid"
@@ -1892,10 +2193,18 @@
       },
       "AdminAuditLogExportHttpRequest": {
         "required": [
+          "projectId",
           "limit"
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "limit": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -1986,10 +2295,18 @@
       },
       "AdminIntegrationApiCredentialMutationHttpRequest": {
         "required": [
+          "projectId",
           "expectedVersion"
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "expectedVersion": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -2175,10 +2492,18 @@
       },
       "AdminNativeEthAddressPoolImportHttpRequest": {
         "required": [
+          "projectId",
           "addresses"
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "addresses": {
             "type": [
               "null",
@@ -2217,6 +2542,7 @@
       },
       "AdminNativeEthAddressPoolSummary": {
         "required": [
+          "projectId",
           "unusedCount",
           "assignedCount",
           "retiredCount",
@@ -2225,6 +2551,10 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "unusedCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -2278,6 +2608,7 @@
       },
       "AdminPaymentDetailReadModel": {
         "required": [
+          "projectId",
           "paymentId",
           "externalReference",
           "fiatCurrency",
@@ -2299,6 +2630,10 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "paymentId": {
             "type": "string",
             "format": "uuid"
@@ -2395,11 +2730,19 @@
       },
       "AdminPaymentSettlementHttpRequest": {
         "required": [
+          "projectId",
           "expectedVersion",
           "reason"
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "expectedVersion": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -2433,6 +2776,7 @@
       },
       "AdminPaymentSummaryReadModel": {
         "required": [
+          "projectId",
           "paymentId",
           "externalReference",
           "fiatCurrency",
@@ -2448,6 +2792,10 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "paymentId": {
             "type": "string",
             "format": "uuid"
@@ -2508,6 +2856,119 @@
           }
         }
       },
+      "AdminProjectCreateHttpRequest": {
+        "required": [
+          "name",
+          "slug"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AdminProjectHttpResponse": {
+        "required": [
+          "project"
+        ],
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/AdminProjectReadModel"
+          }
+        }
+      },
+      "AdminProjectReadModel": {
+        "required": [
+          "projectId",
+          "name",
+          "slug",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AdminProjectsHttpResponse": {
+        "required": [
+          "projects"
+        ],
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminProjectReadModel"
+            }
+          }
+        }
+      },
+      "AdminProjectStatusHttpRequest": {
+        "required": [
+          "expectedVersion",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "AdminRecoveryCodesHttpResponse": {
         "required": [
           "generatedAt",
@@ -2529,6 +2990,7 @@
       },
       "AdminReorgAlertReadModel": {
         "required": [
+          "projectId",
           "id",
           "paymentId",
           "supportedCurrency",
@@ -2546,6 +3008,10 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -2864,6 +3330,7 @@
       },
       "AdminWebhookEndpointCreateHttpRequest": {
         "required": [
+          "projectId",
           "integrationApiCredentialId",
           "url",
           "secretReference",
@@ -2871,6 +3338,13 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "integrationApiCredentialId": {
             "type": [
               "null",
@@ -2974,11 +3448,19 @@
       },
       "AdminWebhookEndpointSecretRotationHttpRequest": {
         "required": [
+          "projectId",
           "expectedVersion",
           "secretReference"
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "expectedVersion": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -3012,12 +3494,20 @@
       },
       "AdminWebhookEndpointUpdateHttpRequest": {
         "required": [
+          "projectId",
           "expectedVersion",
           "url",
           "eventTypes"
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "expectedVersion": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
