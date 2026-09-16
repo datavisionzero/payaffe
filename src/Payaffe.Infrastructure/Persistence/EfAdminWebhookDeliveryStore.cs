@@ -14,8 +14,8 @@ public sealed class EfAdminWebhookDeliveryStore(PayaffeDbContext dbContext) : IA
             .Where(webhookEvent => webhookEvent.Status == "retry_pending" || webhookEvent.Status == "terminal_failed")
             .Join(
                 dbContext.Payments.AsNoTracking(),
-                webhookEvent => webhookEvent.PaymentId,
-                payment => payment.Id,
+                webhookEvent => new { webhookEvent.ProjectId, Id = webhookEvent.PaymentId },
+                payment => new { payment.ProjectId, payment.Id },
                 (webhookEvent, payment) => new
                 {
                     WebhookEvent = webhookEvent,
@@ -42,6 +42,7 @@ public sealed class EfAdminWebhookDeliveryStore(PayaffeDbContext dbContext) : IA
             {
                 attempts.TryGetValue(candidate.WebhookEvent.Id, out var lastAttempt);
                 return new AdminWebhookDeliveryReadModel(
+                    candidate.WebhookEvent.ProjectId,
                     candidate.WebhookEvent.Id,
                     candidate.WebhookEvent.PaymentId,
                     candidate.PaymentExternalReference,

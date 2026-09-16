@@ -9,4 +9,5 @@ public sealed record RecordBlockchainObservationCommand(
     DateTimeOffset ObservedAt,
     int Confirmations,
     string ProviderName,
-    string? ProviderObservationId);
+    string? ProviderObservationId,
+    Guid ProjectId = default);

@@ -33,6 +33,7 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
         Assert.Null(webhookEvent.LastErrorCode);
 
         var attempt = Assert.Single(context.DbContext.WebhookDeliveryAttempts);
+        Assert.Equal(ProjectDefaults.DefaultProjectId, attempt.ProjectId);
         Assert.Equal("succeeded", attempt.Result);
         Assert.Equal(204, attempt.HttpStatusCode);
         Assert.Equal(1, attempt.AttemptNumber);
@@ -68,6 +69,22 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
         Assert.Equal(503, attempt.HttpStatusCode);
         Assert.Equal("http.503", attempt.SafeErrorCode);
         Assert.Equal(ProcessorNow.AddMinutes(1), attempt.NextRetryAt);
+    }
+
+    [Fact]
+    public async Task ProcessNextAsync_continues_existing_delivery_for_disabled_project()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.NoContent);
+        var project = Assert.Single(context.DbContext.Projects);
+        project.Status = "disabled";
+        project.UpdatedAt = ProcessorNow;
+        project.Version++;
+        await context.DbContext.SaveChangesAsync();
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        Assert.Equal("delivered", Assert.Single(context.DbContext.WebhookOutboxEvents).Status);
+        Assert.Equal(ProjectDefaults.DefaultProjectId, Assert.Single(context.DbContext.WebhookDeliveryAttempts).ProjectId);
     }
 
     [Fact]

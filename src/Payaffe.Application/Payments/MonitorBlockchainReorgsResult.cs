@@ -5,4 +5,5 @@ public sealed record MonitorBlockchainReorgsResult(
     int CheckedCount,
     int UpdatedCount,
     int ReorgAlertCount,
-    int MissingObservationCount);
+    int MissingObservationCount,
+    int FailedCount = 0);

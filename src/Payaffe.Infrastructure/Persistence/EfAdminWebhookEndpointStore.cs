@@ -30,18 +30,21 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var credentialAvailable = await dbContext.IntegrationApiCredentials.AnyAsync(
-            credential =>
-                credential.Id == endpoint.IntegrationApiCredentialId &&
-                credential.Status == "active",
-            cancellationToken);
-        if (!credentialAvailable)
+        var projectId = await dbContext.IntegrationApiCredentials
+            .Where(
+                credential =>
+                    credential.Id == endpoint.IntegrationApiCredentialId &&
+                    credential.Status == "active")
+            .Select(credential => (Guid?)credential.ProjectId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (projectId is null)
         {
             return AdminWebhookEndpointStoreResult.ParentCredentialUnavailable();
         }
 
         var record = new WebhookEndpointRecord
         {
+            ProjectId = projectId.Value,
             Id = endpoint.Id,
             IntegrationApiCredentialId = endpoint.IntegrationApiCredentialId,
             Url = endpoint.Url,
@@ -52,7 +55,7 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
             UpdatedAt = endpoint.CreatedAt,
         };
         dbContext.WebhookEndpoints.Add(record);
-        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry));
+        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, projectId.Value));
         await dbContext.SaveChangesAsync(cancellationToken);
         return AdminWebhookEndpointStoreResult.Updated(ToReadModel(record));
     }
@@ -75,7 +78,7 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
         endpoint.Record.EventTypes = update.EventTypes;
         endpoint.Record.UpdatedAt = occurredAt;
         endpoint.Record.Version++;
-        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry));
+        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, endpoint.Record.ProjectId));
         return await SaveMutationAsync(endpointId, endpoint.Record, cancellationToken);
     }
 
@@ -96,7 +99,7 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
         endpoint.Record!.SecretReference = secretReference;
         endpoint.Record.UpdatedAt = occurredAt;
         endpoint.Record.Version++;
-        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry));
+        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, endpoint.Record.ProjectId));
         return await SaveMutationAsync(endpointId, endpoint.Record, cancellationToken);
     }
 
@@ -116,7 +119,7 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
         endpoint.Record!.Status = "disabled";
         endpoint.Record.UpdatedAt = occurredAt;
         endpoint.Record.Version++;
-        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry));
+        dbContext.AuditLogEntries.Add(ToAuditRecord(auditEntry, endpoint.Record.ProjectId));
         return await SaveMutationAsync(endpointId, endpoint.Record, cancellationToken);
     }
 
@@ -169,6 +172,7 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
 
     private static AdminWebhookEndpointReadModel ToReadModel(WebhookEndpointRecord endpoint) =>
         new(
+            endpoint.ProjectId,
             endpoint.Id,
             endpoint.IntegrationApiCredentialId,
             endpoint.Url,
@@ -186,9 +190,10 @@ public sealed class EfAdminWebhookEndpointStore(PayaffeDbContext dbContext)
                 ',',
                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private static AuditLogEntryRecord ToAuditRecord(AdminAuditEntry auditEntry) =>
+    private static AuditLogEntryRecord ToAuditRecord(AdminAuditEntry auditEntry, Guid projectId) =>
         new()
         {
+            ProjectId = projectId,
             EventId = auditEntry.EventId,
             OccurredAt = auditEntry.OccurredAt,
             EventType = auditEntry.EventType,

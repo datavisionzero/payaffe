@@ -58,12 +58,13 @@ public sealed class BlockchainObservationHostedService(
 
             var payments = scope.ServiceProvider.GetRequiredService<PaymentApplicationService>();
             var result = await payments.PollBlockchainObservationsAsync(_maxPaymentsPerPoll, cancellationToken);
-            if (result.ObservationCount > 0)
+            if (result.ObservationCount > 0 || result.FailedCount > 0)
             {
                 logger.LogInformation(
-                    "Polled {TargetCount} Blockchain Observation targets and processed {ObservationCount} observations.",
+                    "Polled {TargetCount} Blockchain Observation targets, processed {ObservationCount} observations and isolated {FailedCount} failures.",
                     result.TargetCount,
-                    result.ObservationCount);
+                    result.ObservationCount,
+                    result.FailedCount);
             }
 
             await lease.CompleteAsync(WorkerName, DateTimeOffset.UtcNow, cancellationToken);

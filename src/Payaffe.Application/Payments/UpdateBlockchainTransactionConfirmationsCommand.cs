@@ -6,4 +6,5 @@ public sealed record UpdateBlockchainTransactionConfirmationsCommand(
     string TransactionHash,
     int Confirmations,
     string? BlockHash,
-    long? BlockHeight);
+    long? BlockHeight,
+    Guid ProjectId = default);

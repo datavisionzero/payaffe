@@ -1,6 +1,7 @@
 namespace Payaffe.Application.Admin;
 
 public sealed record AdminWebhookEndpointReadModel(
+    Guid ProjectId,
     Guid Id,
     Guid IntegrationApiCredentialId,
     string Url,

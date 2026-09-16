@@ -2741,6 +2741,7 @@
       },
       "AdminWebhookDeliveryReadModel": {
         "required": [
+          "projectId",
           "webhookEventId",
           "paymentId",
           "paymentExternalReference",
@@ -2760,6 +2761,10 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "webhookEventId": {
             "type": "string",
             "format": "uuid"
@@ -2909,6 +2914,7 @@
       },
       "AdminWebhookEndpointReadModel": {
         "required": [
+          "projectId",
           "id",
           "integrationApiCredentialId",
           "url",
@@ -2921,6 +2927,10 @@
         ],
         "type": "object",
         "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "id": {
             "type": "string",
             "format": "uuid"

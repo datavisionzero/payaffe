@@ -6,4 +6,5 @@ public sealed record PollBlockchainObservationsResult(
     int RecordedCount,
     int CompletedCount,
     int AlreadyRecordedCount,
-    int RejectedCount);
+    int RejectedCount,
+    int FailedCount = 0);

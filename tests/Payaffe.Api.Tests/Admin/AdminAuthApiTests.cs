@@ -1819,16 +1819,17 @@ public sealed class AdminAuthApiTests
     [Fact]
     public async Task Admin_manages_webhook_endpoint_configuration_with_secret_references_and_audit()
     {
-        const string firstSecretReference = "configuration:Webhooks:EndpointSecrets:partner-v1";
-        const string secondSecretReference = "configuration:Webhooks:EndpointSecrets:partner-v2";
         await using var factory = new PaymentApiFactory();
+        var projectId = await factory.SeedProjectAsync();
+        var firstSecretReference = $"configuration:Webhooks:Projects:{projectId:D}:EndpointSecrets:partner-v1";
+        var secondSecretReference = $"configuration:Webhooks:Projects:{projectId:D}:EndpointSecrets:partner-v2";
         factory.AddWebhookSecret(firstSecretReference, "first-webhook-secret");
         factory.AddWebhookSecret(secondSecretReference, "second-webhook-secret");
         await factory.SeedAdminAccountAsync(
             "admin@example.test",
             "correct-password",
             totpSecret: TotpSecret);
-        var credentialId = await factory.SeedCredentialAsync("partner-token");
+        var credentialId = await factory.SeedCredentialAsync("partner-token", projectId: projectId);
         using var loginClient = factory.CreateClient();
         var sessionCookie = await SignInAndGetSessionCookieAsync(loginClient);
         var rawSessionToken = ExtractCookieValue(sessionCookie);
@@ -1852,6 +1853,7 @@ public sealed class AdminAuthApiTests
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var created = await createResponse.Content.ReadFromJsonAsync<AdminWebhookEndpointResponse>();
         Assert.NotNull(created);
+        Assert.Equal(projectId, created.Endpoint.ProjectId);
         Assert.Equal(credentialId, created.Endpoint.IntegrationApiCredentialId);
         Assert.Equal(firstSecretReference, created.Endpoint.SecretReference);
         Assert.Equal(["payment.completed", "payment.created"], created.Endpoint.EventTypes);
@@ -1906,6 +1908,7 @@ public sealed class AdminAuthApiTests
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
         var stored = Assert.Single(dbContext.WebhookEndpoints);
+        Assert.Equal(projectId, stored.ProjectId);
         Assert.Equal(secondSecretReference, stored.SecretReference);
         Assert.NotEqual("second-webhook-secret", stored.SecretReference);
         Assert.Equal("disabled", stored.Status);
@@ -1919,6 +1922,7 @@ public sealed class AdminAuthApiTests
             },
             eventType => Assert.Contains(dbContext.AuditLogEntries, audit =>
                 audit.EventType == eventType &&
+                audit.ProjectId == projectId &&
                 audit.Outcome == "success" &&
                 audit.SubjectId == stored.Id.ToString("D")));
     }
@@ -2500,6 +2504,7 @@ public sealed class AdminAuthApiTests
         AdminWebhookEndpointResponseModel Endpoint);
 
     private sealed record AdminWebhookEndpointResponseModel(
+        Guid ProjectId,
         Guid Id,
         Guid IntegrationApiCredentialId,
         string Url,

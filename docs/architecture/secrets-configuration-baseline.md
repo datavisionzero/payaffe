@@ -143,7 +143,12 @@ secret mechanism.
 The first concrete Webhook Endpoint secret resolution path stores only a
 secret reference on the Webhook Endpoint record. References in the form
 `configuration:Webhooks:EndpointSecrets:<name>` resolve to server-side
-configuration values under `Webhooks:EndpointSecrets:<name>`.
+configuration values under `Webhooks:EndpointSecrets:<name>` for the migrated
+default Project. Other Projects use
+`configuration:Webhooks:Projects:<project-id>:EndpointSecrets:<name>` and the
+matching `Webhooks:Projects:<project-id>:EndpointSecrets:<name>` configuration
+namespace. Delivery resolves the reference with the persisted owner Project ID
+and rejects every other Project namespace.
 
 With Projects, provider, Exchange Rate Source, observability, session, and
 data-protection secret references remain installation-wide. Webhook Endpoint
@@ -151,7 +156,7 @@ and Watch-Only Wallet Source references are Project-owned. Their resolvers
 receive the persisted owner `project_id` and accept only that Project's
 configuration namespace; a request or database record cannot use a reference
 to select another Project's value. Legacy unscoped Webhook and wallet settings
-are accepted only by the one-time default-Project upgrader.
+remain valid only for the migrated default Project.
 
 ## Rotation And Revocation
 

@@ -149,7 +149,8 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                 payment.Id,
                 payment.SelectedCurrency!,
                 payment.PaymentAddress!,
-                payment.ExpectedCryptoAmount!))
+                payment.ExpectedCryptoAmount!,
+                payment.ProjectId))
             .ToListAsync(cancellationToken);
     }
 
@@ -187,7 +188,8 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                     transaction.PaymentAddress,
                     payment.ExpectedCryptoAmount!,
                     transaction.TransactionHash,
-                    transaction.Confirmations))
+                    transaction.Confirmations,
+                    payment.ProjectId))
             .Take(maxTransactions)
             .ToListAsync(cancellationToken);
     }
@@ -286,7 +288,10 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         await using var transaction = await BeginTransactionIfRelationalAsync(cancellationToken);
 
         var payment = await dbContext.Payments
-            .SingleOrDefaultAsync(candidate => candidate.Id == observation.PaymentId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == observation.PaymentId &&
+                             (observation.ProjectId == Guid.Empty || candidate.ProjectId == observation.ProjectId),
+                cancellationToken);
         if (payment is null)
         {
             return RecordBlockchainObservationStoreResult.PaymentNotFound();
@@ -307,7 +312,8 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             .AsNoTracking()
             .SingleOrDefaultAsync(
                 candidate => candidate.SupportedCurrency == observation.SupportedCurrency &&
-                             candidate.TransactionHash == observation.TransactionHash,
+                             candidate.TransactionHash == observation.TransactionHash &&
+                             candidate.ProjectId == payment.ProjectId,
                 cancellationToken);
         if (existingTransaction is not null)
         {
@@ -418,7 +424,10 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         await using var transaction = await BeginTransactionIfRelationalAsync(cancellationToken);
 
         var payment = await dbContext.Payments
-            .SingleOrDefaultAsync(candidate => candidate.Id == confirmationUpdate.PaymentId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == confirmationUpdate.PaymentId &&
+                             (confirmationUpdate.ProjectId == Guid.Empty || candidate.ProjectId == confirmationUpdate.ProjectId),
+                cancellationToken);
         if (payment is null)
         {
             return UpdateBlockchainTransactionConfirmationsStoreResult.PaymentNotFound();
@@ -444,6 +453,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         var previousConfirmations = matchingTransaction.Confirmations;
         var previousBlockHash = matchingTransaction.BlockHash;
         var previousBlockHeight = matchingTransaction.BlockHeight;
+        completionPolicy = ResolveCompletionPolicy(payment, completionPolicy);
         var reorgDetected = IsReorgAffectedCompletedTransaction(
             payment,
             matchingTransaction,
@@ -484,7 +494,6 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             dbContext.PaymentEventHistory.Add(ToRecord(payment.ProjectId, reorgPaymentEvent));
         }
 
-        completionPolicy = ResolveCompletionPolicy(payment, completionPolicy);
         var completion = await CalculateCompletionAsync(payment, matchingTransaction, completionPolicy, cancellationToken);
         if (completion.IsCompleted)
         {

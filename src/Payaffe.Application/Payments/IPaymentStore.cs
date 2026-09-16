@@ -180,7 +180,8 @@ public sealed record BlockchainReorgMonitoringTarget(
     string PaymentAddress,
     string ExpectedCryptoAmount,
     string TransactionHash,
-    int CurrentConfirmations);
+    int CurrentConfirmations,
+    Guid ProjectId = default);
 
 public sealed record ReorgMonitoringPolicyDraft(
     int BtcRequiredConfirmations,
@@ -234,7 +235,8 @@ public sealed record BlockchainObservationDraft(
     string ProviderName,
     string? ProviderObservationId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid ProjectId = default);
 
 public sealed record PaymentCompletionPolicyDraft(
     int RequiredConfirmations,
@@ -247,7 +249,8 @@ public sealed record BlockchainTransactionConfirmationUpdateDraft(
     int Confirmations,
     string? BlockHash,
     long? BlockHeight,
-    DateTimeOffset CheckedAt);
+    DateTimeOffset CheckedAt,
+    Guid ProjectId = default);
 
 public sealed record PaymentOptionDraft(
     Guid PaymentId,

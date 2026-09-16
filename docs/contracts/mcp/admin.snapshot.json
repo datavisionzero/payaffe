@@ -842,6 +842,10 @@
                   "format": "uuid",
                   "type": "string"
                 },
+                "projectId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
                 "status": {
                   "type": "string"
                 },
@@ -865,6 +869,7 @@
                 "occurredAt",
                 "paymentExternalReference",
                 "paymentId",
+                "projectId",
                 "status",
                 "webhookEventId"
               ],

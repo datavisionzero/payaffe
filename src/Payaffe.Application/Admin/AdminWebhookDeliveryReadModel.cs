@@ -1,6 +1,7 @@
 namespace Payaffe.Application.Admin;
 
 public sealed record AdminWebhookDeliveryReadModel(
+    Guid ProjectId,
     Guid WebhookEventId,
     Guid PaymentId,
     string PaymentExternalReference,

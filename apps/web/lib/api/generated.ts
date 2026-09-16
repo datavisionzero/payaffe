@@ -700,6 +700,8 @@ export interface components {
         };
         AdminWebhookDeliveryReadModel: {
             /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
             webhookEventId: string;
             /** Format: uuid */
             paymentId: string;
@@ -739,6 +741,8 @@ export interface components {
             endpoint: components["schemas"]["AdminWebhookEndpointReadModel"];
         };
         AdminWebhookEndpointReadModel: {
+            /** Format: uuid */
+            projectId: string;
             /** Format: uuid */
             id: string;
             /** Format: uuid */

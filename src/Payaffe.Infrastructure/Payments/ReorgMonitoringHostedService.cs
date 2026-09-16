@@ -58,12 +58,13 @@ public sealed class ReorgMonitoringHostedService(
 
             var payments = scope.ServiceProvider.GetRequiredService<PaymentApplicationService>();
             var result = await payments.MonitorBlockchainReorgsAsync(_maxTransactionsPerPoll, cancellationToken);
-            if (result.CheckedCount > 0 || result.ReorgAlertCount > 0)
+            if (result.CheckedCount > 0 || result.ReorgAlertCount > 0 || result.FailedCount > 0)
             {
                 logger.LogInformation(
-                    "Checked {CheckedCount} Reorg Monitoring targets and created {ReorgAlertCount} Reorg Alerts.",
+                    "Checked {CheckedCount} Reorg Monitoring targets, created {ReorgAlertCount} Reorg Alerts and isolated {FailedCount} failures.",
                     result.CheckedCount,
-                    result.ReorgAlertCount);
+                    result.ReorgAlertCount,
+                    result.FailedCount);
             }
 
             await lease.CompleteAsync(WorkerName, DateTimeOffset.UtcNow, cancellationToken);
