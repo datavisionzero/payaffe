@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "../../lib/link";
 import { useSearchParams } from "../../lib/navigation";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { useEffect, useId, useState } from "react";
 import type { AdminPaymentSummary } from "../../lib/admin-api";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage, StatusPill } from "./common";
@@ -20,9 +20,27 @@ const PAYMENT_STATUSES = [
   "expired",
   "settled"
 ];
+const t = createText({
+  filterScope: "The filter applies to the {count, plural, one {# most recent Payment} other {# most recent Payments}} loaded on this page.",
+  filterSearch: "Search external reference",
+  filterStatus: "Status",
+  filterStatusAll: "All statuses",
+  paymentAmount: "Amount",
+  paymentCount: "{count, plural, one {# payment} other {# payments}}",
+  paymentCreatedAt: "Created",
+  paymentCurrency: "Currency",
+  paymentCurrencyUnselected: "Not selected",
+  paymentExpiresAt: "Expires",
+  paymentExternalReference: "External reference",
+  paymentStatus: "Status",
+  paymentsDescription: "Latest Payment records visible to authenticated Admins.",
+  paymentsEmpty: "No Payments have been created yet.",
+  paymentsFilteredEmpty: "No Payment matches the current filter.",
+  paymentsLoading: "Loading payments",
+  paymentsPageTitle: "Payments"
+});
 
 export function AdminPaymentsPage() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const searchParams = useSearchParams();
   const statusFieldId = useId();
@@ -124,9 +142,8 @@ export function AdminPaymentsPage() {
 }
 
 function PaymentTable({ payments, projectId }: { payments: AdminPaymentSummary[]; projectId: string }) {
-  const t = useTranslations("AdminPage");
   return (
-    <div className="overflow-x-auto">
+    <div aria-label="Payments table" className="overflow-x-auto" role="region" tabIndex={0}>
       <table className="w-full min-w-[760px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">

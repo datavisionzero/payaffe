@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "../../lib/link";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useEffect } from "react";
 import { useSearchParams } from "../../lib/navigation";
@@ -11,8 +11,24 @@ import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage } from "./c
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
 
+const t = createText({
+  auditActor: "Actor",
+  auditEventType: "Event",
+  auditLogCount: "{count, plural, one {# event} other {# events}}",
+  auditLogDescription: "Recent security-relevant Admin and system events.",
+  auditLogEmpty: "No Audit Log entries are available yet.",
+  auditLogExport: "Export JSON",
+  auditLogExported: "Exported {count, plural, one {# event} other {# events}} at {exportedAt}.",
+  auditLogLoading: "Loading audit log",
+  auditLogTitle: "Audit log",
+  auditOccurredAt: "Occurred",
+  auditOutcome: "Outcome",
+  auditReasonCode: "Reason",
+  auditSubject: "Subject",
+  submitting: "Working"
+});
+
 export function AdminAuditLogPage() {
-  const t = useTranslations("AdminPage");
   const searchParams = useSearchParams();
   const [projectId, setProjectId] = useState(() => searchParams.get("projectId") ?? "");
   const projects = useQuery(adminQueries.projects());
@@ -92,7 +108,7 @@ export function AdminAuditLogPage() {
         <Panel>
           {entries.length === 0 ? <EmptyMessage>{t("auditLogEmpty")}</EmptyMessage> : null}
           {entries.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div aria-label="Audit Log table" className="overflow-x-auto" role="region" tabIndex={0}>
               <table className="w-full min-w-[900px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">

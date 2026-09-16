@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -25,8 +25,33 @@ import {
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
 
+const t = createText({
+  accountDescription: "This session, step-up confirmation, recovery codes, and sign-out.",
+  accountTitle: "Account",
+  adminTools: "Admin tools",
+  adminToolsDescription: "Use server-authorized actions for operational changes.",
+  authenticated: "Authenticated",
+  clearSensitiveValue: "Clear sensitive value",
+  expiresAt: "Absolute expiration",
+  generateRecoveryCodes: "Generate recovery codes",
+  idleExpiresAt: "Idle expiration",
+  loading: "Loading",
+  logout: "Log out",
+  mfaAuthenticatedAt: "MFA completed",
+  recoveryCodesGeneratedAt: "Generated at {generatedAt}",
+  recoveryCodesTitle: "Recovery codes",
+  secondFactorNotEnrolled: "No second factor",
+  sessionTitle: "Current session",
+  status: "Status",
+  stepUp: "Confirm step-up",
+  stepUpAuthenticatedAt: "Step-up completed",
+  submitting: "Working",
+  totpCode: "Authentication code",
+  username: "Username",
+  "validation.totpCode": "Enter a six-digit authentication code."
+});
+
 export function AdminAccountPage() {
-  const t = useTranslations("AdminPage");
   const queryClient = useQueryClient();
   const session = useQuery(adminQueries.session());
   const [recoveryCodes, setRecoveryCodes] = useState<AdminRecoveryCodes | null>(null);
@@ -162,7 +187,6 @@ function RecoveryCodesPanel({
   onClear: () => void;
   recoveryCodes: AdminRecoveryCodes;
 }) {
-  const t = useTranslations("AdminPage");
   return (
     <section className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface-strong)] p-4">
       <h3 className="text-sm font-semibold">{t("recoveryCodesTitle")}</h3>

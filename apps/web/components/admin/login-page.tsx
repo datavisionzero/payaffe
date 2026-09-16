@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "../../lib/navigation";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -20,8 +20,27 @@ import { ErrorMessage, SubmitButton, TextField } from "./common";
 import { adminQueries } from "./queries";
 import { ThemeSelect } from "../theme-select";
 
+const t = createText({
+  back: "Back",
+  continue: "Continue",
+  loginDescription: "Use your local Admin Account.",
+  loginTitle: "Admin sign-in",
+  mfaDescription: "Enter the six-digit code from your authenticator app.",
+  mfaTitle: "Multi-factor authentication",
+  password: "Password",
+  recoveryCode: "Recovery code",
+  signIn: "Sign in",
+  submitting: "Working",
+  totpCode: "Authentication code",
+  useAuthenticatorCode: "Use authenticator code",
+  useRecoveryCode: "Use recovery code",
+  username: "Username",
+  "validation.loginRequired": "Username and password are required.",
+  "validation.recoveryCode": "Enter a recovery code.",
+  "validation.totpCode": "Enter a six-digit authentication code."
+});
+
 export function AdminLoginPage() {
-  const t = useTranslations("AdminPage");
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useQuery(adminQueries.session());

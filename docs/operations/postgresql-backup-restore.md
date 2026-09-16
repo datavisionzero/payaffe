@@ -42,7 +42,7 @@ Without those, a restored database cannot resolve secrets or derive addresses.
 Restore into a new, empty database. Never overlay a database that is in use.
 
 ```sh
-docker compose stop api web worker
+docker compose stop api worker
 docker compose exec -T db createdb --username "$PAYAFFE_DB_USER" payaffe_restore
 docker compose exec -T db pg_restore \
   --username "$PAYAFFE_DB_USER" \

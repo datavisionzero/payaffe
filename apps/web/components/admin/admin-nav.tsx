@@ -2,7 +2,7 @@
 
 import Link from "../../lib/link";
 import { usePathname } from "../../lib/navigation";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { cn } from "../../lib/utils";
 import {
   ActivityIcon,
@@ -18,6 +18,24 @@ import {
 import { type AdminAttention, useAdminAttention } from "./attention";
 import { adminProjectPath } from "./project-routes";
 
+const t = createText({
+  ariaLabel: "Admin sections",
+  lowCapacity: "low capacity",
+  needsAttention: "needs attention",
+  "groups.operations": "Operations",
+  "groups.configuration": "Configuration",
+  "groups.security": "Security",
+  "items.overview": "Overview",
+  "items.projects": "Projects",
+  "items.payments": "Payments",
+  "items.monitoring": "Monitoring",
+  "items.webhooks": "Webhooks",
+  "items.integrations": "Integrations",
+  "items.addresses": "Addresses",
+  "items.auditLog": "Audit log",
+  "items.account": "Account"
+});
+
 export function AdminNav({
   onNavigate,
   open,
@@ -27,7 +45,6 @@ export function AdminNav({
   open: boolean;
   projectId: string | null;
 }) {
-  const t = useTranslations("AdminNav");
   const pathname = usePathname();
   const attention = useAdminAttention(projectId);
   const projectPath = projectId ? adminProjectPath(projectId) : null;
@@ -86,7 +103,7 @@ export function AdminNav({
           <ul aria-labelledby={`admin-nav-${group.key}`} className="mt-2 grid gap-1">
             {group.items.map((item) => {
               const label = t(`items.${item.key}`);
-              const badge = badgeFor(item.key, attention, t);
+              const badge = badgeFor(item.key, attention);
               return (
                 <li key={item.key}>
                   <Link
@@ -138,8 +155,7 @@ type NavBadgeContent = { label: string; text: string };
 
 function badgeFor(
   itemKey: string,
-  attention: AdminAttention,
-  t: ReturnType<typeof useTranslations<"AdminNav">>
+  attention: AdminAttention
 ): NavBadgeContent | null {
   if (itemKey === "addresses") {
     return attention.addressesLowCapacity ? { label: t("lowCapacity"), text: "!" } : null;

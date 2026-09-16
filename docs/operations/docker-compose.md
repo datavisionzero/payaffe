@@ -43,6 +43,27 @@ image works at any installation address without a compiled-in URL. `/api` and
 `/health` never receive the SPA fallback; eligible Admin and Payer document
 navigations do, including direct deep-link reloads.
 
+### Upgrading from the separate web runtime
+
+The Vite migration folds the browser application into the `api` image. An
+installation upgrading from a version with a separate Next.js `web` service
+must remove that service, its published port, and any reverse-proxy route that
+sent browser traffic to it. The proxy sends every path to `api:8080`; no Node.js
+process runs in production after the upgrade.
+
+There is no frontend data migration. Existing `/pay/{payerPageId}` links keep
+their path and load through the API host's SPA fallback. Admin deep links also
+remain reloadable; legacy unscoped Admin paths redirect only when the
+installation has one unambiguous Project. The only retained browser values are
+non-sensitive UI preferences such as the color theme and last Project ID, and
+they may safely be cleared.
+
+After the normal database backup, `pull`, and `up`, verify `/health/ready`, load
+one existing Payer link directly, reload one Project-scoped Admin URL, and
+confirm an unknown `/api` path and a missing asset still return `404`. A stale
+HTML shell cannot pin an old release because `index.html` is served with
+`no-cache`; hashed assets are immutable and may remain cached.
+
 ## Published image tags
 
 Three tags are published to `ghcr.io/datavisionzero`, and only one of them is

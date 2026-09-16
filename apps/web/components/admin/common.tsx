@@ -1,11 +1,35 @@
 "use client";
 
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import type React from "react";
 import { useId } from "react";
 import type { useForm } from "react-hook-form";
 import { Button } from "../ui/button";
 import { AdminApiError, type CredentialForm } from "../../lib/admin-api";
+
+const t = createText({
+  clearSensitiveValue: "Clear sensitive value",
+  correlationId: "Correlation ID: {correlationId}",
+  oneTimeValue: "Copy this value now. It is only retained in this page until you clear or leave it.",
+  "errors.unexpected": "The request could not be completed.",
+  "errors.admin_login.invalid": "The credentials are invalid.",
+  "errors.admin_mfa.invalid": "The authentication code is invalid.",
+  "errors.admin_session.invalid": "The session is no longer valid.",
+  "errors.admin_csrf.invalid": "The request expired. Retry the action.",
+  "errors.admin_step_up.invalid": "The step-up code is invalid.",
+  "errors.admin_step_up.required": "Confirm step-up before viewing this sensitive detail.",
+  "errors.audit_log.not_found": "The Audit Log entry was not found.",
+  "errors.webhook_delivery.not_found": "The Webhook Delivery was not found.",
+  "errors.webhook_delivery.not_resendable": "The Webhook Delivery cannot be resent.",
+  "errors.project.slug_conflict": "That Project slug is already in use.",
+  "errors.project.status_transition_invalid": "That Project status change is not allowed.",
+  "errors.project.has_active_work": "The Project still has active payment or delivery work and cannot be archived.",
+  "errors.project.not_found": "The Project is no longer available.",
+  "errors.rateLimited": "Too many requests. Wait before retrying.",
+  "errors.forbidden": "You are not authorized to perform this action.",
+  "errors.concurrency": "The resource changed. Refresh and retry.",
+  "errors.validationFailed": "Review the highlighted values and retry."
+});
 
 export function PageHeader({
   actions,
@@ -148,7 +172,7 @@ export function TextField({
 
 export function InfoItem({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-sm text-[var(--muted-foreground)]">{label}</dt>
       <dd className="mt-1 break-words text-base font-medium">{value}</dd>
     </div>
@@ -172,9 +196,8 @@ export function EmptyMessage({ children }: { children: React.ReactNode }) {
 }
 
 export function ErrorMessage({ error }: { error: Error }) {
-  const t = useTranslations("AdminPage");
   if (error instanceof AdminApiError) {
-    const message = getAdminErrorMessage(error.code, error.status, t);
+    const message = getAdminErrorMessage(error.code, error.status);
     return (
       <div
         aria-live="assertive"
@@ -203,7 +226,6 @@ export function SensitiveValuePanel({
   onClear: () => void;
   value: string;
 }) {
-  const t = useTranslations("AdminPage");
   return (
     <div className="mt-5 rounded-md border border-[var(--destructive)] bg-[var(--card)] p-4" role="status">
       <p className="font-semibold">{label}</p>
@@ -229,8 +251,7 @@ export function mapFieldError(
 
 export function getAdminErrorMessage(
   code: string | undefined,
-  status: number,
-  t: ReturnType<typeof useTranslations<"AdminPage">>
+  status: number
 ): string {
   switch (code) {
     case "admin_login.invalid":

@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "../../lib/link";
 import { usePathname, useRouter, useSearchParams } from "../../lib/navigation";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { useEffect, useRef, useState } from "react";
 import { MenuIcon, UserCircleIcon } from "lucide-react";
 import { type AdminProject, type AdminSession } from "../../lib/admin-api";
@@ -14,8 +14,17 @@ import { ThemeSelect } from "../theme-select";
 import { AdminProjectProvider } from "./project-context";
 import { adminProjectPath, projectIdFromAdminPath, switchAdminProjectPath } from "./project-routes";
 
+const t = createText({
+  checkingSession: "Checking session",
+  loadingProjects: "Loading projects",
+  menu: "Menu",
+  project: "Project",
+  redirecting: "Taking you to sign-in.",
+  signedInAs: "Signed in as",
+  skipToContent: "Skip to content"
+});
+
 export function AdminShell({ children }: { children: React.ReactNode }) {
-  const t = useTranslations("AdminNav");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -231,7 +240,6 @@ function TopBar({
   selectedProject: AdminProject | null;
   session: AdminSession;
 }) {
-  const t = useTranslations("AdminNav");
   return (
     <header className="sticky top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--card)] px-3">
       <div className="flex items-center gap-3">

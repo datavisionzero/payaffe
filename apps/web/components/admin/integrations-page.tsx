@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -29,8 +29,22 @@ import { formatDateTime } from "./format";
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
 import { useAdminProject } from "./project-context";
 
+const t = createText({
+  createCredential: "Create credential",
+  credentialLastUsed: "Last used: {value}",
+  credentialName: "Credential name",
+  credentialToken: "New Integration API bearer token",
+  credentialsDescription: "Create, rotate, and disable credentials used by external systems.",
+  credentialsTitle: "Integration API Credentials",
+  disableCredential: "Disable credential",
+  loading: "Loading",
+  notAvailable: "Not available",
+  rotateCredential: "Rotate token",
+  submitting: "Working",
+  "validation.credentialName": "Enter a credential name of at most 255 characters."
+});
+
 export function AdminIntegrationsPage() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();

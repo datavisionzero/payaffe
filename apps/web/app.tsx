@@ -1,25 +1,60 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from "react";
 import { Navigate, Outlet, Route, Routes, useParams } from "react-router";
-import { AdminAccountPage } from "./components/admin/account-page";
-import { AdminAddressesPage } from "./components/admin/addresses-page";
-import { AdminAuditLogDetailPage } from "./components/admin/audit-log-detail-page";
-import { AdminAuditLogPage } from "./components/admin/audit-log-page";
-import { AdminIntegrationsPage } from "./components/admin/integrations-page";
 import { AdminLoginPage } from "./components/admin/login-page";
-import { AdminMonitoringPage } from "./components/admin/monitoring-page";
-import { AdminOverviewPage } from "./components/admin/overview-page";
-import { AdminPaymentDetailPage } from "./components/admin/payment-detail-page";
-import { AdminPaymentsPage } from "./components/admin/payments-page";
 import { AdminShell } from "./components/admin/admin-shell";
-import { AdminWebhooksPage } from "./components/admin/webhooks-page";
-import {
-  AdminLandingPage,
-  AdminProjectsPage,
-  LegacyProjectRedirect
-} from "./components/admin/projects-page";
-import { PayerPage } from "./components/payer-page";
 import Link from "./lib/link";
 import { reportClientError } from "./lib/client-errors";
+
+const AdminAccountPage = lazy(() =>
+  import("./components/admin/account-page").then((module) => ({ default: module.AdminAccountPage }))
+);
+const AdminAddressesPage = lazy(() =>
+  import("./components/admin/addresses-page").then((module) => ({ default: module.AdminAddressesPage }))
+);
+const AdminAuditLogDetailPage = lazy(() =>
+  import("./components/admin/audit-log-detail-page").then((module) => ({
+    default: module.AdminAuditLogDetailPage
+  }))
+);
+const AdminAuditLogPage = lazy(() =>
+  import("./components/admin/audit-log-page").then((module) => ({ default: module.AdminAuditLogPage }))
+);
+const AdminIntegrationsPage = lazy(() =>
+  import("./components/admin/integrations-page").then((module) => ({
+    default: module.AdminIntegrationsPage
+  }))
+);
+const AdminMonitoringPage = lazy(() =>
+  import("./components/admin/monitoring-page").then((module) => ({ default: module.AdminMonitoringPage }))
+);
+const AdminOverviewPage = lazy(() =>
+  import("./components/admin/overview-page").then((module) => ({ default: module.AdminOverviewPage }))
+);
+const AdminPaymentDetailPage = lazy(() =>
+  import("./components/admin/payment-detail-page").then((module) => ({
+    default: module.AdminPaymentDetailPage
+  }))
+);
+const AdminPaymentsPage = lazy(() =>
+  import("./components/admin/payments-page").then((module) => ({ default: module.AdminPaymentsPage }))
+);
+const AdminWebhooksPage = lazy(() =>
+  import("./components/admin/webhooks-page").then((module) => ({ default: module.AdminWebhooksPage }))
+);
+const PayerPage = lazy(() =>
+  import("./components/payer-page").then((module) => ({ default: module.PayerPage }))
+);
+const AdminLandingPage = lazy(() =>
+  import("./components/admin/projects-page").then((module) => ({ default: module.AdminLandingPage }))
+);
+const AdminProjectsPage = lazy(() =>
+  import("./components/admin/projects-page").then((module) => ({ default: module.AdminProjectsPage }))
+);
+const LegacyProjectRedirect = lazy(() =>
+  import("./components/admin/projects-page").then((module) => ({
+    default: module.LegacyProjectRedirect
+  }))
+);
 
 export function App() {
   return (
@@ -57,6 +92,14 @@ export function App() {
   );
 }
 
+function PayerRouteLoading() {
+  return (
+    <main aria-live="polite" className="mx-auto min-h-screen w-full max-w-3xl px-6 py-12">
+      <h1 className="text-xl font-semibold">Loading payment</h1>
+    </main>
+  );
+}
+
 function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-6 py-12">
@@ -74,14 +117,30 @@ function HomePage() {
 function AdminShellRoute() {
   return (
     <AdminShell>
-      <Outlet />
+      <Suspense fallback={<AdminRouteLoading />}>
+        <Outlet />
+      </Suspense>
     </AdminShell>
+  );
+}
+
+function AdminRouteLoading() {
+  return (
+    <div aria-live="polite" className="rounded-md border border-[var(--border)] p-5 text-sm">
+      <h1 className="text-xl font-semibold">Loading Admin view</h1>
+    </div>
   );
 }
 
 function PayerRoute() {
   const { payerPageId } = useParams();
-  return payerPageId ? <PayerPage payerPageId={payerPageId} /> : <Navigate replace to="/" />;
+  return payerPageId ? (
+    <Suspense fallback={<PayerRouteLoading />}>
+      <PayerPage payerPageId={payerPageId} />
+    </Suspense>
+  ) : (
+    <Navigate replace to="/" />
+  );
 }
 
 function AdminPaymentRoute() {

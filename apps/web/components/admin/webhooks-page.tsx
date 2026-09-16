@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "../../lib/link";
 import { useSearchParams } from "../../lib/navigation";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -42,9 +42,47 @@ const WEBHOOK_EVENT_TYPES = [
   "payment.expired",
   "payment.settled"
 ];
+const t = createText({
+  allEvents: "All supported Payment events",
+  createWebhookEndpoint: "Create Webhook Endpoint",
+  credential: "Integration API Credential",
+  disableWebhookEndpoint: "Disable Webhook Endpoint",
+  eventTypes: "Payment event types",
+  loading: "Loading",
+  newSecretReference: "New secret reference",
+  notAvailable: "Not available",
+  rotateWebhookSecret: "Rotate secret reference",
+  secretReference: "Secret reference",
+  secretReferenceSummary: "Secret reference: {value}",
+  selectCredential: "Select a credential",
+  submitting: "Working",
+  updateWebhookEndpoint: "Update Webhook Endpoint",
+  "validation.webhookEndpoint": "Select a credential and enter a valid URL and secret reference.",
+  webhookAction: "Action",
+  webhookAttempts: "Attempts",
+  webhookDeliveriesDescription: "Failed or retry-pending Webhook Events that can be resent.",
+  webhookDeliveriesEmpty: "No failed Webhook Deliveries are pending.",
+  webhookDeliveriesLoading: "Loading Webhook Deliveries",
+  webhookDeliveriesTab: "Deliveries",
+  webhookDeliveriesTitle: "Webhook deliveries",
+  webhookDeliveryCount: "{count, plural, one {# delivery} other {# deliveries}}",
+  webhookDeliveryResent: "Resend completed with status {status}.",
+  webhookEndpointsDescription: "Manage the external destinations configured for Payment events.",
+  webhookEndpointsTab: "Endpoints",
+  webhookEndpointsTitle: "Webhook Endpoints",
+  webhookEventType: "Event",
+  webhookLastAttempt: "Last attempt",
+  webhookLastError: "Last error",
+  webhookPayment: "Payment",
+  webhookResend: "Resend",
+  webhookStatus: "Status",
+  webhookUrl: "Webhook Endpoint URL",
+  webhookViews: "Webhook views",
+  webhooksDescription: "The destinations Payment events are sent to, and the deliveries that did not arrive.",
+  webhooksTitle: "Webhooks"
+});
 
 export function AdminWebhooksPage() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const webhookPath = adminProjectPath(project.projectId, "/webhooks");
   const searchParams = useSearchParams();
@@ -99,7 +137,6 @@ function ViewTab({
 }
 
 function WebhookEndpointSection() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
@@ -181,7 +218,6 @@ function EventTypeFields({
 }: {
   register: ReturnType<typeof useForm<WebhookEndpointForm>>["register"];
 }) {
-  const t = useTranslations("AdminPage");
   return (
     <fieldset>
       <legend className="text-sm font-medium">{t("eventTypes")}</legend>
@@ -198,7 +234,6 @@ function EventTypeFields({
 }
 
 function WebhookEndpointItem({ endpoint }: { endpoint: AdminWebhookEndpoint }) {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
@@ -268,7 +303,6 @@ function WebhookEndpointItem({ endpoint }: { endpoint: AdminWebhookEndpoint }) {
 }
 
 function WebhookDeliverySection() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
@@ -308,7 +342,12 @@ function WebhookDeliverySection() {
         <EmptyMessage>{t("webhookDeliveriesEmpty")}</EmptyMessage>
       ) : null}
       {deliveries.length > 0 ? (
-        <div className="mt-5 overflow-x-auto">
+        <div
+          aria-label="Webhook deliveries table"
+          className="mt-5 overflow-x-auto"
+          role="region"
+          tabIndex={0}
+        >
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">
@@ -349,7 +388,15 @@ function WebhookDeliverySection() {
                     <button
                       className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--brand)] disabled:cursor-wait disabled:opacity-70"
                       disabled={resendMutation.isPending}
-                      onClick={() => resendMutation.mutate(delivery.webhookEventId)}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Resend ${delivery.eventType} for ${delivery.paymentExternalReference}?`
+                          )
+                        ) {
+                          resendMutation.mutate(delivery.webhookEventId);
+                        }
+                      }}
                       type="button"
                     >
                       {resendMutation.isPending ? t("submitting") : t("webhookResend")}

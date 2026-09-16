@@ -133,6 +133,9 @@ export const state = {
     | { csrf: string | null; body: { projectId?: string; expectedVersion?: number; reason?: string } }
     | null,
   webhookResendEventId: null as string | null,
+  addressImportRequest: null as
+    | { csrf: string | null; body: { projectId?: string; addresses?: string[] } }
+    | null,
   addressPool: {
     unusedCount: 8,
     assignedCount: 2,
@@ -162,6 +165,7 @@ export function resetAdminState() {
   state.mfaRequestBody = null;
   state.settlementRequest = null;
   state.webhookResendEventId = null;
+  state.addressImportRequest = null;
   state.addressPool = {
     unusedCount: 8,
     assignedCount: 2,
@@ -375,6 +379,26 @@ export const adminServer = setupServer(
     );
   }),
   http.get("/api/admin/native-eth-address-pool", () => guarded(state.addressPool)),
+  http.post("/api/admin/native-eth-address-pool/import", async ({ request }) => {
+    capture("addressImport", request);
+    const body = (await request.json()) as { projectId?: string; addresses?: string[] };
+    state.addressImportRequest = {
+      csrf: request.headers.get("X-CSRF-TOKEN"),
+      body
+    };
+    state.addressPool = {
+      ...state.addressPool,
+      unusedCount: state.addressPool.unusedCount + (body.addresses?.length ?? 0)
+    };
+    return HttpResponse.json(
+      {
+        importId: "596de3ac-7fab-41f8-b2a4-5d40d8e70e7e",
+        importedCount: body.addresses?.length ?? 0,
+        summary: state.addressPool
+      },
+      { status: 201 }
+    );
+  }),
   http.get("/api/admin/csrf", () => HttpResponse.json({ csrfToken: "csrf-token" }))
 );
 

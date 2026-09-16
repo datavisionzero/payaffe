@@ -72,6 +72,7 @@ describe("AdminWebhooksPage", () => {
 
   it("marks the selected view and resends a failed Delivery from it", async () => {
     state.authenticated = true;
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     nav.search = "?view=deliveries";
     renderAdmin(<AdminWebhooksPage />);
 
@@ -91,6 +92,20 @@ describe("AdminWebhooksPage", () => {
     expect(await screen.findByText("Resend completed with status delivered.")).toBeInTheDocument();
   });
 
+  it("does not resend a Delivery when confirmation is declined", async () => {
+    state.authenticated = true;
+    nav.search = "?view=deliveries";
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderAdmin(<AdminWebhooksPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Resend" }));
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      "Resend payment.created for order-123?"
+    );
+    expect(state.webhookResendEventId).toBeNull();
+  });
+
   it("shows the endpoints view by default", async () => {
     state.authenticated = true;
     renderAdmin(<AdminWebhooksPage />);
@@ -103,6 +118,27 @@ describe("AdminWebhooksPage", () => {
 });
 
 describe("AdminAddressesPage", () => {
+  it("imports valid Native ETH addresses with Project scope and CSRF", async () => {
+    state.authenticated = true;
+    renderAdmin(<AdminAddressesPage />);
+
+    await screen.findByRole("heading", { level: 1, name: "Native ETH Address Pool" });
+    fireEvent.change(screen.getByLabelText("Payment Addresses"), {
+      target: { value: "0x1111111111111111111111111111111111111111" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import addresses" }));
+
+    await vi.waitFor(() => {
+      expect(state.addressImportRequest).toEqual({
+        csrf: "csrf-token",
+        body: {
+          projectId: "00000000-0000-0000-0000-000000000001",
+          addresses: ["0x1111111111111111111111111111111111111111"]
+        }
+      });
+    });
+  });
+
   it("rejects an import that is not a Native ETH address", async () => {
     state.authenticated = true;
     renderAdmin(<AdminAddressesPage />);

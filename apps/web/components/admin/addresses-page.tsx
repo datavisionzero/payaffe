@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { useForm } from "react-hook-form";
 import {
   type AddressPoolImportFormInput,
@@ -13,8 +13,24 @@ import { ErrorMessage, InfoItem, PageHeader, Panel, StateMessage, SubmitButton }
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
 import { useAdminProject } from "./project-context";
 
+const t = createText({
+  addressPoolAddresses: "Payment Addresses",
+  addressPoolDescription: "Review capacity and import non-custodial Native ETH Payment Addresses.",
+  addressPoolInputHelp: "Enter one 0x-prefixed address per line. Private keys and seed phrases must never be entered.",
+  addressPoolTitle: "Native ETH Address Pool",
+  assignedAddresses: "Assigned",
+  capacity: "Capacity",
+  capacityAvailable: "Available",
+  importAddresses: "Import addresses",
+  loading: "Loading",
+  lowCapacity: "Low capacity",
+  retiredAddresses: "Retired",
+  submitting: "Working",
+  unusedAddresses: "Unused",
+  "validation.addressPool": "Enter one or more unique Native ETH addresses in 0x format."
+});
+
 export function AdminAddressesPage() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
@@ -76,7 +92,6 @@ export function AdminAddressesPage() {
 }
 
 function AddressPoolSummary({ summary }: { summary: AdminNativeEthAddressPool }) {
-  const t = useTranslations("AdminPage");
   return (
     <dl className="grid gap-3 sm:grid-cols-4">
       <InfoItem label={t("unusedAddresses")} value={String(summary.unusedCount)} />

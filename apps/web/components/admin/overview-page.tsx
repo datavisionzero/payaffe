@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "../../lib/link";
-import { useTranslations } from "../../lib/english";
+import { createText } from "../../lib/text";
 import { cn } from "../../lib/utils";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage, StatusPill } from "./common";
 import { formatDateTime, formatFiatAmount } from "./format";
@@ -11,9 +11,32 @@ import { useAdminProject } from "./project-context";
 import { adminProjectPath } from "./project-routes";
 
 const RECENT_PAYMENT_COUNT = 5;
+const t = createText({
+  addressPoolSummary: "{count, plural, one {# unused address} other {# unused addresses}}",
+  addressPoolTitle: "Native ETH Address Pool",
+  lowCapacity: "Low capacity",
+  notAvailable: "Not available",
+  observationHealthTitle: "Observation Health",
+  observationSummary: "{available} of {total} available",
+  overviewTitle: "Overview",
+  paymentAmount: "Amount",
+  paymentCreatedAt: "Created",
+  paymentExternalReference: "External reference",
+  paymentStatus: "Status",
+  paymentsEmpty: "No Payments have been created yet.",
+  paymentsLoading: "Loading payments",
+  paymentsTitle: "Recent payments",
+  reorgAlertsSummary: "{count, plural, =0 {No open alerts} one {# open alert} other {# open alerts}}",
+  reorgAlertsTitle: "Reorg Alerts",
+  viewAddresses: "View Address Pool",
+  viewMonitoring: "View monitoring",
+  viewPayments: "View all payments",
+  viewWebhooks: "View webhooks",
+  webhookDeliveriesSummary: "{count, plural, =0 {Nothing pending} one {# pending} other {# pending}}",
+  webhookDeliveriesTitle: "Webhook deliveries"
+});
 
 export function AdminOverviewPage() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
 
   return (
@@ -36,7 +59,6 @@ export function AdminOverviewPage() {
 }
 
 function ObservationTile() {
-  const t = useTranslations("AdminPage");
   const query = useQuery(adminQueries.observationHealth());
   const currencies = query.data ?? [];
   const project = useAdminProject();
@@ -69,7 +91,6 @@ function ObservationTile() {
 }
 
 function ReorgAlertTile() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const query = useQuery(adminQueries.reorgAlerts(project.projectId));
   const count = query.data?.length ?? 0;
@@ -86,7 +107,6 @@ function ReorgAlertTile() {
 }
 
 function WebhookDeliveryTile() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const query = useQuery(adminQueries.webhookDeliveries(project.projectId));
   const count = query.data?.length ?? 0;
@@ -103,7 +123,6 @@ function WebhookDeliveryTile() {
 }
 
 function AddressPoolTile() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const query = useQuery(adminQueries.addressPool(project.projectId));
 
@@ -164,7 +183,6 @@ function Tile({
 }
 
 function RecentPayments() {
-  const t = useTranslations("AdminPage");
   const project = useAdminProject();
   const query = useQuery(adminQueries.payments(project.projectId));
   const payments = (query.data ?? []).slice(0, RECENT_PAYMENT_COUNT);
@@ -186,7 +204,12 @@ function RecentPayments() {
         <EmptyMessage>{t("paymentsEmpty")}</EmptyMessage>
       ) : null}
       {payments.length > 0 ? (
-        <div className="mt-5 overflow-x-auto">
+        <div
+          aria-label="Recent payments table"
+          className="mt-5 overflow-x-auto"
+          role="region"
+          tabIndex={0}
+        >
           <table className="w-full min-w-[560px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">

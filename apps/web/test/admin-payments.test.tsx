@@ -139,6 +139,7 @@ describe("AdminPaymentDetailPage", () => {
 
   it("settles an eligible Payment with its concurrency version and CSRF", async () => {
     state.authenticated = true;
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     adminServer.use(
       http.get(`/api/admin/payments/${paymentId}`, () =>
         HttpResponse.json({ ...paymentDetail, status: "observed", version: 3 })
@@ -173,6 +174,29 @@ describe("AdminPaymentDetailPage", () => {
         }
       });
     });
+  });
+
+  it("leaves an eligible Payment unchanged when Settlement is not confirmed", async () => {
+    state.authenticated = true;
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    adminServer.use(
+      http.get(`/api/admin/payments/${paymentId}`, () =>
+        HttpResponse.json({ ...paymentDetail, status: "observed", version: 3 })
+      )
+    );
+    renderAdmin(<AdminPaymentDetailPage paymentId={paymentId} />);
+
+    fireEvent.change(await screen.findByLabelText("Settlement reason"), {
+      target: { value: "Confirmed with the partner." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Settle Payment" }));
+
+    await vi.waitFor(() =>
+      expect(window.confirm).toHaveBeenCalledWith(
+        "Settle order-123? This records a manual resolution and cannot be undone."
+      )
+    );
+    expect(state.settlementRequest).toBeNull();
   });
 
   it("keeps the initiating Project when selection changes while CSRF is loading", async () => {
