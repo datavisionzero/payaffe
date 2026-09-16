@@ -22,7 +22,9 @@ The product exposes:
 - Use [CONTEXT.md](CONTEXT.md) for domain language. Do not invent alternate names for established terms.
 - Architecture decisions live in [docs/adr/](docs/adr/). Follow the form described in [docs/adr/README.md](docs/adr/README.md) and update the decision index there.
 - Documentation clarifies intent, domain language, and decisions. Code and tests remain the technical source of truth, and documentation should not retell them.
-- Track unresolved questions, future work, and deferred follow-ups as GitHub issues when they cannot be resolved in the current change.
+- Treat GitHub Issues as public. Create or update one only when the work is
+  intended for public discussion; otherwise report the follow-up in the handoff
+  so a maintainer can route it appropriately.
 - Do not create target folders, toolchain files, or CI jobs in advance when they do not have a concrete use yet.
 
 ## Working Language
@@ -34,7 +36,7 @@ The product exposes:
 ## Git And GitHub
 
 - This project is hosted on GitHub. `gh` is part of the normal development
-  workflow; use it for issues, pull requests, and CI checks when practical.
+  workflow; use it for public issues, pull requests, and CI checks when practical.
 - Development is trunk-based. `main` is the only long-lived branch and stays
   deployable; do not create `develop`, `release`, or Git Flow branches.
 - Use short-lived branches named `feature/`, `fix/`, `docs/`, or `chore/`
