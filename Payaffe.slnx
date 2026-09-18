@@ -21,6 +21,7 @@
     <Project Path="src/Payaffe.Application/Payaffe.Application.csproj" />
     <Project Path="src/Payaffe.Domain/Payaffe.Domain.csproj" />
     <Project Path="src/Payaffe.Infrastructure/Payaffe.Infrastructure.csproj" />
+    <Project Path="src/Payaffe.Sdk/Payaffe.Sdk.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Payaffe.Api.Tests/Payaffe.Api.Tests.csproj" />
@@ -28,6 +29,7 @@
     <Project Path="tests/Payaffe.Domain.Tests/Payaffe.Domain.Tests.csproj" />
     <Project Path="tests/Payaffe.Integration.Tests/Payaffe.Integration.Tests.csproj" />
     <Project Path="tests/Payaffe.Mcp.Tests/Payaffe.Mcp.Tests.csproj" />
+    <Project Path="tests/Payaffe.Sdk.Tests/Payaffe.Sdk.Tests.csproj" />
     <Project Path="tests/Payaffe.Worker.Tests/Payaffe.Worker.Tests.csproj" />
   </Folder>
 </Solution>
