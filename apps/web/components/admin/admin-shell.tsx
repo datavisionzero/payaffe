@@ -1,27 +1,37 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
-import {
-  defaultAdminProjectId,
-  setSelectedAdminProjectId,
-  type AdminProject,
-  type AdminSession
-} from "../../lib/admin-api";
-import { ErrorMessage, StateMessage } from "./common";
+import Link from "../../lib/link";
+import { usePathname, useRouter, useSearchParams } from "../../lib/navigation";
+import { createText } from "../../lib/text";
+import { useEffect, useRef, useState } from "react";
+import { MenuIcon, UserCircleIcon } from "lucide-react";
+import { type AdminProject, type AdminSession } from "../../lib/admin-api";
+import { ErrorMessage, StateMessage, StatusPill } from "./common";
 import { AdminNav } from "./admin-nav";
 import { adminQueries } from "./queries";
+import { ThemeSelect } from "../theme-select";
+import { AdminProjectProvider } from "./project-context";
+import { adminProjectPath, projectIdFromAdminPath, switchAdminProjectPath } from "./project-routes";
+
+const t = createText({
+  checkingSession: "Checking session",
+  loadingProjects: "Loading projects",
+  menu: "Menu",
+  project: "Project",
+  redirecting: "Taking you to sign-in.",
+  signedInAs: "Signed in as",
+  skipToContent: "Skip to content"
+});
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
-  const t = useTranslations("AdminNav");
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [navOpen, setNavOpen] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState(defaultAdminProjectId);
+  const routeProjectId = projectIdFromAdminPath(pathname);
+  const previousProjectId = useRef(routeProjectId);
   const session = useQuery(adminQueries.session());
   const projects = useQuery({
     ...adminQueries.projects(),
@@ -29,19 +39,30 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    if (!projects.data?.length) {
-      return;
+    const previous = previousProjectId.current;
+    previousProjectId.current = routeProjectId;
+    if (previous && previous !== routeProjectId) {
+      void queryClient
+        .cancelQueries({ queryKey: ["admin-project", previous] })
+        .finally(() => queryClient.removeQueries({ queryKey: ["admin-project", previous] }));
     }
+    if (routeProjectId) {
+      window.localStorage?.setItem("payaffe:selected-project-id", routeProjectId);
+    }
+  }, [queryClient, routeProjectId]);
 
-    const storedProjectId = window.localStorage?.getItem("payaffe:selected-project-id") ?? null;
-    const nextProjectId = projects.data.some((project) => project.projectId === storedProjectId)
-      ? storedProjectId!
-      : projects.data.some((project) => project.projectId === selectedProjectId)
-        ? selectedProjectId
-        : projects.data[0].projectId;
-    setSelectedAdminProjectId(nextProjectId);
-    setSelectedProjectId(nextProjectId);
-  }, [projects.data, selectedProjectId]);
+  useEffect(() => {
+    if (
+      routeProjectId &&
+      projects.data &&
+      !projects.data.some((project) => project.projectId === routeProjectId)
+    ) {
+      window.localStorage?.removeItem("payaffe:selected-project-id");
+      void queryClient
+        .cancelQueries({ queryKey: ["admin-project", routeProjectId] })
+        .finally(() => queryClient.removeQueries({ queryKey: ["admin-project", routeProjectId] }));
+    }
+  }, [projects.data, queryClient, routeProjectId]);
 
   useEffect(() => {
     const expireSession = () => {
@@ -49,6 +70,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         predicate: (candidate) => String(candidate.queryKey[0]).startsWith("admin")
       });
       queryClient.setQueryData(adminQueries.session().queryKey, null);
+      window.localStorage?.removeItem("payaffe:selected-project-id");
     };
     window.addEventListener("payaffe:admin-session-expired", expireSession);
     return () => window.removeEventListener("payaffe:admin-session-expired", expireSession);
@@ -99,23 +121,30 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const selectedProject = projects.data.find((project) => project.projectId === selectedProjectId);
-  if (!selectedProject) {
-    return <CenteredState>{t("loadingProjects")}</CenteredState>;
-  }
+  const selectedProject = routeProjectId
+    ? projects.data.find((project) => project.projectId === routeProjectId) ?? null
+    : null;
+  const routeProjectMissing = routeProjectId !== null && selectedProject === null;
 
-  setSelectedAdminProjectId(selectedProject.projectId);
-
-  const selectProject = (projectId: string) => {
-    setSelectedAdminProjectId(projectId);
+  const selectProject = async (projectId: string) => {
+    if (!projectId) {
+      router.push("/admin/projects");
+      return;
+    }
+    if (routeProjectId && routeProjectId !== projectId) {
+      await queryClient.cancelQueries({ queryKey: ["admin-project", routeProjectId] });
+      queryClient.removeQueries({ queryKey: ["admin-project", routeProjectId] });
+    }
     window.localStorage?.setItem("payaffe:selected-project-id", projectId);
-    setSelectedProjectId(projectId);
+    const nextPath = switchAdminProjectPath(pathname, projectId);
+    const query = searchParams.toString();
+    router.push(`${nextPath}${query && routeProjectId ? `?${query}` : ""}`);
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[var(--background)]">
       <a
-        className="sr-only rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-20"
+        className="sr-only rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--primary-foreground)] focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-40"
         href="#admin-main"
       >
         {t("skipToContent")}
@@ -123,17 +152,75 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <TopBar
         navOpen={navOpen}
         onToggleNav={() => setNavOpen((open) => !open)}
-        onSelectProject={selectProject}
+        onSelectProject={(projectId) => void selectProject(projectId)}
         projects={projects.data}
         selectedProject={selectedProject}
         session={session.data}
       />
-      <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
-        <AdminNav onNavigate={() => setNavOpen(false)} open={navOpen} />
-        <main className="min-w-0 px-5 py-8 sm:px-8" id="admin-main" key={selectedProject.projectId}>
-          {children}
+      {navOpen ? (
+        <button
+          aria-label="Close navigation"
+          className="fixed inset-0 top-12 z-20 bg-[color:color-mix(in_oklch,var(--foreground)_30%,transparent)] lg:hidden"
+          onClick={() => setNavOpen(false)}
+          type="button"
+        />
+      ) : null}
+      <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
+        <AdminNav
+          onNavigate={() => setNavOpen(false)}
+          open={navOpen}
+          projectId={selectedProject?.projectId ?? null}
+        />
+        <main
+          className="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
+          id="admin-main"
+          key={selectedProject?.projectId ?? "installation"}
+        >
+          {routeProjectMissing ? (
+            <div className="mx-auto max-w-xl py-8">
+              <StateMessage>
+                This Project is unavailable. It may have been removed or your access may have changed.{" "}
+                <Link className="font-medium text-[var(--brand-ink)]" href="/admin/projects">
+                  Choose a Project
+                </Link>
+              </StateMessage>
+            </div>
+          ) : selectedProject ? (
+            <AdminProjectProvider project={selectedProject}>
+              <ProjectContextBanner project={selectedProject} />
+              {selectedProject.status === "archived" ? (
+                <fieldset className="m-0 min-w-0 border-0 p-0" disabled>
+                  <legend className="sr-only">Archived Project controls are read-only</legend>
+                  {children}
+                </fieldset>
+              ) : (
+                children
+              )}
+            </AdminProjectProvider>
+          ) : (
+            children
+          )}
         </main>
       </div>
+    </div>
+  );
+}
+
+function ProjectContextBanner({ project }: { project: AdminProject }) {
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
+      <span>Project</span>
+      <Link
+        className="font-medium text-[var(--foreground)] hover:text-[var(--brand-ink)]"
+        href={adminProjectPath(project.projectId)}
+      >
+        {project.name}
+      </Link>
+      <StatusPill status={project.status} />
+      {project.status === "disabled" ? (
+        <span>New Payments and new integration configuration are disabled.</span>
+      ) : null}
+      {project.status === "archived" ? <span>Archived Projects are read-only.</span> : null}
     </div>
   );
 }
@@ -150,34 +237,36 @@ function TopBar({
   onToggleNav: () => void;
   onSelectProject: (projectId: string) => void;
   projects: AdminProject[];
-  selectedProject: AdminProject;
+  selectedProject: AdminProject | null;
   session: AdminSession;
 }) {
-  const t = useTranslations("AdminNav");
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4">
+    <header className="sticky top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--card)] px-3">
       <div className="flex items-center gap-3">
         <button
           aria-controls="admin-navigation"
           aria-expanded={navOpen}
-          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium lg:hidden"
+          className="inline-flex size-8 items-center justify-center rounded-md border border-[var(--border)] hover:bg-[var(--muted)] lg:hidden"
           onClick={onToggleNav}
           type="button"
         >
-          {t("menu")}
+          <MenuIcon aria-hidden="true" className="size-4" />
+          <span className="sr-only">{t("menu")}</span>
         </button>
-        <Link className="text-sm font-semibold text-[var(--accent)]" href="/admin">
-          payaffe
+        <Link className="flex items-center gap-2 text-sm font-semibold" href="/admin">
+          <span aria-hidden="true" className="size-4 rounded-sm bg-[var(--brand)]" />
+          <span className="hidden sm:inline">payaffe</span>
         </Link>
       </div>
-      <label className="ml-auto flex min-w-0 items-center gap-2 text-sm">
+      <label className="ml-auto flex w-28 min-w-0 items-center gap-2 text-xs sm:w-auto">
         <span className="hidden text-[var(--muted-foreground)] sm:inline">{t("project")}</span>
         <select
           aria-label={t("project")}
-          className="max-w-52 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5"
+          className="h-8 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-xs sm:max-w-56"
           onChange={(event) => onSelectProject(event.target.value)}
-          value={selectedProject.projectId}
+          value={selectedProject?.projectId ?? ""}
         >
+          <option value="">Select Project…</option>
           {projects.map((project) => (
             <option key={project.projectId} value={project.projectId}>
               {project.name} ({project.status})
@@ -185,12 +274,15 @@ function TopBar({
           ))}
         </select>
       </label>
+      <ThemeSelect compact />
       <Link
-        className="max-w-[50%] truncate text-sm font-medium hover:text-[var(--accent)]"
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--muted)]"
         href="/admin/account"
+        title={session.username}
       >
         <span className="sr-only">{t("signedInAs")} </span>
-        {session.username}
+        <UserCircleIcon aria-hidden="true" className="size-4" />
+        <span className="sr-only">{session.username}</span>
       </Link>
     </header>
   );

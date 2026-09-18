@@ -23,58 +23,46 @@ says otherwise.
 
 ### One origin, and a proxy in front
 
-The deployment file expects a reverse proxy in front of both hosts, serving the
-payer page, the Admin UI, and the API from one address. Everything the API
-answers is under two prefixes, so the routing is two rules:
-
-| Path       | Goes to      |
-| ---------- | ------------ |
-| `/api/`    | `api:8080`   |
-| `/health/` | `api:8080`   |
-| everything else | `web:3000` |
+The API container serves the built Payer/Admin SPA, browser APIs, Integration
+API, and health endpoints from one address. A reverse proxy therefore forwards
+every path to one upstream:
 
 Caddy, as a whole configuration:
 
 ```caddyfile
 pay.example.com {
-    handle /api/* {
-        reverse_proxy api:8080
-    }
-    handle /health/* {
-        reverse_proxy api:8080
-    }
-    handle {
-        reverse_proxy web:3000
-    }
+    reverse_proxy api:8080
 }
 ```
 
-nginx wants the same three locations, with `proxy_set_header Host $host` and
+nginx uses the same one upstream, with `proxy_set_header Host $host` and
 `X-Forwarded-Proto $scheme` so that the API sees the public scheme.
 
-This is why the API paths carry the `/api` prefix at all. The Admin UI is a
-page at `/admin` and the admin API used to be at `/admin/...`, which cannot be
-split by any proxy rule; moving the API under `/api/admin` and `/api/payer` is
-what makes one origin possible. The Integration API stays where it was, at
-`/api/v1`, because that one is a published contract
-([ADR 0011](../adr/0011-the-integration-api-versions-in-the-path.md)).
+The browser bundle always calls relative `/api` paths, so the published API
+image works at any installation address without a compiled-in URL. `/api` and
+`/health` never receive the SPA fallback; eligible Admin and Payer document
+navigations do, including direct deep-link reloads.
 
-The payoff is that the published `payaffe-web` image works at any address. Next
-.js compiles `NEXT_PUBLIC_*` into the browser bundle, so an image built with an
-API address in it would be pinned to one installation; the published one is
-built without, and the bundle calls `/api` on whatever origin served the page.
+### Upgrading from the separate web runtime
 
-An installation that really does answer the API at a different origin sets
-`PAYAFFE_WEB_PUBLIC_ORIGIN` for CORS and builds its own web image with the
-address compiled in:
+The Vite migration folds the browser application into the `api` image. An
+installation upgrading from a version with a separate Next.js `web` service
+must remove that service, its published port, and any reverse-proxy route that
+sent browser traffic to it. The proxy sends every path to `api:8080`; no Node.js
+process runs in production after the upgrade.
 
-```sh
-docker build -f apps/web/Dockerfile \
-  --build-arg NEXT_PUBLIC_PAYAFFE_API_BASE_URL=https://api.example.com \
-  -t payaffe-web:local .
-```
+There is no frontend data migration. Existing `/pay/{payerPageId}` links keep
+their path and load through the API host's SPA fallback. Admin deep links also
+remain reloadable; legacy unscoped Admin paths redirect only when the
+installation has one unambiguous Project. The only retained browser values are
+non-sensitive UI preferences such as the color theme and last Project ID, and
+they may safely be cleared.
 
-and sets `PAYAFFE_WEB_IMAGE=payaffe-web:local` in `.env`.
+After the normal database backup, `pull`, and `up`, verify `/health/ready`, load
+one existing Payer link directly, reload one Project-scoped Admin URL, and
+confirm an unknown `/api` path and a missing asset still return `404`. A stale
+HTML shell cannot pin an old release because `index.html` is served with
+`no-cache`; hashed assets are immutable and may remain cached.
 
 ## Published image tags
 
@@ -103,12 +91,11 @@ Both Compose files define these concrete services:
 - `db`: PostgreSQL product database.
 - `migrations`: controlled EF Core migration runner, enabled through the
   `operations` profile.
-- `api`: ASP.NET Core API host for the Integration API, Payer API, and health
-  endpoints.
+- `api`: ASP.NET Core host for APIs, health endpoints, and the built Payer/Admin
+  SPA.
 - `worker`: .NET worker host running Payment expiration, Blockchain
   Observation, Reorg Monitoring, Rate Cache refresh, Webhook Delivery, and the
   operational metric snapshot.
-- `web`: Next.js app serving the Payer Page and Admin UI routes.
 
 The Admin MCP host is not a Compose service. It is a local `stdio` process
 started by the agent client and is documented in [admin-mcp.md](admin-mcp.md).
@@ -138,9 +125,6 @@ them:
 - `PAYAFFE_DB_PASSWORD`
 - `PAYAFFE_DB_PORT`
 - `PAYAFFE_API_PORT`
-- `PAYAFFE_WEB_PORT`
-- `PAYAFFE_API_PUBLIC_URL`
-- `PAYAFFE_WEB_PUBLIC_ORIGIN`
 - `PAYAFFE_PAYER_PAGE_BASE_URL`
 - `PAYAFFE_DEPLOYMENT_ENVIRONMENT`
 - `PAYAFFE_RELEASE`
@@ -187,13 +171,10 @@ them:
 - `PAYAFFE_WORKER_HEALTH_PROBE_INTERVAL`
 - `PAYAFFE_WORKER_HEALTH_MAX_AGE`
 
-Production secrets must not be committed. The web image takes one build
-argument, the public browser API base URL, and only for the cross-origin
-topology; it carries nothing installation-specific otherwise. Browser errors are
-posted to this installation's own API and scrubbed there
+Production secrets must not be committed. The static browser application
+carries no installation-specific API URL. Browser errors are posted to this
+installation's own API and scrubbed there
 ([ADR 0026](../adr/0026-an-error-is-an-entry-and-there-is-no-error-tracker.md)).
-The API uses `PAYAFFE_WEB_PUBLIC_ORIGIN` as the allowed browser origin for
-credentials-enabled Admin and Payer browser API calls.
 Blockchain Observation mode configuration uses
 `PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE`. The accepted values are `none`,
 `blockchair`, and `nownodes`. The default `none` mode keeps provider polling
@@ -455,7 +436,7 @@ docker compose up -d
 Working on payaffe builds them from the working tree instead:
 
 ```sh
-docker compose up --build db api worker web
+docker compose up --build db api worker
 ```
 
 Logs are delivered to a logaffe installation through `PAYAFFE_LOGAFFE_URL` and
@@ -482,22 +463,18 @@ way up. Which version a pull moves to is
 
 The default local ports are:
 
-- `http://localhost:3000` for the web app.
-- `http://localhost:8080` for the API host.
+- `http://localhost:8080` for the web application and API host.
 - `localhost:5432` for PostgreSQL, from the root Compose file only. The
   deployment file does not publish the database at all.
 
-The deployment file binds both published ports to `127.0.0.1`, because the
+The deployment file binds the published port to `127.0.0.1`, because the
 reverse proxy that terminates TLS belongs in front of them. An installation
 that really is reached directly sets `PAYAFFE_BIND_ADDRESS=0.0.0.0` and accepts
 that admin sign-in then travels in the clear.
 
-Override `PAYAFFE_WEB_PORT`, `PAYAFFE_API_PORT`, or `PAYAFFE_DB_PORT` in
-`.env` when a local port is already in use. When changing the API port for
-browser access, keep `PAYAFFE_API_PUBLIC_URL` aligned because it is built into
-the public web bundle. When changing the web origin, keep
-`PAYAFFE_WEB_PUBLIC_ORIGIN` aligned so browser CORS and cookie-backed Admin
-flows keep working.
+Override `PAYAFFE_API_PORT` or `PAYAFFE_DB_PORT` in `.env` when a local port is
+already in use. Keep `PAYAFFE_PAYER_PAGE_BASE_URL` aligned with the public
+origin so newly created Payment links remain reachable.
 
 ## Health
 

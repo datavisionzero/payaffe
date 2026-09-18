@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { createText } from "../../lib/text";
 import { useForm } from "react-hook-form";
 import {
   type AddressPoolImportFormInput,
@@ -11,17 +11,36 @@ import {
 } from "../../lib/admin-api";
 import { ErrorMessage, InfoItem, PageHeader, Panel, StateMessage, SubmitButton } from "./common";
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
+import { useAdminProject } from "./project-context";
+
+const t = createText({
+  addressPoolAddresses: "Payment Addresses",
+  addressPoolDescription: "Review capacity and import non-custodial Native ETH Payment Addresses.",
+  addressPoolInputHelp: "Enter one 0x-prefixed address per line. Private keys and seed phrases must never be entered.",
+  addressPoolTitle: "Native ETH Address Pool",
+  assignedAddresses: "Assigned",
+  capacity: "Capacity",
+  capacityAvailable: "Available",
+  importAddresses: "Import addresses",
+  loading: "Loading",
+  lowCapacity: "Low capacity",
+  retiredAddresses: "Retired",
+  submitting: "Working",
+  unusedAddresses: "Unused",
+  "validation.addressPool": "Enter one or more unique Native ETH addresses in 0x format."
+});
 
 export function AdminAddressesPage() {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
   const form = useForm<AddressPoolImportFormInput>({ defaultValues: { addresses: "" } });
-  const query = useQuery(adminQueries.addressPool());
+  const query = useQuery(adminQueries.addressPool(projectId));
   const mutation = useMutation({
-    mutationFn: importAdminNativeEthAddressPool,
+    mutationFn: (addresses: string[]) => importAdminNativeEthAddressPool(projectId, addresses),
     onSuccess: async () => {
       form.reset();
-      await invalidateAdminConfiguration(queryClient);
+      await invalidateAdminConfiguration(queryClient, projectId);
     }
   });
   const submit = form.handleSubmit((values) => {
@@ -50,7 +69,7 @@ export function AdminAddressesPage() {
             <textarea
               aria-describedby={form.formState.errors.addresses ? "address-pool-error" : undefined}
               aria-invalid={form.formState.errors.addresses ? "true" : undefined}
-              className="mt-2 block min-h-36 w-full rounded-md border border-[var(--border)] bg-white p-3 font-mono text-sm"
+              className="mt-2 block min-h-36 w-full rounded-md border border-[var(--input)] bg-[var(--background)] p-3 font-mono text-sm"
               {...form.register("addresses")}
             />
           </label>
@@ -73,7 +92,6 @@ export function AdminAddressesPage() {
 }
 
 function AddressPoolSummary({ summary }: { summary: AdminNativeEthAddressPool }) {
-  const t = useTranslations("AdminPage");
   return (
     <dl className="grid gap-3 sm:grid-cols-4">
       <InfoItem label={t("unusedAddresses")} value={String(summary.unusedCount)} />

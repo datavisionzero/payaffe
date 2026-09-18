@@ -1,11 +1,35 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { createText } from "../../lib/text";
 import type React from "react";
 import { useId } from "react";
 import type { useForm } from "react-hook-form";
 import { Button } from "../ui/button";
 import { AdminApiError, type CredentialForm } from "../../lib/admin-api";
+
+const t = createText({
+  clearSensitiveValue: "Clear sensitive value",
+  correlationId: "Correlation ID: {correlationId}",
+  oneTimeValue: "Copy this value now. It is only retained in this page until you clear or leave it.",
+  "errors.unexpected": "The request could not be completed.",
+  "errors.admin_login.invalid": "The credentials are invalid.",
+  "errors.admin_mfa.invalid": "The authentication code is invalid.",
+  "errors.admin_session.invalid": "The session is no longer valid.",
+  "errors.admin_csrf.invalid": "The request expired. Retry the action.",
+  "errors.admin_step_up.invalid": "The step-up code is invalid.",
+  "errors.admin_step_up.required": "Confirm step-up before viewing this sensitive detail.",
+  "errors.audit_log.not_found": "The Audit Log entry was not found.",
+  "errors.webhook_delivery.not_found": "The Webhook Delivery was not found.",
+  "errors.webhook_delivery.not_resendable": "The Webhook Delivery cannot be resent.",
+  "errors.project.slug_conflict": "That Project slug is already in use.",
+  "errors.project.status_transition_invalid": "That Project status change is not allowed.",
+  "errors.project.has_active_work": "The Project still has active payment or delivery work and cannot be archived.",
+  "errors.project.not_found": "The Project is no longer available.",
+  "errors.rateLimited": "Too many requests. Wait before retrying.",
+  "errors.forbidden": "You are not authorized to perform this action.",
+  "errors.concurrency": "The resource changed. Refresh and retry.",
+  "errors.validationFailed": "Review the highlighted values and retry."
+});
 
 export function PageHeader({
   actions,
@@ -17,9 +41,9 @@ export function PageHeader({
   title: string;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-5">
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-4">
       <div>
-        <h1 className="text-2xl font-semibold">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">{description}</p>
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
@@ -39,10 +63,10 @@ export function AdminSection({
   title: string;
 }) {
   return (
-    <section className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5">
+    <section className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold">{title}</h2>
+          <h2 className="text-lg font-semibold">{title}</h2>
           {description ? (
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">{description}</p>
           ) : null}
@@ -56,13 +80,16 @@ export function AdminSection({
 
 export function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5">{children}</div>
+    <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">{children}</div>
   );
 }
 
 export function StatusPill({ status }: { status: string }) {
   return (
-    <span className="inline-flex rounded-md bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium">
+    <span
+      className="inline-flex rounded-md px-2 py-1 text-xs font-medium"
+      data-status={status.toLowerCase()}
+    >
       {status}
     </span>
   );
@@ -103,7 +130,7 @@ export function SecondaryButton({
 }) {
   return (
     <button
-      className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
+      className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:cursor-wait disabled:opacity-70"
       disabled={busy}
       onClick={onClick}
       type="button"
@@ -128,7 +155,7 @@ export function TextField({
     <label className="block text-sm font-medium" htmlFor={id}>
       <span>{label}</span>
       <input
-        className="mt-2 block h-11 w-full rounded-md border border-[var(--border)] bg-white px-3 text-base outline-none focus:border-[var(--accent)]"
+        className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3 text-base outline-none focus:border-[var(--brand)]"
         aria-describedby={error ? errorId : undefined}
         aria-invalid={error ? "true" : undefined}
         id={id}
@@ -145,7 +172,7 @@ export function TextField({
 
 export function InfoItem({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-sm text-[var(--muted-foreground)]">{label}</dt>
       <dd className="mt-1 break-words text-base font-medium">{value}</dd>
     </div>
@@ -154,7 +181,7 @@ export function InfoItem({ label, value }: { label: string; value: string }) {
 
 export function StateMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5 text-sm">
+    <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-5 text-sm">
       {children}
     </div>
   );
@@ -169,13 +196,12 @@ export function EmptyMessage({ children }: { children: React.ReactNode }) {
 }
 
 export function ErrorMessage({ error }: { error: Error }) {
-  const t = useTranslations("AdminPage");
   if (error instanceof AdminApiError) {
-    const message = getAdminErrorMessage(error.code, error.status, t);
+    const message = getAdminErrorMessage(error.code, error.status);
     return (
       <div
         aria-live="assertive"
-        className="mt-4 rounded-md border border-[var(--danger)] bg-white p-4 text-sm text-[var(--danger)]"
+        className="mt-4 rounded-md border border-[var(--destructive)] bg-[var(--status-danger-bg)] p-4 text-sm text-[var(--status-danger-fg)]"
         role="alert"
       >
         <span>{message}</span>
@@ -200,9 +226,8 @@ export function SensitiveValuePanel({
   onClear: () => void;
   value: string;
 }) {
-  const t = useTranslations("AdminPage");
   return (
-    <div className="mt-5 rounded-md border border-[var(--danger)] bg-white p-4" role="status">
+    <div className="mt-5 rounded-md border border-[var(--destructive)] bg-[var(--card)] p-4" role="status">
       <p className="font-semibold">{label}</p>
       <p className="mt-2 break-all font-mono text-sm">{value}</p>
       <p className="mt-2 text-sm text-[var(--muted-foreground)]">{t("oneTimeValue")}</p>
@@ -226,8 +251,7 @@ export function mapFieldError(
 
 export function getAdminErrorMessage(
   code: string | undefined,
-  status: number,
-  t: ReturnType<typeof useTranslations<"AdminPage">>
+  status: number
 ): string {
   switch (code) {
     case "admin_login.invalid":
@@ -248,6 +272,14 @@ export function getAdminErrorMessage(
       return t("errors.webhook_delivery.not_found");
     case "webhook_delivery.not_resendable":
       return t("errors.webhook_delivery.not_resendable");
+    case "project.slug_conflict":
+      return t("errors.project.slug_conflict");
+    case "project.status_transition_invalid":
+      return t("errors.project.status_transition_invalid");
+    case "project.has_active_work":
+      return t("errors.project.has_active_work");
+    case "project.not_found":
+      return t("errors.project.not_found");
     case "admin_rate_limit.exceeded":
       return t("errors.rateLimited");
     case "concurrency.conflict":

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import Link from "../../lib/link";
+import { createText } from "../../lib/text";
 import { useForm } from "react-hook-form";
 import {
   type AdminPaymentDetail,
@@ -21,10 +21,43 @@ import {
 } from "./common";
 import { formatDateTime, formatFiatAmount } from "./format";
 import { adminQueries } from "./queries";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
+
+const t = createText({
+  backToPayments: "Back to payments",
+  completedAt: "Completed",
+  confirmedEligibleTotal: "Confirmed eligible total",
+  expectedCryptoAmount: "Expected crypto amount",
+  lateAcceptanceEndsAt: "Late acceptance ends",
+  notAvailable: "Not available",
+  observedTotal: "Observed total",
+  payerPageId: "Payer Page ID",
+  paymentAddress: "Payment address",
+  paymentAmount: "Amount",
+  paymentCreatedAt: "Created",
+  paymentCurrency: "Currency",
+  paymentCurrencyUnselected: "Not selected",
+  paymentDetailDescription: "One Payment, its Blockchain Observation totals, and manual Settlement.",
+  paymentDetailLoading: "Loading payment detail",
+  paymentDetailTitle: "Payment detail",
+  paymentExpiresAt: "Expires",
+  paymentExternalReference: "External reference",
+  paymentId: "Payment ID",
+  paymentStatus: "Status",
+  settlePayment: "Settle Payment",
+  settledAt: "Settled",
+  settlementReason: "Settlement reason",
+  settlementTitle: "Manual Settlement",
+  settlementUnavailable: "This Payment is not currently eligible for manual Settlement.",
+  submitting: "Working",
+  updatedAt: "Updated",
+  "validation.settlementReason": "Enter a Settlement reason of at most 500 characters."
+});
 
 export function AdminPaymentDetailPage({ paymentId }: { paymentId: string }) {
-  const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.payment(paymentId));
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.payment(project.projectId, paymentId));
 
   return (
     <div className="space-y-6">
@@ -32,7 +65,10 @@ export function AdminPaymentDetailPage({ paymentId }: { paymentId: string }) {
         description={t("paymentDetailDescription")}
         title={query.data?.externalReference ?? t("paymentDetailTitle")}
       />
-      <Link className="inline-block text-sm font-medium text-[var(--accent)]" href="/admin/payments">
+      <Link
+        className="inline-block text-sm font-medium text-[var(--brand-ink)]"
+        href={adminProjectPath(project.projectId, "/payments")}
+      >
         {t("backToPayments")}
       </Link>
       {query.isPending ? <StateMessage>{t("paymentDetailLoading")}</StateMessage> : null}
@@ -43,18 +79,19 @@ export function AdminPaymentDetailPage({ paymentId }: { paymentId: string }) {
 }
 
 function PaymentDetailContent({ payment }: { payment: AdminPaymentDetail }) {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
   const form = useForm<SettlementForm>({ defaultValues: { reason: "" } });
   const mutation = useMutation({
     mutationFn: (values: SettlementForm) =>
-      settleAdminPayment(payment.paymentId, payment.version, values.reason),
+      settleAdminPayment(projectId, payment.paymentId, payment.version, values.reason),
     onSuccess: async (result) => {
       form.reset();
-      queryClient.setQueryData(adminQueries.payment(payment.paymentId).queryKey, result);
+      queryClient.setQueryData(adminQueries.payment(projectId, payment.paymentId).queryKey, result);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminQueries.payments().queryKey }),
-        queryClient.invalidateQueries({ queryKey: adminQueries.auditLog().queryKey })
+        queryClient.invalidateQueries({ queryKey: adminQueries.payments(projectId).queryKey }),
+        queryClient.invalidateQueries({ queryKey: adminQueries.auditLog(projectId).queryKey })
       ]);
     }
   });
@@ -67,6 +104,13 @@ function PaymentDetailContent({ payment }: { payment: AdminPaymentDetail }) {
       form.setError("reason", { message: t("validation.settlementReason") });
       return;
     }
+    if (
+      !window.confirm(
+        `Settle ${payment.externalReference}? This records a manual resolution and cannot be undone.`
+      )
+    ) {
+      return;
+    }
     mutation.mutate(parsed.data);
   });
 
@@ -74,7 +118,7 @@ function PaymentDetailContent({ payment }: { payment: AdminPaymentDetail }) {
     <>
       <Panel>
         <div className="grid gap-5 lg:grid-cols-2">
-          <dl className="grid gap-4 sm:grid-cols-2">
+          <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
             <InfoItem label={t("paymentExternalReference")} value={payment.externalReference} />
             <InfoItem label={t("paymentStatus")} value={payment.status} />
             <InfoItem
@@ -99,7 +143,7 @@ function PaymentDetailContent({ payment }: { payment: AdminPaymentDetail }) {
               value={payment.paymentAddress ?? t("notAvailable")}
             />
           </dl>
-          <dl className="grid gap-4 sm:grid-cols-2">
+          <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
             <InfoItem label={t("paymentId")} value={payment.paymentId} />
             <InfoItem label={t("payerPageId")} value={payment.payerPageId} />
             <InfoItem label={t("paymentCreatedAt")} value={formatDateTime(payment.createdAt)} />

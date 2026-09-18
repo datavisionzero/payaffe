@@ -3,7 +3,7 @@ import { HttpResponse, http } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminPaymentDetailPage } from "../components/admin/payment-detail-page";
 import { AdminPaymentsPage } from "../components/admin/payments-page";
-import { setSelectedAdminProjectId, settleAdminPayment } from "../lib/admin-api";
+import { settleAdminPayment } from "../lib/admin-api";
 import {
   adminServer,
   paymentDetail,
@@ -15,7 +15,7 @@ import {
 } from "./admin-harness";
 
 const nav = vi.hoisted(() => ({ search: "", replace: vi.fn(), push: vi.fn() }));
-vi.mock("next/navigation", () => ({
+vi.mock("../lib/navigation", () => ({
   useRouter: () => ({
     back: vi.fn(),
     forward: vi.fn(),
@@ -47,7 +47,7 @@ describe("AdminPaymentsPage", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Payments" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "order-123" })).toHaveAttribute(
       "href",
-      `/admin/payments/${paymentId}`
+      `/admin/projects/${projectId}/payments/${paymentId}`
     );
     expect(screen.getByRole("link", { name: "order-124" })).toBeInTheDocument();
     // The status filter offers the same words, so this asks the table itself.
@@ -99,6 +99,25 @@ describe("AdminPaymentsPage", () => {
     expect(await screen.findByRole("link", { name: "order-124" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "order-123" })).not.toBeInTheDocument();
   });
+
+  it("shows a safe authorization state when Project access is denied", async () => {
+    state.authenticated = true;
+    adminServer.use(
+      http.get("/api/admin/payments", () =>
+        HttpResponse.json(
+          { title: "Forbidden.", code: "admin.forbidden", detail: "internal policy detail" },
+          { status: 403 }
+        )
+      )
+    );
+    renderAdmin(<AdminPaymentsPage />);
+
+    expect(
+      await screen.findByText("You are not authorized to perform this action.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("internal policy detail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "order-123" })).not.toBeInTheDocument();
+  });
 });
 
 describe("AdminPaymentDetailPage", () => {
@@ -114,12 +133,13 @@ describe("AdminPaymentDetailPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to payments" })).toHaveAttribute(
       "href",
-      "/admin/payments"
+      `/admin/projects/${projectId}/payments`
     );
   });
 
   it("settles an eligible Payment with its concurrency version and CSRF", async () => {
     state.authenticated = true;
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     adminServer.use(
       http.get(`/api/admin/payments/${paymentId}`, () =>
         HttpResponse.json({ ...paymentDetail, status: "observed", version: 3 })
@@ -156,8 +176,32 @@ describe("AdminPaymentDetailPage", () => {
     });
   });
 
+  it("leaves an eligible Payment unchanged when Settlement is not confirmed", async () => {
+    state.authenticated = true;
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    adminServer.use(
+      http.get(`/api/admin/payments/${paymentId}`, () =>
+        HttpResponse.json({ ...paymentDetail, status: "observed", version: 3 })
+      )
+    );
+    renderAdmin(<AdminPaymentDetailPage paymentId={paymentId} />);
+
+    fireEvent.change(await screen.findByLabelText("Settlement reason"), {
+      target: { value: "Confirmed with the partner." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Settle Payment" }));
+
+    await vi.waitFor(() =>
+      expect(window.confirm).toHaveBeenCalledWith(
+        "Settle order-123? This records a manual resolution and cannot be undone."
+      )
+    );
+    expect(state.settlementRequest).toBeNull();
+  });
+
   it("keeps the initiating Project when selection changes while CSRF is loading", async () => {
     const otherProjectId = "ebc46c0b-c785-47d5-a2b6-5d417374bd79";
+    let selectedProjectId = projectId;
     let releaseCsrf!: () => void;
     const csrfGate = new Promise<void>((resolve) => {
       releaseCsrf = resolve;
@@ -180,9 +224,8 @@ describe("AdminPaymentDetailPage", () => {
       })
     );
 
-    setSelectedAdminProjectId(projectId);
-    const settlement = settleAdminPayment(paymentId, 3, "Captured Project");
-    setSelectedAdminProjectId(otherProjectId);
+    const settlement = settleAdminPayment(selectedProjectId, paymentId, 3, "Captured Project");
+    selectedProjectId = otherProjectId;
     releaseCsrf();
     await settlement;
 

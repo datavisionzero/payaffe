@@ -16,7 +16,6 @@ set -euo pipefail
 PROJECT="payaffe-smoke"
 ENV_FILE="$(mktemp -t payaffe-smoke-env.XXXXXX)"
 API_PORT="18080"
-WEB_PORT="13000"
 DB_PORT="15432"
 RECEIVER="payaffe-smoke-receiver"
 KEEP="false"
@@ -59,13 +58,10 @@ CREDENTIAL_ID="11111111-1111-4111-8111-111111111111"
   echo "PAYAFFE_DB_PASSWORD=smoke-$(openssl rand -hex 12)"
   echo "PAYAFFE_DB_PORT=$DB_PORT"
   echo "PAYAFFE_API_PORT=$API_PORT"
-  echo "PAYAFFE_WEB_PORT=$WEB_PORT"
-  echo "PAYAFFE_API_PUBLIC_URL=http://localhost:$API_PORT"
-  echo "PAYAFFE_WEB_PUBLIC_ORIGIN=http://localhost:$WEB_PORT"
-  echo "PAYAFFE_PAYER_PAGE_BASE_URL=http://localhost:$WEB_PORT/pay"
+  echo "PAYAFFE_PAYER_PAGE_BASE_URL=http://localhost:$API_PORT/pay"
   echo "PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1=$WEBHOOK_SECRET"
 } >"$ENV_FILE"
-note "Compose project: $PROJECT (ports $API_PORT/$WEB_PORT/$DB_PORT)"
+note "Compose project: $PROJECT (ports $API_PORT/$DB_PORT)"
 
 compose down -v >/dev/null 2>&1 || true
 compose build >/dev/null
@@ -82,7 +78,7 @@ fi
 
 section "Starting the product hosts"
 
-compose up -d db api worker web >/dev/null
+compose up -d db api worker >/dev/null
 
 wait_healthy() {
   local service="$1" attempts="${2:-60}" status
@@ -95,7 +91,7 @@ wait_healthy() {
   return 1
 }
 
-for service in db api worker web; do
+for service in db api worker; do
   if wait_healthy "$service"; then
     pass "Service '$service' reports healthy"
   else
@@ -131,8 +127,10 @@ section "Seeding a smoke Integration API Credential"
 # database authority could. Everything after this point uses the public API.
 compose exec -T db psql --quiet --username "$(grep -m1 '^PAYAFFE_DB_USER=' "$ENV_FILE" | cut -d= -f2)" \
   --dbname "$(grep -m1 '^PAYAFFE_DB_NAME=' "$ENV_FILE" | cut -d= -f2)" >/dev/null <<SQL
-insert into auth.integration_api_credentials (id, name, token_hash, status, created_at, updated_at, version)
-values ('$CREDENTIAL_ID', 'release smoke', '$TOKEN_HASH', 'active', now(), now(), 1);
+insert into auth.integration_api_credentials
+  (project_id, id, name, token_hash, status, created_at, updated_at, version)
+values
+  ('00000000-0000-0000-0000-000000000001', '$CREDENTIAL_ID', 'release smoke', '$TOKEN_HASH', 'active', now(), now(), 1);
 SQL
 pass "Integration API Credential seeded"
 
@@ -201,7 +199,7 @@ else
   fail "Payer API returned $STATUS"
 fi
 
-STATUS="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$WEB_PORT/pay/$PAYER_PAGE_ID")"
+STATUS="$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: text/html' "http://localhost:$API_PORT/pay/$PAYER_PAGE_ID")"
 if [ "$STATUS" = "200" ]; then
   pass "Web app renders the Payer Page"
 else

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useRouter } from "../../lib/navigation";
+import { createText } from "../../lib/text";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -18,9 +18,29 @@ import {
 } from "../../lib/admin-api";
 import { ErrorMessage, SubmitButton, TextField } from "./common";
 import { adminQueries } from "./queries";
+import { ThemeSelect } from "../theme-select";
+
+const t = createText({
+  back: "Back",
+  continue: "Continue",
+  loginDescription: "Use your local Admin Account.",
+  loginTitle: "Admin sign-in",
+  mfaDescription: "Enter the six-digit code from your authenticator app.",
+  mfaTitle: "Multi-factor authentication",
+  password: "Password",
+  recoveryCode: "Recovery code",
+  signIn: "Sign in",
+  submitting: "Working",
+  totpCode: "Authentication code",
+  useAuthenticatorCode: "Use authenticator code",
+  useRecoveryCode: "Use recovery code",
+  username: "Username",
+  "validation.loginRequired": "Username and password are required.",
+  "validation.recoveryCode": "Enter a recovery code.",
+  "validation.totpCode": "Enter a six-digit authentication code."
+});
 
 export function AdminLoginPage() {
-  const t = useTranslations("AdminPage");
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useQuery(adminQueries.session());
@@ -110,8 +130,14 @@ export function AdminLoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-12">
-      <p className="text-sm font-medium text-[var(--accent)]">payaffe</p>
-      <section className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface)] p-5">
+      <div className="flex items-center justify-between gap-4">
+        <p className="flex items-center gap-2 text-sm font-semibold">
+          <span aria-hidden="true" className="size-4 rounded-sm bg-[var(--brand)]" />
+          payaffe
+        </p>
+        <ThemeSelect compact />
+      </div>
+      <section className="mt-4 rounded-md border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
         <h1 className="text-xl font-semibold">{challengeId ? t("mfaTitle") : t("loginTitle")}</h1>
         <p className="mt-2 text-sm text-[var(--muted-foreground)]">
           {challengeId ? t("mfaDescription") : t("loginDescription")}
@@ -154,7 +180,7 @@ export function AdminLoginPage() {
                 {mfaMutation.isPending ? t("submitting") : t("signIn")}
               </SubmitButton>
               <button
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)]"
                 onClick={() => {
                   setChallengeId(null);
                   mfaForm.reset({ totpCode: "" });
@@ -165,7 +191,7 @@ export function AdminLoginPage() {
                 {t("back")}
               </button>
               <button
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)]"
                 onClick={() => {
                   setMfaMode("recovery");
                   mfaForm.reset({ totpCode: "" });
@@ -191,7 +217,7 @@ export function AdminLoginPage() {
                 {mfaMutation.isPending ? t("submitting") : t("signIn")}
               </SubmitButton>
               <button
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)]"
                 onClick={() => {
                   setMfaMode("totp");
                   recoveryCodeForm.reset({ recoveryCode: "" });
@@ -201,7 +227,7 @@ export function AdminLoginPage() {
                 {t("useAuthenticatorCode")}
               </button>
               <button
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)]"
                 onClick={() => {
                   setChallengeId(null);
                   mfaForm.reset({ totpCode: "" });

@@ -31,9 +31,9 @@ name: payaffe
 # differs.
 x-backend-environment: &backend-environment
   ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
-  # One public address for the whole installation, because the reverse proxy
-  # serves both hosts from it. The payer page and the origin the API accepts
-  # browser calls from are derived from it, so they cannot disagree.
+  # One public address for the whole installation. The API host serves both the
+  # browser application and its API, so generated payer links cannot disagree
+  # with the application origin.
   Payments__PayerPageBaseUrl: ${PAYAFFE_PUBLIC_URL:?Set PAYAFFE_PUBLIC_URL in .env}/pay
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}
   Webhooks__EndpointSecrets__partner-v2: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2:-}
@@ -134,9 +134,6 @@ services:
       # requests only. Running both would poll every provider twice; the leases
       # make it safe, not useful.
       Workers__RunInApiHost: ${PAYAFFE_RUN_WORKERS_IN_API_HOST:-false}
-      # Same-origin needs no CORS, but naming the origin costs nothing and is
-      # what the split-origin topology needs.
-      Web__AllowedOrigins__0: ${PAYAFFE_WEB_PUBLIC_ORIGIN:-${PAYAFFE_PUBLIC_URL}}
       Admin__Authentication__RateLimitPermitLimit: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_PERMIT_LIMIT:-30}
       Admin__Authentication__RateLimitWindow: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_WINDOW:-00:05:00}
       IntegrationApi__RateLimit__PermitLimit: ${PAYAFFE_INTEGRATION_API_RATE_LIMIT_PERMIT_LIMIT:-120}
@@ -204,37 +201,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-
-  # The published image carries no API address. Next.js compiles NEXT_PUBLIC_*
-  # into the browser bundle, so an image built with one would be pinned to a
-  # single installation; without one, the bundle calls /api on whatever origin
-  # served the page. That works because the reverse proxy in front serves both
-  # hosts from one address, which is the topology this file assumes:
-  #
-  #   /api/ and /health/  ->  api:8080
-  #   everything else     ->  web:3000
-  #
-  # An installation whose API really does answer at a different origin builds
-  # its own web image with that address compiled in and names it in
-  # PAYAFFE_WEB_IMAGE. docs/operations/docker-compose.md has both, including a
-  # complete Caddy configuration.
-  web:
-    image: ${PAYAFFE_WEB_IMAGE:-ghcr.io/datavisionzero/payaffe-web:${PAYAFFE_VERSION:-latest}}
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_started
-    environment:
-      HOSTNAME: 0.0.0.0
-      PORT: 3000
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:3000/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    ports:
-      - "${PAYAFFE_BIND_ADDRESS:-127.0.0.1}:${PAYAFFE_WEB_PORT:-3000}:3000"
 
 volumes:
   db-data:

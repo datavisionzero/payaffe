@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -27,32 +27,51 @@ import {
 } from "./common";
 import { formatDateTime } from "./format";
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
+import { useAdminProject } from "./project-context";
+
+const t = createText({
+  createCredential: "Create credential",
+  credentialLastUsed: "Last used: {value}",
+  credentialName: "Credential name",
+  credentialToken: "New Integration API bearer token",
+  credentialsDescription: "Create, rotate, and disable credentials used by external systems.",
+  credentialsTitle: "Integration API Credentials",
+  disableCredential: "Disable credential",
+  loading: "Loading",
+  notAvailable: "Not available",
+  rotateCredential: "Rotate token",
+  submitting: "Working",
+  "validation.credentialName": "Enter a credential name of at most 255 characters."
+});
 
 export function AdminIntegrationsPage() {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
   const [secret, setSecret] = useState<AdminIntegrationApiCredentialSecret | null>(null);
   const form = useForm<CredentialForm>({ defaultValues: { name: "" } });
-  const query = useQuery(adminQueries.credentials());
+  const query = useQuery(adminQueries.credentials(projectId));
   const createMutation = useMutation({
-    mutationFn: createAdminIntegrationApiCredential,
+    mutationFn: (name: string) => createAdminIntegrationApiCredential(projectId, name),
     onSuccess: async (result) => {
       setSecret(result);
       form.reset();
-      await invalidateAdminConfiguration(queryClient);
+      await invalidateAdminConfiguration(queryClient, projectId);
     },
     onError: (error) => mapFieldError(error, "name", form, t("validation.credentialName"))
   });
   const rotateMutation = useMutation({
-    mutationFn: rotateAdminIntegrationApiCredential,
+    mutationFn: (credential: AdminIntegrationApiCredential) =>
+      rotateAdminIntegrationApiCredential(projectId, credential),
     onSuccess: async (result) => {
       setSecret(result);
-      await invalidateAdminConfiguration(queryClient);
+      await invalidateAdminConfiguration(queryClient, projectId);
     }
   });
   const disableMutation = useMutation({
-    mutationFn: disableAdminIntegrationApiCredential,
-    onSuccess: async () => invalidateAdminConfiguration(queryClient)
+    mutationFn: (credential: AdminIntegrationApiCredential) =>
+      disableAdminIntegrationApiCredential(projectId, credential),
+    onSuccess: async () => invalidateAdminConfiguration(queryClient, projectId)
   });
   const submit = form.handleSubmit((values) => {
     const parsed = credentialFormSchema.safeParse(values);

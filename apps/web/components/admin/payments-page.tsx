@@ -1,14 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import Link from "../../lib/link";
+import { useSearchParams } from "../../lib/navigation";
+import { createText } from "../../lib/text";
 import { useEffect, useId, useState } from "react";
 import type { AdminPaymentSummary } from "../../lib/admin-api";
-import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage } from "./common";
+import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage, StatusPill } from "./common";
 import { formatDateTime, formatFiatAmount } from "./format";
 import { adminQueries } from "./queries";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
 
 const PAYMENT_STATUSES = [
   "pending_currency_selection",
@@ -18,13 +20,32 @@ const PAYMENT_STATUSES = [
   "expired",
   "settled"
 ];
+const t = createText({
+  filterScope: "The filter applies to the {count, plural, one {# most recent Payment} other {# most recent Payments}} loaded on this page.",
+  filterSearch: "Search external reference",
+  filterStatus: "Status",
+  filterStatusAll: "All statuses",
+  paymentAmount: "Amount",
+  paymentCount: "{count, plural, one {# payment} other {# payments}}",
+  paymentCreatedAt: "Created",
+  paymentCurrency: "Currency",
+  paymentCurrencyUnselected: "Not selected",
+  paymentExpiresAt: "Expires",
+  paymentExternalReference: "External reference",
+  paymentStatus: "Status",
+  paymentsDescription: "Latest Payment records visible to authenticated Admins.",
+  paymentsEmpty: "No Payments have been created yet.",
+  paymentsFilteredEmpty: "No Payment matches the current filter.",
+  paymentsLoading: "Loading payments",
+  paymentsPageTitle: "Payments"
+});
 
 export function AdminPaymentsPage() {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
   const searchParams = useSearchParams();
   const statusFieldId = useId();
   const searchFieldId = useId();
-  const query = useQuery(adminQueries.payments());
+  const query = useQuery(adminQueries.payments(project.projectId));
   const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
 
@@ -70,7 +91,7 @@ export function AdminPaymentsPage() {
           <label className="block text-sm font-medium" htmlFor={statusFieldId}>
             <span>{t("filterStatus")}</span>
             <select
-              className="mt-2 block h-11 w-full rounded-md border border-[var(--border)] bg-white px-3"
+              className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
               id={statusFieldId}
               onChange={(event) => setStatus(event.target.value)}
               value={status}
@@ -86,7 +107,7 @@ export function AdminPaymentsPage() {
           <label className="block text-sm font-medium" htmlFor={searchFieldId}>
             <span>{t("filterSearch")}</span>
             <input
-              className="mt-2 block h-11 w-full rounded-md border border-[var(--border)] bg-white px-3 text-base outline-none focus:border-[var(--accent)]"
+              className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3 text-base outline-none focus:border-[var(--brand)]"
               id={searchFieldId}
               onChange={(event) => setSearch(event.target.value)}
               type="search"
@@ -111,17 +132,18 @@ export function AdminPaymentsPage() {
           {payments.length > 0 && filtered.length === 0 ? (
             <EmptyMessage>{t("paymentsFilteredEmpty")}</EmptyMessage>
           ) : null}
-          {filtered.length > 0 ? <PaymentTable payments={filtered} /> : null}
+          {filtered.length > 0 ? (
+            <PaymentTable payments={filtered} projectId={project.projectId} />
+          ) : null}
         </Panel>
       ) : null}
     </div>
   );
 }
 
-function PaymentTable({ payments }: { payments: AdminPaymentSummary[] }) {
-  const t = useTranslations("AdminPage");
+function PaymentTable({ payments, projectId }: { payments: AdminPaymentSummary[]; projectId: string }) {
   return (
-    <div className="overflow-x-auto">
+    <div aria-label="Payments table" className="overflow-x-auto" role="region" tabIndex={0}>
       <table className="w-full min-w-[760px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">
@@ -138,16 +160,14 @@ function PaymentTable({ payments }: { payments: AdminPaymentSummary[] }) {
             <tr className="border-b border-[var(--border)] last:border-0" key={payment.paymentId}>
               <td className="max-w-[220px] break-words py-3 pr-4 font-medium">
                 <Link
-                  className="text-[var(--accent)] hover:text-[var(--accent-strong)]"
-                  href={`/admin/payments/${payment.paymentId}`}
+                  className="text-[var(--brand-ink)] hover:text-[var(--brand-ink)]"
+                  href={adminProjectPath(projectId, `/payments/${payment.paymentId}`)}
                 >
                   {payment.externalReference}
                 </Link>
               </td>
               <td className="py-3 pr-4">
-                <span className="inline-flex rounded-md bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium">
-                  {payment.status}
-                </span>
+                <StatusPill status={payment.status} />
               </td>
               <td className="py-3 pr-4">
                 {formatFiatAmount(payment.fiatCurrency, payment.fiatAmountMinor)}

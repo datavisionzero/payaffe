@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import Link from "../../lib/link";
+import { useSearchParams } from "../../lib/navigation";
+import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -31,6 +31,8 @@ import {
 } from "./common";
 import { formatDateTime } from "./format";
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
 
 const WEBHOOK_EVENT_TYPES = [
   "payment.created",
@@ -40,9 +42,49 @@ const WEBHOOK_EVENT_TYPES = [
   "payment.expired",
   "payment.settled"
 ];
+const t = createText({
+  allEvents: "All supported Payment events",
+  createWebhookEndpoint: "Create Webhook Endpoint",
+  credential: "Integration API Credential",
+  disableWebhookEndpoint: "Disable Webhook Endpoint",
+  eventTypes: "Payment event types",
+  loading: "Loading",
+  newSecretReference: "New secret reference",
+  notAvailable: "Not available",
+  rotateWebhookSecret: "Rotate secret reference",
+  secretReference: "Secret reference",
+  secretReferenceSummary: "Secret reference: {value}",
+  selectCredential: "Select a credential",
+  submitting: "Working",
+  updateWebhookEndpoint: "Update Webhook Endpoint",
+  "validation.webhookEndpoint": "Select a credential and enter a valid URL and secret reference.",
+  webhookAction: "Action",
+  webhookAttempts: "Attempts",
+  webhookDeliveriesDescription: "Failed or retry-pending Webhook Events that can be resent.",
+  webhookDeliveriesEmpty: "No failed Webhook Deliveries are pending.",
+  webhookDeliveriesLoading: "Loading Webhook Deliveries",
+  webhookDeliveriesTab: "Deliveries",
+  webhookDeliveriesTitle: "Webhook deliveries",
+  webhookDeliveryCount: "{count, plural, one {# delivery} other {# deliveries}}",
+  webhookDeliveryResent: "Resend completed with status {status}.",
+  webhookEndpointsDescription: "Manage the external destinations configured for Payment events.",
+  webhookEndpointsTab: "Endpoints",
+  webhookEndpointsTitle: "Webhook Endpoints",
+  webhookEventType: "Event",
+  webhookLastAttempt: "Last attempt",
+  webhookLastError: "Last error",
+  webhookPayment: "Payment",
+  webhookResend: "Resend",
+  webhookStatus: "Status",
+  webhookUrl: "Webhook Endpoint URL",
+  webhookViews: "Webhook views",
+  webhooksDescription: "The destinations Payment events are sent to, and the deliveries that did not arrive.",
+  webhooksTitle: "Webhooks"
+});
 
 export function AdminWebhooksPage() {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const webhookPath = adminProjectPath(project.projectId, "/webhooks");
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "deliveries" ? "deliveries" : "endpoints";
 
@@ -54,10 +96,10 @@ export function AdminWebhooksPage() {
           of them can be linked to directly. */}
       <nav aria-label={t("webhookViews")}>
         <ul className="flex flex-wrap gap-2 border-b border-[var(--border)]">
-          <ViewTab active={view === "endpoints"} href="/admin/webhooks">
+          <ViewTab active={view === "endpoints"} href={webhookPath}>
             {t("webhookEndpointsTab")}
           </ViewTab>
-          <ViewTab active={view === "deliveries"} href="/admin/webhooks?view=deliveries">
+          <ViewTab active={view === "deliveries"} href={`${webhookPath}?view=deliveries`}>
             {t("webhookDeliveriesTab")}
           </ViewTab>
         </ul>
@@ -74,7 +116,7 @@ function ViewTab({
 }: {
   active: boolean;
   children: React.ReactNode;
-  href: "/admin/webhooks" | "/admin/webhooks?view=deliveries";
+  href: string;
 }) {
   return (
     <li>
@@ -83,7 +125,7 @@ function ViewTab({
         className={cn(
           "-mb-px inline-block border-b-2 px-3 py-2 text-sm font-medium",
           active
-            ? "border-[var(--accent)] text-[var(--accent-strong)]"
+            ? "border-[var(--brand)] text-[var(--brand-ink)]"
             : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         )}
         href={href}
@@ -95,10 +137,11 @@ function ViewTab({
 }
 
 function WebhookEndpointSection() {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
-  const credentials = useQuery(adminQueries.credentials());
-  const query = useQuery(adminQueries.webhookEndpoints());
+  const credentials = useQuery(adminQueries.credentials(projectId));
+  const query = useQuery(adminQueries.webhookEndpoints(projectId));
   const form = useForm<WebhookEndpointForm>({
     defaultValues: {
       integrationApiCredentialId: "",
@@ -108,10 +151,10 @@ function WebhookEndpointSection() {
     }
   });
   const mutation = useMutation({
-    mutationFn: createAdminWebhookEndpoint,
+    mutationFn: (command: WebhookEndpointForm) => createAdminWebhookEndpoint(projectId, command),
     onSuccess: async () => {
       form.reset();
-      await invalidateAdminConfiguration(queryClient);
+      await invalidateAdminConfiguration(queryClient, projectId);
     }
   });
   const submit = form.handleSubmit((values) => {
@@ -132,7 +175,7 @@ function WebhookEndpointSection() {
         <label className="block text-sm font-medium">
           <span>{t("credential")}</span>
           <select
-            className="mt-2 block h-11 w-full rounded-md border border-[var(--border)] bg-white px-3"
+            className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
             {...form.register("integrationApiCredentialId")}
           >
             <option value="">{t("selectCredential")}</option>
@@ -175,7 +218,6 @@ function EventTypeFields({
 }: {
   register: ReturnType<typeof useForm<WebhookEndpointForm>>["register"];
 }) {
-  const t = useTranslations("AdminPage");
   return (
     <fieldset>
       <legend className="text-sm font-medium">{t("eventTypes")}</legend>
@@ -192,27 +234,28 @@ function EventTypeFields({
 }
 
 function WebhookEndpointItem({ endpoint }: { endpoint: AdminWebhookEndpoint }) {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
   const form = useForm<{ url: string; secretReference: string }>({
     defaultValues: { url: endpoint.url, secretReference: "" }
   });
   const updateMutation = useMutation({
     mutationFn: (url: string) =>
-      updateAdminWebhookEndpoint(endpoint, { url, eventTypes: endpoint.eventTypes }),
-    onSuccess: async () => invalidateAdminConfiguration(queryClient)
+      updateAdminWebhookEndpoint(projectId, endpoint, { url, eventTypes: endpoint.eventTypes }),
+    onSuccess: async () => invalidateAdminConfiguration(queryClient, projectId)
   });
   const rotateMutation = useMutation({
     mutationFn: (secretReference: string) =>
-      rotateAdminWebhookEndpointSecret(endpoint, secretReference),
+      rotateAdminWebhookEndpointSecret(projectId, endpoint, secretReference),
     onSuccess: async () => {
       form.reset({ url: endpoint.url, secretReference: "" });
-      await invalidateAdminConfiguration(queryClient);
+      await invalidateAdminConfiguration(queryClient, projectId);
     }
   });
   const disableMutation = useMutation({
-    mutationFn: () => disableAdminWebhookEndpoint(endpoint),
-    onSuccess: async () => invalidateAdminConfiguration(queryClient)
+    mutationFn: () => disableAdminWebhookEndpoint(projectId, endpoint),
+    onSuccess: async () => invalidateAdminConfiguration(queryClient, projectId)
   });
 
   return (
@@ -260,17 +303,18 @@ function WebhookEndpointItem({ endpoint }: { endpoint: AdminWebhookEndpoint }) {
 }
 
 function WebhookDeliverySection() {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
+  const projectId = project.projectId;
   const queryClient = useQueryClient();
-  const query = useQuery(adminQueries.webhookDeliveries());
+  const query = useQuery(adminQueries.webhookDeliveries(projectId));
   const [resentDelivery, setResentDelivery] = useState<AdminWebhookDeliveryResend | null>(null);
   const resendMutation = useMutation({
-    mutationFn: resendAdminWebhookDelivery,
+    mutationFn: (eventId: string) => resendAdminWebhookDelivery(projectId, eventId),
     onSuccess: async (result) => {
       setResentDelivery(result);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminQueries.webhookDeliveries().queryKey }),
-        queryClient.invalidateQueries({ queryKey: adminQueries.auditLog().queryKey })
+        queryClient.invalidateQueries({ queryKey: adminQueries.webhookDeliveries(projectId).queryKey }),
+        queryClient.invalidateQueries({ queryKey: adminQueries.auditLog(projectId).queryKey })
       ]);
     }
   });
@@ -298,7 +342,12 @@ function WebhookDeliverySection() {
         <EmptyMessage>{t("webhookDeliveriesEmpty")}</EmptyMessage>
       ) : null}
       {deliveries.length > 0 ? (
-        <div className="mt-5 overflow-x-auto">
+        <div
+          aria-label="Webhook deliveries table"
+          className="mt-5 overflow-x-auto"
+          role="region"
+          tabIndex={0}
+        >
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">
@@ -337,9 +386,17 @@ function WebhookDeliverySection() {
                   </td>
                   <td className="py-3">
                     <button
-                      className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
+                      className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium hover:border-[var(--brand)] disabled:cursor-wait disabled:opacity-70"
                       disabled={resendMutation.isPending}
-                      onClick={() => resendMutation.mutate(delivery.webhookEventId)}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Resend ${delivery.eventType} for ${delivery.paymentExternalReference}?`
+                          )
+                        ) {
+                          resendMutation.mutate(delivery.webhookEventId);
+                        }
+                      }}
                       type="button"
                     >
                       {resendMutation.isPending ? t("submitting") : t("webhookResend")}

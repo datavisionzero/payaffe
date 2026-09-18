@@ -3,10 +3,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { NextIntlClientProvider } from "next-intl";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { PayerPage } from "../components/payer-page";
-import messages from "../messages/en.json";
+import { ThemeProvider } from "../components/theme-provider";
 
 const pendingPayment = {
   paymentId: "78d8a09b-1c4a-4b6e-9f94-f8acbd4278f1",
@@ -50,7 +49,10 @@ const server = setupServer(
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  vi.useRealTimers();
+  server.resetHandlers();
+});
 afterAll(() => server.close());
 
 describe("PayerPage", () => {
@@ -75,6 +77,56 @@ describe("PayerPage", () => {
     expect(screen.getByText("0.00039980 BTC")).toBeInTheDocument();
     expect(screen.getByText("btc-test-address")).toBeInTheDocument();
     expect(screen.getByLabelText("QR code for the payment instruction")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open payment instruction in a compatible wallet" })
+    ).toHaveAttribute("href", "bitcoin:btc-test-address?amount=0.00039980");
+  });
+
+  it("explains when every Payment Option is unavailable", async () => {
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
+        HttpResponse.json({
+          ...pendingPayment,
+          paymentOptions: pendingPayment.paymentOptions.map((option) => ({
+            ...option,
+            status: "unavailable",
+            unavailableReasonCode: "blockchain_observation.unavailable"
+          }))
+        })
+      )
+    );
+    renderPayerPage();
+
+    expect(
+      await screen.findByText(
+        "No Payment Option is currently usable. Please retry later or contact the shop."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button").every((button) => button.hasAttribute("disabled"))).toBe(
+      true
+    );
+  });
+
+  it("polls until the Payment reaches a final state", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let reads = 0;
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () => {
+        reads += 1;
+        return HttpResponse.json({
+          ...selectedPayment,
+          status: reads === 1 ? "waiting_for_payment" : "completed",
+          completedAt: reads === 1 ? null : "2026-07-04T12:30:00Z"
+        });
+      })
+    );
+    renderPayerPage();
+
+    expect(await screen.findByText("Waiting for payment")).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await screen.findByText("Payment completed")).toBeInTheDocument();
+    expect(reads).toBe(2);
   });
 
   it.each([
@@ -157,10 +209,10 @@ function renderPayerPage() {
   });
 
   return render(
-    <NextIntlClientProvider locale="en" messages={messages}>
+    <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <PayerPage payerPageId="fixed-payer-page-id" />
       </QueryClientProvider>
-    </NextIntlClientProvider>
+    </ThemeProvider>
   );
 }

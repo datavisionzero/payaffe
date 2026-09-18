@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { createText } from "../../lib/text";
 import type { AdminObservationHealth, AdminReorgAlert } from "../../lib/admin-api";
 import {
   AdminSection,
@@ -14,13 +14,37 @@ import {
 } from "./common";
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
+import { useAdminProject } from "./project-context";
+
+const t = createText({
+  lastFailure: "Last failure",
+  lastSuccess: "Last success",
+  loading: "Loading",
+  monitoringDescription: "Whether Blockchain Observation is working, and which completed Payments a reorganization touched.",
+  monitoringTitle: "Monitoring",
+  newConfirmations: "New confirmations",
+  notAvailable: "Not available",
+  observationHealthDescription: "Current safe availability summary for Blockchain Observation.",
+  observationHealthTitle: "Observation Health",
+  previousConfirmations: "Previous confirmations",
+  provider: "Configured provider",
+  reorgAlertsDescription: "Warnings for completed Payments affected by a blockchain reorganization.",
+  reorgAlertsEmpty: "No Reorg Alerts are available.",
+  reorgAlertsTitle: "Reorg Alerts",
+  safeErrorCode: "Safe error code",
+  transactionHash: "Transaction hash",
+  updatedAt: "Updated"
+});
 
 export function AdminMonitoringPage() {
-  const t = useTranslations("AdminPage");
+  const project = useAdminProject();
 
   return (
     <div className="space-y-6">
-      <PageHeader description={t("monitoringDescription")} title={t("monitoringTitle")} />
+      <PageHeader
+        description={`${project.name} · ${t("monitoringDescription")}`}
+        title={t("monitoringTitle")}
+      />
       <ObservationSection />
       <ReorgAlertSection />
     </div>
@@ -28,13 +52,12 @@ export function AdminMonitoringPage() {
 }
 
 function ObservationSection() {
-  const t = useTranslations("AdminPage");
   const query = useQuery(adminQueries.observationHealth());
 
   return (
     <AdminSection
       description={t("observationHealthDescription")}
-      title={t("observationHealthTitle")}
+      title={`Installation-wide ${t("observationHealthTitle")}`}
     >
       {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
       {query.isError ? <ErrorMessage error={query.error} /> : null}
@@ -77,8 +100,8 @@ function ObservationSection() {
 }
 
 function ReorgAlertSection() {
-  const t = useTranslations("AdminPage");
-  const query = useQuery(adminQueries.reorgAlerts());
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.reorgAlerts(project.projectId));
 
   return (
     <AdminSection description={t("reorgAlertsDescription")} title={t("reorgAlertsTitle")}>

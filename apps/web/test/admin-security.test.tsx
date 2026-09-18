@@ -14,7 +14,7 @@ import {
 } from "./admin-harness";
 
 const nav = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
-vi.mock("next/navigation", () => ({
+vi.mock("../lib/navigation", () => ({
   useRouter: () => ({
     back: vi.fn(),
     forward: vi.fn(),
@@ -60,6 +60,28 @@ describe("AdminAuditLogPage", () => {
     await vi.waitFor(() => expect(state.csrf.auditExport).toBe("csrf-token"));
     expect(downloadClick).toHaveBeenCalledOnce();
     expect(await screen.findByText(/Exported 1 event/)).toBeInTheDocument();
+  });
+
+  it("filters the installation-wide Audit Log by an explicit Project", async () => {
+    state.authenticated = true;
+    let requestedProjectId: string | null = null;
+    adminServer.use(
+      http.get("/api/admin/audit-log", ({ request }) => {
+        requestedProjectId = new URL(request.url).searchParams.get("projectId");
+        return HttpResponse.json({ entries: [] });
+      })
+    );
+    renderAdmin(<AdminAuditLogPage />);
+
+    await screen.findByText("No Audit Log entries are available yet.");
+    fireEvent.change(screen.getByRole("combobox", { name: "Project filter" }), {
+      target: { value: "00000000-0000-0000-0000-000000000001" }
+    });
+
+    await vi.waitFor(() =>
+      expect(requestedProjectId).toBe("00000000-0000-0000-0000-000000000001")
+    );
+    expect(window.location.search).toBe("?projectId=00000000-0000-0000-0000-000000000001");
   });
 });
 

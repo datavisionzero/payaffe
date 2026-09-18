@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { ThemeSelect } from "./theme-select";
+import { createText } from "../lib/text";
 import {
   buildPaymentUri,
   formatFiatAmount,
@@ -21,9 +22,48 @@ const statusLabels: Record<string, string> = {
   expired: "statuses.expired",
   settled: "statuses.settled"
 };
+const t = createText({
+  title: "Complete payment",
+  loading: "Loading payment",
+  notFound: "Payment was not found.",
+  unexpectedError: "Payment details could not be loaded.",
+  correlationId: "Correlation ID: {correlationId}",
+  amountDue: "Amount due",
+  expiresAt: "Expires",
+  status: "Status",
+  selectCurrency: "Select currency",
+  selectCurrencyDescription: "Choose how you want to pay.",
+  payInstruction: "Payment instruction",
+  expectedAmount: "Expected amount",
+  paymentAddress: "Payment address",
+  qrCode: "QR code for the payment instruction",
+  openWallet: "Open payment instruction in a compatible wallet",
+  selecting: "Selecting",
+  payWith: "Pay with {currency}",
+  currencyUnavailable: "{currency} unavailable",
+  noUsableOptions: "No Payment Option is currently usable. Please retry later or contact the shop.",
+  observationDelay: "Blockchain Observation can be delayed. Keep this page open; the status updates automatically.",
+  returnToShop: "Return to shop",
+  returnManual: "This link is shown after completion. You will not be redirected automatically.",
+  "unavailableReasons.exchange_rate.unavailable": "An exchange rate is not currently available.",
+  "unavailableReasons.payment_address.unavailable": "A Payment Address is not currently available.",
+  "unavailableReasons.blockchain_observation.unavailable": "Blockchain Observation is not currently available.",
+  "statusDescriptions.pending_currency_selection": "Choose an available Supported Currency to continue.",
+  "statusDescriptions.waiting_for_payment": "Send the exact amount to the Payment Address below.",
+  "statusDescriptions.observed": "The transfer was observed and is waiting for the required confirmations.",
+  "statusDescriptions.completed": "The Payment is complete. No further transfer is needed.",
+  "statusDescriptions.expired": "The regular payment window has expired. Do not send a new transfer.",
+  "statusDescriptions.settled": "An Admin has resolved this Payment.",
+  "statusDescriptions.unknown": "The Payment status is not recognized. Refresh or contact the shop.",
+  "statuses.pending_currency_selection": "Currency selection pending",
+  "statuses.waiting_for_payment": "Waiting for payment",
+  "statuses.observed": "Payment observed",
+  "statuses.completed": "Payment completed",
+  "statuses.expired": "Payment expired",
+  "statuses.settled": "Payment settled"
+});
 
 export function PayerPage({ payerPageId }: { payerPageId: string }) {
-  const t = useTranslations("PayerPage");
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["payer-payment", payerPageId],
@@ -42,9 +82,15 @@ export function PayerPage({ payerPageId }: { payerPageId: string }) {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl px-5 py-8 sm:px-8">
-      <header className="mb-8 border-b border-[var(--border)] pb-5">
-        <p className="text-sm font-medium text-[var(--accent)]">payaffe</p>
-        <h1 className="mt-2 text-3xl font-semibold">{t("title")}</h1>
+      <header className="mb-8 flex items-start justify-between gap-4 border-b border-[var(--border)] pb-5">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <span aria-hidden="true" className="size-4 rounded-sm bg-[var(--brand)]" />
+            payaffe
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">{t("title")}</h1>
+        </div>
+        <ThemeSelect compact />
       </header>
 
       {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
@@ -70,9 +116,6 @@ function PaymentContent({
   isSelecting: boolean;
   onSelect: (currency: string) => void;
 }) {
-  const t = useTranslations("PayerPage");
-  const format = useFormatter();
-  const locale = useLocale();
   const selected = payment.selectedCurrency !== null && payment.paymentAddress !== null;
   const returnUrl = safeReturnUrl(payment.returnUrl);
   return (
@@ -82,13 +125,15 @@ function PaymentContent({
           <div>
             <dt className="text-sm text-[var(--muted-foreground)]">{t("amountDue")}</dt>
             <dd className="mt-1 text-xl font-semibold">
-              {formatFiatAmount(payment.fiatCurrency, payment.fiatAmountMinor, locale)}
+              {formatFiatAmount(payment.fiatCurrency, payment.fiatAmountMinor, "en")}
             </dd>
           </div>
           <div>
             <dt className="text-sm text-[var(--muted-foreground)]">{t("expiresAt")}</dt>
             <dd className="mt-1 text-base">
-              {format.dateTime(new Date(payment.expiresAt), { dateStyle: "medium", timeStyle: "short" })}
+              {new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
+                new Date(payment.expiresAt)
+              )}
             </dd>
           </div>
           <div>
@@ -111,7 +156,7 @@ function PaymentContent({
                 return (
                   <div className="rounded-md border border-[var(--border)] bg-[var(--surface-strong)]" key={option.supportedCurrency}>
                     <button
-                      className="w-full rounded-md px-4 py-3 text-left font-semibold hover:ring-2 hover:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-md px-4 py-3 text-left font-semibold hover:ring-2 hover:ring-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={isSelecting || !isAvailable}
                       onClick={() => onSelect(option.supportedCurrency)}
                       type="button"
@@ -144,7 +189,7 @@ function PaymentContent({
         {returnUrl && (payment.status === "completed" || payment.status === "settled") ? (
           <div className="mt-6 border-t border-[var(--border)] pt-5">
             <a
-              className="inline-flex rounded-md bg-[var(--accent)] px-4 py-3 font-semibold text-white hover:bg-[var(--accent-strong)]"
+              className="inline-flex rounded-md bg-[var(--brand)] px-4 py-3 font-semibold text-[var(--brand-foreground)] hover:opacity-90"
               href={returnUrl}
               rel="noopener noreferrer"
             >
@@ -164,7 +209,6 @@ function PaymentContent({
 }
 
 function StatusMessage({ payment }: { payment: PayerPayment }) {
-  const t = useTranslations("PayerPage");
   const key = statusLabels[payment.status] ? payment.status : "unknown";
   return (
     <div
@@ -181,15 +225,18 @@ function StatusMessage({ payment }: { payment: PayerPayment }) {
 }
 
 function PaymentInstruction({ payment }: { payment: PayerPayment }) {
-  const t = useTranslations("PayerPage");
   const paymentUri = buildPaymentUri(payment);
   return (
     <div className="mt-8 border-t border-[var(--border)] pt-6">
       <h2 className="text-lg font-semibold">{t("payInstruction")}</h2>
       <div className="mt-5 grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)]">
-        <div className="flex h-[180px] w-[180px] items-center justify-center rounded-md border border-[var(--border)] bg-white">
+        <a
+          aria-label={t("openWallet")}
+          className="flex h-[180px] w-[180px] items-center justify-center rounded-md border border-[var(--border)] bg-[#fff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]"
+          href={paymentUri}
+        >
           <QRCodeSVG aria-label={t("qrCode")} size={144} value={paymentUri} />
-        </div>
+        </a>
         <dl className="min-w-0 space-y-4">
           <div>
             <dt className="text-sm text-[var(--muted-foreground)]">{t("expectedAmount")}</dt>
@@ -208,10 +255,9 @@ function PaymentInstruction({ payment }: { payment: PayerPayment }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const t = useTranslations("PayerPage");
   const labelKey = statusLabels[status];
   return (
-    <span className="inline-flex rounded-md bg-[var(--surface-strong)] px-3 py-1 text-sm font-medium">
+    <span className="inline-flex rounded-md px-3 py-1 text-sm font-medium" data-status={status}>
       {labelKey ? t(labelKey) : status}
     </span>
   );
@@ -226,7 +272,6 @@ function StateMessage({ children }: { children: React.ReactNode }) {
 }
 
 function ErrorMessage({ error }: { error: Error }) {
-  const t = useTranslations("PayerPage");
   if (error instanceof PayerApiError && error.status === 404) {
     return <StateMessage>{t("notFound")}</StateMessage>;
   }

@@ -1,16 +1,16 @@
-using Payaffe.Application.Payments;
-using Payaffe.Application.Admin;
-using Payaffe.Application.Webhooks;
-using Payaffe.Infrastructure.Auth;
-using Payaffe.Infrastructure.Payments;
-using Payaffe.Infrastructure.Persistence;
-using Payaffe.Infrastructure.Persistence.Records;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Payaffe.Application.Admin;
+using Payaffe.Application.Payments;
+using Payaffe.Application.Webhooks;
+using Payaffe.Infrastructure.Auth;
+using Payaffe.Infrastructure.Payments;
+using Payaffe.Infrastructure.Persistence;
+using Payaffe.Infrastructure.Persistence.Records;
 
 namespace Payaffe.Api.Tests.Payments;
 
@@ -28,9 +28,16 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
 
     public TimeSpan? IntegrationApiRateLimitWindow { get; set; }
 
+    public string? StaticWebRootPath { get; set; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        if (StaticWebRootPath is not null)
+        {
+            builder.UseWebRoot(StaticWebRootPath);
+        }
+
         builder.ConfigureServices(services =>
         {
             services.RemoveStartupSchemaMigration();
@@ -155,25 +162,25 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
     private static ProjectConfigurationRecord CreateProjectConfiguration(
         Guid projectId,
         DateTimeOffset now) => new()
-    {
-        ProjectId = projectId,
-        PaymentExpirationSeconds = 3600,
-        LateAcceptanceWindowSeconds = 86400,
-        PaymentTolerancePercent = 1m,
-        BtcEnabled = true,
-        LtcEnabled = true,
-        EthEnabled = true,
-        BtcConfirmationRequirement = 1,
-        LtcConfirmationRequirement = 1,
-        EthConfirmationRequirement = 12,
-        BtcReorgMonitoringDepth = 6,
-        LtcReorgMonitoringDepth = 12,
-        EthReorgMonitoringDepth = 64,
-        NativeEthLowCapacityThreshold = 20,
-        LegacySettingsFingerprint = string.Empty,
-        CreatedAt = now,
-        UpdatedAt = now,
-    };
+        {
+            ProjectId = projectId,
+            PaymentExpirationSeconds = 3600,
+            LateAcceptanceWindowSeconds = 86400,
+            PaymentTolerancePercent = 1m,
+            BtcEnabled = true,
+            LtcEnabled = true,
+            EthEnabled = true,
+            BtcConfirmationRequirement = 1,
+            LtcConfirmationRequirement = 1,
+            EthConfirmationRequirement = 12,
+            BtcReorgMonitoringDepth = 6,
+            LtcReorgMonitoringDepth = 12,
+            EthReorgMonitoringDepth = 64,
+            NativeEthLowCapacityThreshold = 20,
+            LegacySettingsFingerprint = string.Empty,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
 
     public async Task<Guid> SeedAdminAccountAsync(
         string username,

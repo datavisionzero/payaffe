@@ -132,7 +132,7 @@ public sealed class ApiStartupMigrationTests(PostgreSqlFixture postgres) : IClas
                     if (!applySchemaOnStartup)
                     {
                         // Only this one. Removing every IHostedService would
-                        // take the web host itself out with it.
+                        // take the API test host itself out with it.
                         services.Remove(services.Single(descriptor =>
                             descriptor.ImplementationType == typeof(SchemaMigrationHostedService)));
                     }

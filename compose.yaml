@@ -3,7 +3,7 @@
 # differs.
 x-backend-environment: &backend-environment
   ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
-  Payments__PayerPageBaseUrl: ${PAYAFFE_PAYER_PAGE_BASE_URL:-http://localhost:3000/pay}
+  Payments__PayerPageBaseUrl: ${PAYAFFE_PAYER_PAGE_BASE_URL:-http://localhost:8080/pay}
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}
   Webhooks__EndpointSecrets__partner-v2: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2:-}
   ExchangeRates__Enabled: ${PAYAFFE_EXCHANGE_RATES_ENABLED:-true}
@@ -86,7 +86,6 @@ services:
       # The dedicated worker service owns the background work in this
       # deployment, so the API serves requests only.
       Workers__RunInApiHost: ${PAYAFFE_RUN_WORKERS_IN_API_HOST:-false}
-      Web__AllowedOrigins__0: ${PAYAFFE_WEB_PUBLIC_ORIGIN:-http://localhost:3000}
       Admin__Authentication__RateLimitPermitLimit: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_PERMIT_LIMIT:-30}
       Admin__Authentication__RateLimitWindow: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_WINDOW:-00:05:00}
       IntegrationApi__RateLimit__PermitLimit: ${PAYAFFE_INTEGRATION_API_RATE_LIMIT_PERMIT_LIMIT:-120}
@@ -152,27 +151,6 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
-
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_PAYAFFE_API_BASE_URL: ${PAYAFFE_API_PUBLIC_URL:-http://localhost:8080}
-    depends_on:
-      api:
-        condition: service_started
-    environment:
-      HOSTNAME: 0.0.0.0
-      PORT: 3000
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:3000/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    ports:
-      - "${PAYAFFE_WEB_PORT:-3000}:3000"
 
 volumes:
   db-data:

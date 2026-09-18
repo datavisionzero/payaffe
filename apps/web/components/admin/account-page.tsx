@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -25,8 +25,33 @@ import {
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
 
+const t = createText({
+  accountDescription: "This session, step-up confirmation, recovery codes, and sign-out.",
+  accountTitle: "Account",
+  adminTools: "Admin tools",
+  adminToolsDescription: "Use server-authorized actions for operational changes.",
+  authenticated: "Authenticated",
+  clearSensitiveValue: "Clear sensitive value",
+  expiresAt: "Absolute expiration",
+  generateRecoveryCodes: "Generate recovery codes",
+  idleExpiresAt: "Idle expiration",
+  loading: "Loading",
+  logout: "Log out",
+  mfaAuthenticatedAt: "MFA completed",
+  recoveryCodesGeneratedAt: "Generated at {generatedAt}",
+  recoveryCodesTitle: "Recovery codes",
+  secondFactorNotEnrolled: "No second factor",
+  sessionTitle: "Current session",
+  status: "Status",
+  stepUp: "Confirm step-up",
+  stepUpAuthenticatedAt: "Step-up completed",
+  submitting: "Working",
+  totpCode: "Authentication code",
+  username: "Username",
+  "validation.totpCode": "Enter a six-digit authentication code."
+});
+
 export function AdminAccountPage() {
-  const t = useTranslations("AdminPage");
   const queryClient = useQueryClient();
   const session = useQuery(adminQueries.session());
   const [recoveryCodes, setRecoveryCodes] = useState<AdminRecoveryCodes | null>(null);
@@ -38,6 +63,7 @@ export function AdminAccountPage() {
         predicate: (candidate) => candidate.queryKey[0] !== "admin-session"
       });
       queryClient.setQueryData(adminQueries.session().queryKey, null);
+      window.localStorage?.removeItem("payaffe:selected-project-id");
     }
   });
   const stepUpMutation = useMutation({
@@ -120,7 +146,7 @@ export function AdminAccountPage() {
         </form>
         <div className="mt-5 border-t border-[var(--border)] pt-5">
           <button
-            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
+            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium hover:border-[var(--brand)] disabled:cursor-wait disabled:opacity-70"
             disabled={recoveryCodesMutation.isPending}
             onClick={() => recoveryCodesMutation.mutate()}
             type="button"
@@ -141,7 +167,7 @@ export function AdminAccountPage() {
 
       <Panel>
         <button
-          className="rounded-md bg-[var(--foreground)] px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:cursor-wait disabled:opacity-70"
+          className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:opacity-85 disabled:cursor-wait disabled:opacity-70"
           disabled={logoutMutation.isPending}
           onClick={() => logoutMutation.mutate()}
           type="button"
@@ -161,7 +187,6 @@ function RecoveryCodesPanel({
   onClear: () => void;
   recoveryCodes: AdminRecoveryCodes;
 }) {
-  const t = useTranslations("AdminPage");
   return (
     <section className="mt-4 rounded-md border border-[var(--border)] bg-[var(--surface-strong)] p-4">
       <h3 className="text-sm font-semibold">{t("recoveryCodesTitle")}</h3>
@@ -170,7 +195,7 @@ function RecoveryCodesPanel({
       </p>
       <ul className="mt-3 grid gap-2">
         {recoveryCodes.recoveryCodes.map((code) => (
-          <li className="rounded-md bg-white px-3 py-2 font-mono text-sm" key={code}>
+          <li className="rounded-md bg-[var(--card)] px-3 py-2 font-mono text-sm" key={code}>
             {code}
           </li>
         ))}
