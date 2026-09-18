@@ -123,7 +123,7 @@ token cannot be handed to a browser.
 ## Development
 
 ```sh
-dotnet test Payaffe.slnx          # 391 tests; integration tests need Docker
+dotnet test Payaffe.slnx          # 400 tests; integration tests need Docker
 pnpm install
 pnpm web:check                   # generate, test, typecheck, e2e, build
 ```
