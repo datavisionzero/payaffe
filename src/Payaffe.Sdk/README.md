@@ -119,7 +119,9 @@ if (await _events.TryRecordAsync(result.Event!.EventId))
 ```
 
 Verifying a re-serialized body fails: the signature covers the bytes as they
-arrived. The verifier does not host an endpoint, choose a web framework,
+arrived. It covers the timestamp and the body and nothing else, so branch on the
+verified event rather than on the event-type header, which is routing
+information only. The verifier does not host an endpoint, choose a web framework,
 persist deduplication state, or dispatch handlers.
 
 ## Errors

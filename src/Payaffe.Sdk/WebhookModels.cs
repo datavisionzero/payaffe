@@ -28,6 +28,12 @@ public static class PayaffeWebhookEventTypes
     public const string PaymentSettled = "payment.settled";
 }
 
+/// <summary>
+/// The Payaffe headers of one Delivery. Only the timestamp and the signature take part in
+/// verification: the signature covers the timestamp and the body, so the event type and
+/// version headers are routing conveniences and are not evidence of anything. Read the event
+/// type from the verified <see cref="PayaffeWebhookEvent"/> instead.
+/// </summary>
 public sealed record PayaffeWebhookHeaders(
     string? DeliveryId,
     string? Timestamp,
