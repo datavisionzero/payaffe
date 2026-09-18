@@ -1,0 +1,134 @@
+name: Release SDK
+
+# The SDK is released on its own tag because it is versioned on its own line.
+# An installation release (`v*`) publishes images that report the version in
+# Directory.Build.props; this one publishes a NuGet package that reports the
+# version in the SDK csproj. Sharing one tag would force every integrator onto
+# a new package whenever a server released, and would make a client-only fix
+# claim a server release that never happened.
+on:
+  push:
+    tags: ["sdk-v*"]
+  # So that a release can be re-run without moving the tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The existing tag to release, for example sdk-v0.1.0"
+        required: true
+
+permissions:
+  contents: read
+
+# One package release at a time. nuget.org accepts a version once, so two runs
+# for the same version would have one of them fail on a conflict; serialising
+# them makes the second one's failure mean what it says.
+concurrency:
+  group: release-sdk
+  cancel-in-progress: false
+
+jobs:
+  # The tag says what is being released, and this is the only place that reads
+  # it. Everything downstream takes the version from here.
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      ref: ${{ steps.read.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+
+      - id: read
+        name: Read the version out of the tag
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          case "$TAG" in
+            sdk-v*) version="${TAG#sdk-v}" ;;
+            *) echo "An SDK release tag begins with sdk-v: $TAG"; exit 1 ;;
+          esac
+
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "Not a version this can release: $version"
+            exit 1
+          fi
+
+          # The package carries the version the csproj stamps, so the tag and
+          # that file have to agree or the release would publish a package
+          # nobody tagged. This is the same check release.yml makes against
+          # Directory.Build.props, against the file that owns this version.
+          csproj=src/Payaffe.Sdk/Payaffe.Sdk.csproj
+          prefix="$(grep -oE '<VersionPrefix>[^<]*</VersionPrefix>' "$csproj" | sed -E 's#</?VersionPrefix>##g')"
+          suffix="$(grep -oE '<VersionSuffix>[^<]*</VersionSuffix>' "$csproj" | sed -E 's#</?VersionSuffix>##g' || true)"
+          if [ -n "$suffix" ]; then
+            stamped="$prefix-$suffix"
+          else
+            stamped="$prefix"
+          fi
+
+          if [ "$stamped" != "$version" ]; then
+            echo "The tag says $version and $csproj stamps $stamped."
+            echo "Bump the version in the commit the tag points at, then re-tag."
+            exit 1
+          fi
+
+          {
+            echo "version=$version"
+            echo "ref=$TAG"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Releasing Payaffe.Sdk $version from $TAG."
+
+  # The whole solution, not only the SDK's own tests: what the package promises
+  # is checked by the contract and consumer-scenario tests that run the SDK
+  # against a server test host, and those live in the API test project.
+  publish:
+    name: Publish
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - run: dotnet restore Payaffe.slnx
+      - run: dotnet build Payaffe.slnx -c Release --no-restore
+      - run: dotnet test Payaffe.slnx -c Release --no-build
+
+      - name: Pack
+        run: >
+          dotnet pack src/Payaffe.Sdk/Payaffe.Sdk.csproj
+          -c Release --no-build
+          -o "${{ runner.temp }}/nupkg"
+
+      # A missing key fails here rather than after the tag has been pushed and
+      # the tests have run, and the message says which secret to create.
+      - name: Push to nuget.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            echo "The repository secret NUGET_API_KEY is not set."
+            exit 1
+          fi
+
+          dotnet nuget push "${{ runner.temp }}/nupkg/"*.nupkg \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "$NUGET_API_KEY"
+
+      - name: Keep the package a maintainer can inspect
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Payaffe.Sdk-${{ needs.version.outputs.version }}
+          path: ${{ runner.temp }}/nupkg/*.nupkg
+          if-no-files-found: warn
+          retention-days: 14
