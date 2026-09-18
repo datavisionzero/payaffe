@@ -106,10 +106,24 @@ never reach your shell history, is in
 The payer page is at `/pay/{id}` and the Admin UI at `/admin`. Full setup,
 backup, and rotation procedures are in [docs/operations/](docs/operations/).
 
+## Embedding it in your own checkout
+
+A product that would rather keep its payer inside its own checkout does not have
+to send them to the payer page. Its backend creates the payment, submits the
+currency the payer picked, and renders the returned amount, address, and URI in
+its own UI. payaffe never sees that browser
+([ADR 0031](docs/adr/0031-embedded-payments-use-the-integration-api.md)).
+
+The supported client for that is [`Payaffe.Sdk`](src/Payaffe.Sdk/README.md), a
+UI-free `net10.0` package that speaks `/api/v1` and is versioned independently
+of an installation. It keeps the bearer token in the backend, where it has to
+stay: a browser-to-payaffe integration is out of scope precisely because that
+token cannot be handed to a browser.
+
 ## Development
 
 ```sh
-dotnet test Payaffe.slnx          # 304 tests; integration tests need Docker
+dotnet test Payaffe.slnx          # 391 tests; integration tests need Docker
 pnpm install
 pnpm web:check                   # generate, test, typecheck, e2e, build
 ```
