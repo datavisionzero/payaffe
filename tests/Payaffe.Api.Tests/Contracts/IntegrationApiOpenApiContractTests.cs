@@ -50,6 +50,9 @@ public sealed class IntegrationApiOpenApiContractTests
         Assert.DoesNotContain(paths.EnumerateObject(), path => path.Name.StartsWith("/health/", StringComparison.Ordinal));
         Assert.True(paths.TryGetProperty("/api/v1/payments", out var paymentsPath));
         Assert.True(paths.TryGetProperty("/api/v1/payments/{paymentId}", out var paymentByIdPath));
+        Assert.True(paths.TryGetProperty(
+            "/api/v1/payments/{paymentId}/currency-selection",
+            out var currencySelectionPath));
 
         var createPayment = paymentsPath.GetProperty("post");
         Assert.Equal("CreatePayment", createPayment.GetProperty("operationId").GetString());
@@ -70,6 +73,17 @@ public sealed class IntegrationApiOpenApiContractTests
         AssertHasResponse(getPayment, "401");
         AssertHasResponse(getPayment, "404");
         AssertHasResponse(getPayment, "429");
+
+        var selectCurrency = currencySelectionPath.GetProperty("put");
+        Assert.Equal("SelectPaymentCurrency", selectCurrency.GetProperty("operationId").GetString());
+        AssertHasBearerSecurity(selectCurrency);
+        Assert.True(selectCurrency.GetProperty("requestBody").GetProperty("required").GetBoolean());
+        AssertHasResponse(selectCurrency, "200");
+        AssertHasResponse(selectCurrency, "400");
+        AssertHasResponse(selectCurrency, "401");
+        AssertHasResponse(selectCurrency, "404");
+        AssertHasResponse(selectCurrency, "409");
+        AssertHasResponse(selectCurrency, "429");
 
         var schemas = root.GetProperty("components").GetProperty("schemas");
         var problem = schemas.GetProperty("IntegrationApiProblemResponse");

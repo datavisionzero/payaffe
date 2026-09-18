@@ -180,21 +180,12 @@ public sealed class PaymentApplicationServiceTests
         Assert.Equal("0.00039980", observation.Target.ExpectedCryptoAmount);
     }
 
-    /// <summary>
-    /// The Payer Page shows the reason recorded on the Payment Option, so
-    /// selecting the same currency has to name the same cause. Reporting every
-    /// unavailable option as a rate problem sends operators to the wrong
-    /// provider.
-    /// </summary>
-    [Theory]
-    [InlineData(PaymentOptionUnavailableReasons.ExchangeRate, SelectPaymentCurrencyResultKind.RateUnavailable)]
-    [InlineData(PaymentOptionUnavailableReasons.PaymentAddress, SelectPaymentCurrencyResultKind.PaymentAddressUnavailable)]
-    [InlineData(PaymentOptionUnavailableReasons.BlockchainObservation, SelectPaymentCurrencyResultKind.ObservationUnavailable)]
-    public async Task Select_currency_reports_the_reason_recorded_on_the_payment_option(
-        string unavailableReason,
-        SelectPaymentCurrencyResultKind expectedKind)
+    [Fact]
+    public async Task Select_currency_rechecks_a_transiently_unavailable_payment_option()
     {
-        var store = new CapturingSelectionStore(optionAvailable: false, unavailableReason);
+        var store = new CapturingSelectionStore(
+            optionAvailable: false,
+            PaymentOptionUnavailableReasons.ExchangeRate);
         var service = CreateService(
             store,
             TimeSpan.FromHours(1),
@@ -206,30 +197,26 @@ public sealed class PaymentApplicationServiceTests
             new SelectPaymentCurrencyCommand("payer-page-id", "BTC"),
             CancellationToken.None);
 
-        Assert.Equal(expectedKind, result.Kind);
-        Assert.Null(store.Selection);
+        Assert.Equal(SelectPaymentCurrencyResultKind.Selected, result.Kind);
+        Assert.NotNull(store.Selection);
     }
 
-    /// <summary>
-    /// An option with no recorded reason still has to fail closed rather than
-    /// fall through to Currency Selection.
-    /// </summary>
     [Fact]
-    public async Task Select_currency_rejects_an_unavailable_payment_option_without_a_reason()
+    public async Task Select_currency_rechecks_blockchain_observation_before_assigning_an_address()
     {
-        var store = new CapturingSelectionStore(optionAvailable: false, unavailableReason: null!);
+        var store = new CapturingSelectionStore();
         var service = CreateService(
             store,
             TimeSpan.FromHours(1),
             new FixedExchangeRateSource(),
             new FixedPaymentAddressProvider(),
-            new CapturingBlockchainObservationAdapter());
+            new SelectiveBlockchainObservationAdapter("LTC", "ETH"));
 
         var result = await service.SelectCurrencyAsync(
             new SelectPaymentCurrencyCommand("payer-page-id", "BTC"),
             CancellationToken.None);
 
-        Assert.Equal(SelectPaymentCurrencyResultKind.RateUnavailable, result.Kind);
+        Assert.Equal(SelectPaymentCurrencyResultKind.ObservationUnavailable, result.Kind);
         Assert.Null(store.Selection);
     }
 
