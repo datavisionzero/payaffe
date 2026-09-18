@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Payaffe.Application.Admin;
@@ -223,11 +225,73 @@ public sealed class PayaffeSdkConsumerScenarioTests
         Assert.NotNull(settled.SettledAt);
     }
 
+    [Fact]
+    public async Task A_selection_made_on_the_payer_page_is_the_one_the_sdk_sees()
+    {
+        await using PaymentApiFactory factory = new();
+        PayaffeClient payaffe = await CreateClientAsync(factory);
+        Payment created = await payaffe.CreatePaymentAsync(
+            NewOrder("retained-payer-link"),
+            "retained-payer-link");
+
+        using HttpClient payerClient = factory.CreateClient();
+        HttpResponseMessage payerSelection = await payerClient.PostAsJsonAsync(
+            $"/api/payer/payments/{PayerPageIdOf(created)}/currency-selection",
+            new { supportedCurrency = "btc" });
+        payerSelection.EnsureSuccessStatusCode();
+
+        Payment repeated = await payaffe.SelectCurrencyAsync(
+            created.PaymentId,
+            SupportedCurrency.Btc);
+        Assert.Equal(PaymentStatus.WaitingForPayment, repeated.Status);
+        Assert.Equal(SupportedCurrency.Btc, repeated.SelectedCurrency);
+        Assert.NotNull(repeated.PaymentInstruction);
+
+        PayaffeApiException replacement = await Assert.ThrowsAsync<PayaffeApiException>(() =>
+            payaffe.SelectCurrencyAsync(created.PaymentId, SupportedCurrency.Ltc));
+        Assert.Equal("payment.currency_already_selected", replacement.Code.Value);
+    }
+
+    [Fact]
+    public async Task A_retained_payer_link_still_loads_after_the_sdk_made_the_selection()
+    {
+        await using PaymentApiFactory factory = new();
+        PayaffeClient payaffe = await CreateClientAsync(factory);
+        Payment created = await payaffe.CreatePaymentAsync(
+            NewOrder("sdk-then-payer-link"),
+            "sdk-then-payer-link");
+        Payment selected = await payaffe.SelectCurrencyAsync(
+            created.PaymentId,
+            SupportedCurrency.Btc);
+
+        using HttpClient payerClient = factory.CreateClient();
+        HttpResponseMessage payerRead = await payerClient.GetAsync(
+            $"/api/payer/payments/{PayerPageIdOf(created)}");
+        payerRead.EnsureSuccessStatusCode();
+        JsonElement payerPayment = await payerRead.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(
+            selected.PaymentAddress,
+            payerPayment.GetProperty("paymentAddress").GetString());
+        Assert.Equal(
+            selected.ExpectedCryptoAmount,
+            payerPayment.GetProperty("expectedCryptoAmount").GetString());
+
+        // The hosted surface cannot replace what the embedded one committed either.
+        HttpResponseMessage payerReplacement = await payerClient.PostAsJsonAsync(
+            $"/api/payer/payments/{PayerPageIdOf(created)}/currency-selection",
+            new { supportedCurrency = "LTC" });
+        Assert.Equal(HttpStatusCode.Conflict, payerReplacement.StatusCode);
+    }
+
     private static async Task<PayaffeClient> CreateClientAsync(PaymentApiFactory factory)
     {
         await factory.SeedCredentialAsync(_token);
         return new PayaffeClient(factory.CreateClient(), new Uri("http://localhost"), _token);
     }
+
+    private static string PayerPageIdOf(Payment payment) =>
+        payment.PayerPageUrl[(payment.PayerPageUrl.LastIndexOf('/') + 1)..];
 
     private static CreatePaymentRequest NewOrder(string externalReference) =>
         new("EUR", 1999, externalReference);
