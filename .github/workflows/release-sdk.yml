@@ -90,6 +90,14 @@ jobs:
     name: Publish
     needs: version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Trusted Publishing, the same way logaffe publishes its clients. This job
+      # asks the Actions service for an OIDC token describing which repository
+      # and which workflow file is running, and trades it at nuget.org for a key
+      # that lives an hour. Without this permission the token is never issued
+      # and the login step below fails.
+      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -102,27 +110,45 @@ jobs:
       - run: dotnet build Payaffe.slnx -c Release --no-restore
       - run: dotnet test Payaffe.slnx -c Release --no-build
 
+      # No version argument: the SDK csproj carries the version, and the job
+      # above has already refused a tag that disagrees with it.
       - name: Pack
         run: >
           dotnet pack src/Payaffe.Sdk/Payaffe.Sdk.csproj
           -c Release --no-build
           -o "${{ runner.temp }}/nupkg"
 
-      # A missing key fails here rather than after the tag has been pushed and
-      # the tests have run, and the message says which secret to create.
-      - name: Push to nuget.org
+      # There is no stored publishing credential. nuget.org holds a policy
+      # naming this repository, this workflow file and this account, and hands
+      # back a key valid for an hour to a run that matches it — so the thing an
+      # attacker would want to steal from this repository does not exist, and
+      # there is nothing to rotate on a calendar.
+      #
+      # The policy is bound to the file name `release-sdk.yml`. Renaming this
+      # file breaks publishing until the policy is updated to match, which is
+      # worth knowing before somebody tidies it into something shorter.
+      #
+      # The account name is not secret, but this repository is public and there
+      # is no reason to write it down here for a reader who has no use for it.
+      - name: A key that expires in an hour
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${NUGET_API_KEY:-}" ]; then
-            echo "The repository secret NUGET_API_KEY is not set."
-            exit 1
-          fi
 
+          # `--skip-duplicate`, so that re-running a release that already
+          # published is not an error. A re-run gets a fresh key: the exchanged
+          # token is single-use and the key it bought is an hour old at most.
           dotnet nuget push "${{ runner.temp }}/nupkg/"*.nupkg \
             --source https://api.nuget.org/v3/index.json \
-            --api-key "$NUGET_API_KEY"
+            --api-key "$NUGET_API_KEY" \
+            --skip-duplicate
 
       - name: Keep the package a maintainer can inspect
         if: always()
