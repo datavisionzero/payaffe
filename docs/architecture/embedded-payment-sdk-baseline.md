@@ -105,6 +105,12 @@ SDK `1.x` targets Integration API `/api/v1`. SDK semantic-version changes do
 not create an API major version, and an API v2 does not silently change the
 base path used by an installed SDK major.
 
+The package version lives in the SDK project file, not in the product version
+every host reports, and the package is released from its own `sdk-v<version>`
+tag. An installation release must not oblige an integrator to take a new
+package, and a client-only fix must not claim a server release that never
+happened.
+
 A representative product-backend flow remains UI-independent:
 
 ```csharp
