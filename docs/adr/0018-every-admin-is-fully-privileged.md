@@ -8,10 +8,11 @@ none of them by not being an admin.
 Roles were rejected for the MVP because a role model that nobody needs is worse
 than no role model at all: it produces a permission matrix that is maintained
 speculatively, checked inconsistently, and eventually worked around by giving
-everyone the role that works. One installation serves one shop
-([ADR 0017](./0017-one-installation-serves-one-shop.md)), and the admins of a
-single shop are a small group of people who already trust each other with the
-bank account.
+everyone the role that works. One installation serves one operator, whose
+Admins may administer every Project
+([ADR 0029](./0029-one-operator-can-isolate-payment-projects.md)). They are a
+small group of people who already trust each other with the bank account;
+Selected Project context prevents mistakes but is not a permission assignment.
 
 What replaces roles is not weaker authorization but a different axis of it.
 Every protected action is authorized server-side and fails closed when

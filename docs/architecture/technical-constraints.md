@@ -3,11 +3,13 @@
 ## Fixed
 
 - Backend: .NET 10.
-- Web frontend: React with Next.js App Router.
+- Web frontend: React with Vite and React Router, built as static assets served
+  by the API host.
 - Frontend package manager/runtime: pnpm via Corepack on Node.js 24.
 - Browser- and UI-facing product frontends follow
   [frontend-baseline.md](frontend-baseline.md): generated API clients, TanStack
-  Query, Tailwind CSS, shadcn/ui, React Hook Form, Zod, next-intl,
+  Query, Tailwind CSS, repository-owned shadcn/Base UI components, React Hook
+  Form, Zod, browser `Intl`,
   accessibility rules, browser-storage rules, and the frontend test baseline.
 - Primary database: PostgreSQL.
 - Persistence: Entity Framework Core by default, with explicit SQL for performance-critical PostgreSQL features.
@@ -16,14 +18,20 @@
 - Deployment: Docker Compose, as recorded in
   [deployment-operations-baseline.md](deployment-operations-baseline.md).
 - Distribution model: open-source, self-hosted application.
-- Instance model: single-tenant.
+- Instance model: one operator or shop per installation, with multiple isolated
+  Projects and installation-wide Admins.
 - MVP currencies: BTC, LTC, native ETH.
 - Payment input fiat currencies: EUR and USD.
 - Confirmation Requirements and Reorg Monitoring Depths are configurable per
-  Supported Currency, with MVP defaults recorded in
+  Project and Supported Currency, with MVP defaults recorded in
   [../product/requirements.md](../product/requirements.md).
+- Project ownership and isolation follow
+  [project-isolation-baseline.md](project-isolation-baseline.md).
 - Integration API contracts follow
   [integration-api-contract.md](integration-api-contract.md).
+- Embedded integrations use the UI-free `Payaffe.Sdk` package targeting
+  `net10.0` and follow
+  [embedded-payment-sdk-baseline.md](embedded-payment-sdk-baseline.md).
 - MVP admin automation: MCP callable through an agent CLI.
 
 ## Operational

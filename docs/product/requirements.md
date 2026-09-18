@@ -5,12 +5,29 @@
 - Accept cryptocurrency payments for external systems.
 - Provide a web-based frontend with a matching backend.
 - Provide an Integration API so other systems can connect to `payaffe`.
+- Provide a .NET 10 SDK so other products can render the complete payment flow
+  without depending on the hosted Payer Page.
 - Provide an admin MCP surface for querying system data and performing selected payment workflow actions.
 - Keep the product self-hostable and economical to operate.
 
 ## Instance Model
 
-The MVP is single-tenant. One deployment serves exactly one operator or shop.
+One deployment serves exactly one operator or shop. The operator may create
+multiple Projects to isolate its products or integrations without creating
+separate installations.
+
+Each Project owns its Payments, Integration API Credentials, receiving-address
+allocation, Webhook Delivery, and payment-policy configuration. All Admin
+Accounts are installation-wide and may administer every Project. The MVP has no
+Project memberships, Project-specific Admins, or Project roles.
+
+Projects are active, disabled, or archived. Disabling rejects new Payment
+Creation while existing Payments, Payer Pages, Blockchain Observation,
+Webhook Delivery, polling, and administrative resolution continue. Archiving
+is allowed only after project work is terminal; it retains read-only history
+and never deletes payment or audit evidence. Detailed ownership and lifecycle
+rules follow the
+[Project isolation baseline](../architecture/project-isolation-baseline.md).
 
 ## Payment Creation
 
@@ -22,11 +39,13 @@ Payment Creation requires:
 - External Reference,
 - Idempotency Key.
 
-When a Payment is created, the Integration API returns technical payment data for the external system, including at least the Payment identifier, the current status, the Payer payment URL, and the configured expiration time.
+When a Payment is created, the Integration API returns technical payment data
+for the external system, including at least the Payment identifier, current
+status, Payer Page URL, configured expiration time, and Payment Options.
 
 If the external system retries Payment Creation with the same Idempotency Key, `payaffe` returns the same Payment instead of creating a duplicate Payment.
 
-Idempotency is scoped to the Integration API Credential.
+Idempotency is scoped to the Integration API Credential within its Project.
 
 - The same Idempotency Key with the same Payment Creation data returns the same Payment.
 - The same Idempotency Key with different Payment Creation data returns a conflict error.
@@ -45,11 +64,20 @@ The MVP does not support arbitrary custom metadata JSON for Payment Creation.
 
 Payment Context Fields are intended for Admin UI identification, filtering, and search. They are not shown on the Payer Page by default.
 
-The Payer interacts directly with a `payaffe` payment page.
+The integrating product chooses one of two presentation modes:
 
-The payment page presents the available Payment Options for the configured MVP currencies. The Payer selects one Supported Currency in `payaffe`.
+- send the Payer to the hosted Payer Page; or
+- render an Embedded Payment Flow and call the authenticated Integration API
+  from its own backend.
 
-After the Payer selects a Supported Currency, the Payment is fixed to exactly one expected cryptocurrency amount and payment address.
+Both modes present the available Payment Options and invoke the same Currency
+Selection operation. The integrating product owns its customer authentication
+and order authorization; its Integration API Credential is never exposed to
+the Payer's client.
+
+After the Payer selects a Supported Currency, the Payment is fixed to exactly
+one Rate Lock and Payment Instruction containing the expected cryptocurrency
+amount, its atomic-unit value, network, Payment Address, and wallet URI.
 
 The MVP does not support completing one Payment through multiple Supported Currencies at the same time. If BTC, LTC, and native ETH are available, they are alternatives before Payer selection, not simultaneous expected payments after selection.
 
@@ -69,9 +97,9 @@ Rate Locks remain valid until Payment Expiration.
 
 `payaffe` uses a Rate Cache to reduce calls to the Exchange Rate Source.
 
-Admins can configure the Rate Cache interval.
+Admins can configure the installation-wide Rate Cache interval.
 
-Admins can configure the maximum Stale Rate age.
+Admins can configure the installation-wide maximum Stale Rate age.
 
 The default maximum Stale Rate age is 30 minutes.
 
@@ -115,7 +143,7 @@ The MVP does not automatically redirect the Payer after completion.
 Payments have a configurable Payment Expiration.
 
 - The default Payment Expiration is one hour.
-- Admins can configure the Payment Expiration for the installation.
+- Admins can configure the Payment Expiration for each Project.
 - If the Payer does not complete the Payment before the configured expiration time, the Payment leaves the regular payment window.
 - A Blockchain Transaction with an Observed Payment Time before Payment Expiration may still complete the Payment automatically even when it is confirmed after Payment Expiration.
 
@@ -138,8 +166,8 @@ The MVP is non-custodial.
 - `payaffe` must not store private keys, seed phrases, or other secrets that can spend received funds.
 - `payaffe` does not perform refunds, sweeps, or withdrawals.
 - Each Payment receives a Payment Address after the Payer selects a Supported Currency.
-- For BTC and LTC, the MVP uses configured Watch-Only Wallet Sources to derive Payment Addresses.
-- For native ETH, the MVP uses an imported Address Pool.
+- For BTC and LTC, each Project uses configured Watch-Only Wallet Source bindings to derive Payment Addresses.
+- For native ETH, each Project uses an imported Address Pool.
 - Native ETH Payment Addresses are not automatically reused after assignment.
 - Admins can bulk-import native ETH addresses.
 - Admins can inspect the available native ETH Address Pool capacity.
@@ -176,7 +204,7 @@ Matching Blockchain Transactions first make a Payment an Observed Payment.
 
 An Observed Payment is completed only after the configured Confirmation Requirement for the selected Supported Currency is met. External systems are notified of successful completion only when the Payment is completed.
 
-Confirmation Requirements are configurable per Supported Currency.
+Confirmation Requirements are configurable per Project and Supported Currency.
 
 Default Confirmation Requirements:
 
@@ -191,7 +219,7 @@ Payment completion is based on the sum of confirmed Matching Blockchain Transact
 - Matching Blockchain Transactions must fall within the Payment Expiration or Late Acceptance Window rules.
 - A later matching transaction may complete a Payment after an earlier underpaid transaction.
 
-Underpayments are handled with a configurable Payment Tolerance.
+Underpayments are handled with a configurable Payment Tolerance per Project.
 
 - Payment Tolerance is a percentage of the expected cryptocurrency amount.
 - The default Payment Tolerance is 1 percent.
@@ -244,7 +272,7 @@ Instead, `payaffe` creates a Reorg Alert and records the event in Payment Event 
 
 Admins review Reorg Alerts manually.
 
-Reorg Monitoring Depth is configurable per Supported Currency.
+Reorg Monitoring Depth is configurable per Project and Supported Currency.
 
 Default Reorg Monitoring Depth:
 
@@ -261,6 +289,15 @@ External systems can learn about payment changes through both:
 
 Polling through the Integration API is the recovery mechanism when webhooks are missed or delayed.
 
+The Integration API also supports authenticated Currency Selection for an
+Embedded Payment Flow. Its exact amounts, wallet URI rules, idempotent
+concurrency behavior, and compatibility guarantees follow the
+[Integration API contract](../architecture/integration-api-contract.md).
+
+The supported `net10.0` client surface, target-product authorization duties,
+polling backoff, and headless acceptance scenarios follow the
+[Embedded Payment and .NET SDK baseline](../architecture/embedded-payment-sdk-baseline.md).
+
 The MVP supports these webhook events:
 
 - `payment.created`
@@ -270,7 +307,9 @@ The MVP supports these webhook events:
 - `payment.expired`
 - `payment.settled`
 
-Webhook Endpoints belong to Integration API Credentials.
+Webhook Endpoints belong to Integration API Credentials and therefore to the
+same Project. A Webhook Event is delivered only to endpoints in the Payment's
+Project.
 
 Each Integration API Credential may have zero or more Webhook Endpoints.
 
@@ -293,10 +332,11 @@ Admins can inspect Webhook Delivery history in the Admin UI and manually resend 
 
 The MVP uses static bearer tokens for Integration API authentication.
 
-Admins can manage multiple Integration API Credentials.
+Admins can manage multiple Integration API Credentials per Project.
 
 Each Integration API Credential has:
 
+- Project,
 - name,
 - status,
 - created timestamp,
@@ -344,7 +384,9 @@ The MVP MCP does not create Integration API Credentials, change Webhook Endpoint
 
 ## Admin Accounts And Authorization
 
-The MVP supports multiple local Admin Accounts.
+The MVP supports multiple local Admin Accounts. Every Admin Account can
+administer every Project; Selected Project context is a safety control, not an
+authorization role.
 
 Admins authenticate with a local password, required TOTP MFA, and a session
 cookie.
@@ -384,7 +426,6 @@ Webhook Delivery attempts and failures are recorded in Webhook Delivery history.
 - Splitting one Payment across multiple Supported Currencies.
 - Providing a fully trustless blockchain verification setup.
 - Supporting refunds.
-- Supporting late-payment workflows.
 - Automatically reusing native ETH Payment Addresses.
 - OAuth or JWT authentication for external systems.
 - OIDC, SAML, LDAP, or external identity providers for Admin authentication.

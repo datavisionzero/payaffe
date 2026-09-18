@@ -1,5 +1,10 @@
 # The Hosts Are Thin and the Core Is Shared
 
+The frontend topology in this decision is amended by
+[ADR 0030](./0030-the-web-application-is-a-vite-spa-served-by-the-api.md).
+`apps/web` remains outside the shared backend core but is now built as static
+assets into the API host rather than deployed as a Next.js host.
+
 The backend is `Payaffe.Domain`, `Payaffe.Application`, and
 `Payaffe.Infrastructure` under `src/`, with four deployable hosts over them
 under `apps/`: `api`, `worker`, `mcp`, and `migrations`. Dependencies point

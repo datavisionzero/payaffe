@@ -21,7 +21,10 @@ The MVP supports multiple local Admin Accounts.
 
 Each Admin Account is a privileged product-local actor. The MVP has one Admin
 permission level, so all Admin Accounts can perform the same Admin actions
-after authentication, authorization, and any required step-up.
+in every Project after authentication, authorization, and any required
+step-up. There are no Project memberships or Project roles. Selected Project
+context is required for Project-owned actions to prevent accidental mixing,
+but it is not an Admin authorization boundary.
 
 Admin Accounts authenticate with:
 
@@ -68,10 +71,10 @@ The standard request header is:
 X-CSRF-TOKEN
 ```
 
-ASP.NET Core antiforgery is the standard validation mechanism. Next.js App
-Router remains the UI and routing layer; protected product mutations must go
-through a backend path that validates the Admin session, CSRF evidence, and
-authorization.
+ASP.NET Core antiforgery is the standard validation mechanism. The Vite/React
+Router application is the UI and browser-routing layer; protected product
+mutations must go through a backend path that validates the Admin session, CSRF
+evidence, and authorization.
 
 `GET`, `HEAD`, and `OPTIONS` must not have security- or payment-relevant side
 effects.
@@ -235,7 +238,8 @@ Security-relevant Audit Log entries use the shared core schema:
 - `correlation_id`,
 - `reason_code`,
 - `subject_type`,
-- `subject_id`.
+- `subject_id`,
+- `project_id` when the subject or action belongs to a Project.
 
 `occurred_at` is a UTC instant. Audit Log entries are append-only during normal
 product operation. Corrections are recorded as new Audit Log entries.
@@ -268,6 +272,11 @@ Audit outcomes use:
 Audit Log entries must not contain raw secrets, tokens, passwords, MFA secrets,
 recovery codes, CSRF tokens, session identifiers, provider raw payloads,
 stacktraces, or SQL details.
+
+`project_id` is derived from the persisted subject or authenticated Project
+context, not trusted from display state. Installation-wide authentication and
+configuration events leave it absent. All Admins may search across Projects;
+Project filtering is an operational view, not a visibility restriction.
 
 Security-relevant Audit Log entries are retained for at least 180 days.
 

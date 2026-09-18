@@ -7,6 +7,11 @@ surface.
 
 The admin MCP surface is product-local and narrower than the Admin UI.
 
+All Admin MCP actors remain installation-wide Admins. Tools acting on
+Project-owned resources require an explicit `project_id`; no ambient UI
+selection or last-used Project is trusted. Installation-wide tools either have
+no Project context or expose an explicit optional Project filter.
+
 It provides read access for:
 
 - Payments and statuses,
@@ -67,6 +72,7 @@ Initial read tools:
 
 | Tool | Purpose |
 | --- | --- |
+| `project.list` | List Projects the installation-wide Admin may select. |
 | `payment.search` | Search or list Payments for operational review. |
 | `payment.inspect` | Inspect one Payment, including status, evidence, and relevant histories. |
 | `configuration.summarize` | Return a safe configuration summary without secrets. |
@@ -84,6 +90,15 @@ Initial write tools:
 
 Tool names are stable contracts. Breaking semantic changes require a new tool
 name or a documented deprecation and replacement path.
+
+`payment.search`, `payment.inspect`, `webhook_delivery.search`, and
+`address_pool.summarize` require `project_id`. `configuration.summarize`
+requires `project_id` for its Project-owned section and labels
+installation-wide values separately. `audit_log.search` may omit `project_id`
+for an intentional installation-wide search or provide it as an explicit
+filter. `payment.settle`, `webhook_delivery.resend`, and
+`address_pool.import_native_eth` also require `project_id`. All
+Project-resource results include `project_id`.
 
 ## Tool Results
 
@@ -112,6 +127,8 @@ Initial error codes include:
 - `authentication.required`,
 - `step_up.required`,
 - `confirmation.required`,
+- `project.not_found`,
+- `project.disabled`,
 - `payment.not_found`,
 - `payment.not_settleable`,
 - `webhook_delivery.not_found`,
@@ -188,6 +205,7 @@ Implementation must include focused tests for:
 - structured result shape,
 - stable error codes,
 - server-side authorization,
+- explicit Project context and cross-Project identifier substitution,
 - step-up requirements for sensitive actions,
 - confirmation metadata for risky tools,
 - Audit Log entries for write and sensitive read tools,

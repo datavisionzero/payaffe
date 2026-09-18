@@ -14,8 +14,8 @@ its choice. What is mandated is the negative: no secret in Git, no secret in a
 container image, no secret in a log, and no secret in a browser bundle.
 
 `.env.example` is versioned and therefore contains only placeholders or
-local-only non-production defaults. `NEXT_PUBLIC_*` is treated as published
-text, because it is.
+local-only non-production defaults. Browser build values such as Vite `VITE_*`
+variables are treated as published text, because they are.
 
 ## Consequences
 

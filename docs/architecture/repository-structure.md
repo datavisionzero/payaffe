@@ -22,9 +22,13 @@ The repository follows a monorepo-capable structure. Deployable hosts, shared ba
 
 ## Folder Meaning
 
-`apps/` contains deployable or locally runnable applications and hosts. Typical examples are `apps/web` for the Next.js web application, `apps/api` for an ASP.NET Core HTTP API, `apps/auth` for an auth host, `apps/mcp` for an MCP host, `apps/worker` for background processing, or `apps/migrations` for a migration runner. Not every repository needs every host.
+`apps/` contains deployable or locally runnable applications and hosts. Typical examples are `apps/web` for a Vite frontend source package, `apps/api` for an ASP.NET Core HTTP API that may serve the built frontend, `apps/auth` for an auth host, `apps/mcp` for an MCP host, `apps/worker` for background processing, or `apps/migrations` for a migration runner. Not every repository needs every host.
 
-`src/` contains shared backend code and core modules, especially Domain, Application, Infrastructure, and comparable libraries. Deployable hosts should not duplicate domain logic; they should use shared modules.
+`src/` contains shared backend code and core modules, especially Domain,
+Application, Infrastructure, and comparable libraries. The independently
+packaged `Payaffe.Sdk` also belongs here because it is a .NET library rather
+than a deployable host. Deployable hosts and the SDK must not duplicate domain
+logic; they use the public application or HTTP boundaries respectively.
 
 `tests/` contains automated tests that do not fit naturally next to one package or host. Backend test projects, integration tests, and cross-cutting contract tests belong here.
 
@@ -43,7 +47,9 @@ Root configuration files stay in the repository root when tools expect them ther
 - Missing folders are not created in advance.
 - New top-level folders need a clear purpose and should not duplicate this structure.
 - Domain logic should not live permanently in deployable hosts when it should be shared through `src/`.
+- The public .NET SDK belongs in `src/Payaffe.Sdk` with focused tests under
+  `tests/Payaffe.Sdk.Tests`; those folders are created only with the SDK
+  implementation.
 - Frontend code belongs under `apps/web` or, for reusable building blocks, under `packages/`.
 - Documentation should respect existing document types and avoid duplicating decisions.
 - Deviations are allowed, but they should be justified in an ADR or in the architecture documentation.
-

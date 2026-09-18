@@ -6,7 +6,11 @@ This file gives coding agents the default operating rules for `payaffe`.
 
 `payaffe` is an open-source, self-hostable crypto payment application for low-volume payment flows.
 
-The MVP is single-tenant: one deployment serves one operator or shop. The MVP currency scope is BTC, LTC, and native ETH. Payment creation starts from EUR or USD fiat amounts. The product is non-custodial and must not store spending keys, perform refunds, sweeps, or withdrawals.
+One deployment serves one operator or shop and may contain multiple isolated
+Projects under installation-wide Admins. The MVP currency scope is BTC, LTC,
+and native ETH. Payment creation starts from EUR or USD fiat amounts. The
+product is non-custodial and must not store spending keys, perform refunds,
+sweeps, or withdrawals.
 
 The product exposes:
 
@@ -83,6 +87,13 @@ first.
 - Integration API: [docs/architecture/integration-api-contract.md](docs/architecture/integration-api-contract.md).
   Everything under `/api/v1/` is public contract. Versioning, `ProblemDetails`,
   validation shape, OpenAPI generation, and the contract diff are binding.
+- Embedded payments and SDK: [docs/architecture/embedded-payment-sdk-baseline.md](docs/architecture/embedded-payment-sdk-baseline.md).
+  Integration credentials stay backend-only; headless flows use the versioned
+  Integration API and the UI-free `net10.0` SDK.
+- Project isolation: [docs/architecture/project-isolation-baseline.md](docs/architecture/project-isolation-baseline.md).
+  Admins are installation-wide; Project ownership is mandatory for payment
+  data, Integration API Credentials, address allocation, Webhook Delivery, and
+  project-specific background work.
 - Webhooks: [docs/architecture/webhook-event-contract.md](docs/architecture/webhook-event-contract.md).
   Signed, versioned, at-least-once, and snapshotted.
 - Frontend: [docs/architecture/frontend-baseline.md](docs/architecture/frontend-baseline.md).

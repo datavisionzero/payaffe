@@ -1,5 +1,10 @@
 # The Browser API Lives Under /api, on One Origin
 
+The one-origin and path decisions remain current. The separate web-host and
+reverse-proxy topology is superseded by
+[ADR 0030](./0030-the-web-application-is-a-vite-spa-served-by-the-api.md),
+which serves the static application from the API host.
+
 Everything the API answers is under `/api` or `/health`. The Admin API is at
 `/api/admin/...`, the Payer API at `/api/payer/...`, and the Integration API
 stays where it already was, at `/api/v1/...`
