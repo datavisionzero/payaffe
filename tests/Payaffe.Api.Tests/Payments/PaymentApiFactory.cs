@@ -30,6 +30,12 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
 
     public string? StaticWebRootPath { get; set; }
 
+    public HashSet<string> UnavailableRateCurrencies { get; } = new(StringComparer.Ordinal);
+
+    public HashSet<string> UnavailableAddressCurrencies { get; } = new(StringComparer.Ordinal);
+
+    public HashSet<string> UnavailableObservationCurrencies { get; } = new(StringComparer.Ordinal);
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -81,9 +87,12 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IBlockchainObservationAdapter>();
             services.RemoveAll<IAdminTotpSecretResolver>();
             services.RemoveAll<IWebhookSecretResolver>();
-            services.AddScoped<IExchangeRateSource, FixedExchangeRateSource>();
-            services.AddScoped<IPaymentAddressProvider, FixedPaymentAddressProvider>();
-            services.AddScoped<IBlockchainObservationAdapter, NoOpBlockchainObservationAdapter>();
+            services.AddScoped<IExchangeRateSource>(_ =>
+                new FixedExchangeRateSource(UnavailableRateCurrencies));
+            services.AddScoped<IPaymentAddressProvider>(_ =>
+                new FixedPaymentAddressProvider(UnavailableAddressCurrencies));
+            services.AddScoped<IBlockchainObservationAdapter>(_ =>
+                new FixedBlockchainObservationAdapter(UnavailableObservationCurrencies));
             services.AddSingleton<IAdminTotpSecretResolver>(new FixedAdminTotpSecretResolver(_totpSecrets));
             services.AddSingleton<IWebhookSecretResolver>(new FixedWebhookSecretResolver(_webhookSecrets));
         });
@@ -159,6 +168,50 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
         return projectId;
     }
 
+    public async Task SetProjectStatusAsync(Guid projectId, string status)
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var project = await dbContext.Projects.SingleAsync(candidate => candidate.Id == projectId);
+        project.Status = status;
+        project.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync();
+    }
+
+    public async Task SetCurrencyEnabledAsync(Guid projectId, string supportedCurrency, bool enabled)
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var configuration = await dbContext.ProjectConfigurations
+            .SingleAsync(candidate => candidate.ProjectId == projectId);
+        switch (supportedCurrency)
+        {
+            case "BTC":
+                configuration.BtcEnabled = enabled;
+                break;
+            case "LTC":
+                configuration.LtcEnabled = enabled;
+                break;
+            case "ETH":
+                configuration.EthEnabled = enabled;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(supportedCurrency));
+        }
+
+        configuration.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync();
+    }
+
+    public async Task ExpirePaymentAsync(Guid paymentId)
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var payment = await dbContext.Payments.SingleAsync(candidate => candidate.Id == paymentId);
+        payment.ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        await dbContext.SaveChangesAsync();
+    }
+
     private static ProjectConfigurationRecord CreateProjectConfiguration(
         Guid projectId,
         DateTimeOffset now) => new()
@@ -231,7 +284,8 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
         return adminAccountId;
     }
 
-    private sealed class FixedExchangeRateSource : IExchangeRateSource
+    private sealed class FixedExchangeRateSource(IReadOnlySet<string> unavailableCurrencies)
+        : IExchangeRateSource
     {
         public Task<RateLockQuote?> GetRateLockQuoteAsync(
             string fiatCurrency,
@@ -240,16 +294,27 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
             DateTimeOffset requestedAt,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult<RateLockQuote?>(new RateLockQuote(
-                supportedCurrency,
-                "test-rate-source",
-                "50000.00",
-                "0.00039980",
-                requestedAt));
+            return Task.FromResult(
+                unavailableCurrencies.Contains(supportedCurrency)
+                    ? null
+                    : new RateLockQuote(
+                        supportedCurrency,
+                        "test-rate-source",
+                        "50000.00",
+                        "0.00039980",
+                        requestedAt));
         }
+
+        public Task<bool> IsRateAvailableAsync(
+            string fiatCurrency,
+            string supportedCurrency,
+            DateTimeOffset checkedAt,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(!unavailableCurrencies.Contains(supportedCurrency));
     }
 
-    private sealed class FixedPaymentAddressProvider : IPaymentAddressProvider
+    private sealed class FixedPaymentAddressProvider(IReadOnlySet<string> unavailableCurrencies)
+        : IPaymentAddressProvider
     {
         public Task<PaymentAddressAssignment?> AssignAsync(
             Guid projectId,
@@ -257,10 +322,52 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
             string supportedCurrency,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult<PaymentAddressAssignment?>(new PaymentAddressAssignment(
-                supportedCurrency,
-                $"{supportedCurrency.ToLowerInvariant()}-test-address"));
+            var assignment = supportedCurrency switch
+            {
+                "BTC" => new PaymentAddressAssignment(
+                    "BTC",
+                    "bc1qpayaffetestaddress0000000000000000000000000",
+                    "mainnet"),
+                "LTC" => new PaymentAddressAssignment(
+                    "LTC",
+                    "ltc1qpayaffetestaddress000000000000000000000000",
+                    "mainnet"),
+                "ETH" => new PaymentAddressAssignment(
+                    "ETH",
+                    "0x1111111111111111111111111111111111111111",
+                    "mainnet",
+                    1),
+                _ => throw new ArgumentOutOfRangeException(nameof(supportedCurrency)),
+            };
+            return Task.FromResult(
+                unavailableCurrencies.Contains(supportedCurrency)
+                    ? null
+                    : assignment);
         }
+
+        public Task<bool> IsAddressAvailableAsync(
+            Guid projectId,
+            string supportedCurrency,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(!unavailableCurrencies.Contains(supportedCurrency));
+    }
+
+    private sealed class FixedBlockchainObservationAdapter(
+        IReadOnlySet<string> unavailableCurrencies) : IBlockchainObservationAdapter
+    {
+        public Task StartWatchingAsync(
+            BlockchainObservationTarget target,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<BlockchainObservation>> PollAsync(
+            BlockchainObservationTarget target,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<BlockchainObservation>>([]);
+
+        public Task<bool> IsObservationAvailableAsync(
+            string supportedCurrency,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(!unavailableCurrencies.Contains(supportedCurrency));
     }
 
     private sealed class FixedAdminTotpSecretResolver(

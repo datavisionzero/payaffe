@@ -10,6 +10,9 @@ public sealed record SelectPaymentCurrencyResult(
     public static SelectPaymentCurrencyResult AlreadySelected(PaymentResponse payment) =>
         new(SelectPaymentCurrencyResultKind.AlreadySelected, payment);
 
+    public static SelectPaymentCurrencyResult CurrencyAlreadySelected(PaymentResponse payment) =>
+        new(SelectPaymentCurrencyResultKind.CurrencyAlreadySelected, payment);
+
     public static SelectPaymentCurrencyResult NotFound() =>
         new(SelectPaymentCurrencyResultKind.NotFound, Payment: null);
 
@@ -27,16 +30,25 @@ public sealed record SelectPaymentCurrencyResult(
 
     public static SelectPaymentCurrencyResult ObservationUnavailable() =>
         new(SelectPaymentCurrencyResultKind.ObservationUnavailable, Payment: null);
+
+    public static SelectPaymentCurrencyResult CurrencyDisabled() =>
+        new(SelectPaymentCurrencyResultKind.CurrencyDisabled, Payment: null);
+
+    public static SelectPaymentCurrencyResult ProjectArchived() =>
+        new(SelectPaymentCurrencyResultKind.ProjectArchived, Payment: null);
 }
 
 public enum SelectPaymentCurrencyResultKind
 {
     Selected,
     AlreadySelected,
+    CurrencyAlreadySelected,
     NotFound,
     UnsupportedCurrency,
     PaymentExpired,
     RateUnavailable,
     PaymentAddressUnavailable,
     ObservationUnavailable,
+    CurrencyDisabled,
+    ProjectArchived,
 }

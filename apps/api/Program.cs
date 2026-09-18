@@ -351,6 +351,26 @@ integrationApi.MapGet("/payments/{paymentId:guid}", GetPaymentAsync)
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status429TooManyRequests, "application/problem+json");
 
+integrationApi.MapPut("/payments/{paymentId:guid}/currency-selection", SelectPaymentCurrencyAsync)
+    .WithName("SelectPaymentCurrency")
+    .WithTags("Payments")
+    .Accepts<SelectPaymentCurrencyHttpRequest>("application/json")
+    .Produces<PaymentResponse>(StatusCodes.Status200OK, "application/json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status400BadRequest, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json")
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status429TooManyRequests, "application/problem+json")
+    .AddOpenApiOperationTransformer((operation, _, _) =>
+    {
+        if (operation.RequestBody is OpenApiRequestBody requestBody)
+        {
+            requestBody.Required = true;
+        }
+
+        return Task.CompletedTask;
+    });
+
 // Errors the browser could not handle, reported by the payer page and the Admin
 // UI so that they reach the same log the backend writes to. An installation
 // that does not want a publicly postable endpoint sets
@@ -774,6 +794,52 @@ static async Task<IResult> GetPaymentAsync(
     return Results.Ok(payment);
 }
 
+static async Task<IResult> SelectPaymentCurrencyAsync(
+    HttpContext httpContext,
+    Guid paymentId,
+    SelectPaymentCurrencyHttpRequest? request,
+    PaymentApplicationService payments,
+    IIntegrationApiCredentialAuthenticator authenticator,
+    CancellationToken cancellationToken)
+{
+    var credential = await AuthenticateAsync(httpContext, authenticator, cancellationToken);
+    if (credential.Result is not null)
+    {
+        return credential.Result;
+    }
+
+    if (request is null || string.IsNullOrWhiteSpace(request.SupportedCurrency))
+    {
+        return IntegrationApiProblem.Validation(
+            httpContext,
+            new Dictionary<string, string[]>
+            {
+                ["supportedCurrency"] = ["supported_currency.required"],
+            });
+    }
+
+    try
+    {
+        var result = await payments.SelectCurrencyAsync(
+            new SelectIntegrationPaymentCurrencyCommand(
+                credential.Principal!.Id,
+                paymentId,
+                request.SupportedCurrency),
+            cancellationToken);
+
+        return ToCurrencySelectionResult(httpContext, result);
+    }
+    catch (DomainRuleException exception)
+    {
+        return IntegrationApiProblem.Validation(
+            httpContext,
+            new Dictionary<string, string[]>
+            {
+                ["request"] = [exception.Code],
+            });
+    }
+}
+
 static async Task<IResult> GetPayerPaymentAsync(
     HttpContext httpContext,
     string payerPageId,
@@ -828,50 +894,7 @@ static async Task<IResult> SelectPayerPaymentCurrencyAsync(
             new SelectPaymentCurrencyCommand(payerPageId, request.SupportedCurrency),
             cancellationToken);
 
-        return result.Kind switch
-        {
-            SelectPaymentCurrencyResultKind.Selected =>
-                Results.Ok(result.Payment),
-            SelectPaymentCurrencyResultKind.AlreadySelected =>
-                Results.Ok(result.Payment),
-            SelectPaymentCurrencyResultKind.NotFound =>
-                IntegrationApiProblem.Create(
-                    httpContext,
-                    StatusCodes.Status404NotFound,
-                    "Payment was not found.",
-                    "payment.not_found"),
-            SelectPaymentCurrencyResultKind.UnsupportedCurrency =>
-                IntegrationApiProblem.Create(
-                    httpContext,
-                    StatusCodes.Status400BadRequest,
-                    "Supported Currency is invalid.",
-                    "supported_currency.unsupported"),
-            SelectPaymentCurrencyResultKind.PaymentExpired =>
-                IntegrationApiProblem.Create(
-                    httpContext,
-                    StatusCodes.Status409Conflict,
-                    "Payment has expired.",
-                    "payment.expired"),
-            SelectPaymentCurrencyResultKind.RateUnavailable =>
-                IntegrationApiProblem.Create(
-                    httpContext,
-                    StatusCodes.Status409Conflict,
-                    "Exchange rate is unavailable.",
-                    PaymentOptionUnavailableReasons.ExchangeRate),
-            SelectPaymentCurrencyResultKind.PaymentAddressUnavailable =>
-                IntegrationApiProblem.Create(
-                    httpContext,
-                    StatusCodes.Status409Conflict,
-                    "Payment Address is unavailable.",
-                    PaymentOptionUnavailableReasons.PaymentAddress),
-            SelectPaymentCurrencyResultKind.ObservationUnavailable =>
-                IntegrationApiProblem.Create(
-                    httpContext,
-                    StatusCodes.Status409Conflict,
-                    "Blockchain Observation is unavailable.",
-                    PaymentOptionUnavailableReasons.BlockchainObservation),
-            _ => throw new InvalidOperationException($"Unsupported select result {result.Kind}."),
-        };
+        return ToCurrencySelectionResult(httpContext, result);
     }
     catch (DomainRuleException exception)
     {
@@ -882,6 +905,73 @@ static async Task<IResult> SelectPayerPaymentCurrencyAsync(
                 ["request"] = [exception.Code],
             });
     }
+}
+
+static IResult ToCurrencySelectionResult(
+    HttpContext httpContext,
+    SelectPaymentCurrencyResult result)
+{
+    return result.Kind switch
+    {
+        SelectPaymentCurrencyResultKind.Selected or
+        SelectPaymentCurrencyResultKind.AlreadySelected =>
+            Results.Ok(result.Payment),
+        SelectPaymentCurrencyResultKind.CurrencyAlreadySelected =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Payment currency has already been selected.",
+                "payment.currency_already_selected"),
+        SelectPaymentCurrencyResultKind.NotFound =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status404NotFound,
+                "Payment was not found.",
+                "payment.not_found"),
+        SelectPaymentCurrencyResultKind.UnsupportedCurrency =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status400BadRequest,
+                "Supported Currency is invalid.",
+                "supported_currency.unsupported"),
+        SelectPaymentCurrencyResultKind.PaymentExpired =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Payment has expired.",
+                "payment.expired"),
+        SelectPaymentCurrencyResultKind.RateUnavailable =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Exchange rate is unavailable.",
+                PaymentOptionUnavailableReasons.ExchangeRate),
+        SelectPaymentCurrencyResultKind.PaymentAddressUnavailable =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Payment Address is unavailable.",
+                PaymentOptionUnavailableReasons.PaymentAddress),
+        SelectPaymentCurrencyResultKind.ObservationUnavailable =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Blockchain Observation is unavailable.",
+                PaymentOptionUnavailableReasons.BlockchainObservation),
+        SelectPaymentCurrencyResultKind.CurrencyDisabled =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Supported Currency is disabled for the Project.",
+                PaymentOptionUnavailableReasons.ProjectConfiguration),
+        SelectPaymentCurrencyResultKind.ProjectArchived =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Project is archived.",
+                "project.archived"),
+        _ => throw new InvalidOperationException($"Unsupported select result {result.Kind}."),
+    };
 }
 
 static async Task<IResult> StartAdminLoginAsync(
@@ -2940,6 +3030,8 @@ public sealed class PaymentContextHttpRequest
 }
 
 public sealed record SelectPayerPaymentCurrencyHttpRequest(string? SupportedCurrency);
+
+public sealed record SelectPaymentCurrencyHttpRequest(string? SupportedCurrency);
 
 public sealed record AdminLoginStartHttpRequest(string? Username, string? Password);
 

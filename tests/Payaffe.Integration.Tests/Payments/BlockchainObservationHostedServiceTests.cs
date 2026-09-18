@@ -216,7 +216,7 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-reorg-123",
                 "0.00039980",
                 WorkerNow.AddMinutes(1),
@@ -342,8 +342,9 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
             CancellationToken cancellationToken)
         {
             return Task.FromResult<PaymentAddressAssignment?>(new PaymentAddressAssignment(
-                supportedCurrency,
-                $"{supportedCurrency.ToLowerInvariant()}-test-address"));
+                "BTC",
+                "bc1qpayaffetestaddress0000000000000000000000000",
+                "mainnet"));
         }
     }
 

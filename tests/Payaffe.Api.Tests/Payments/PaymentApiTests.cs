@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -335,7 +336,290 @@ public sealed class PaymentApiTests
         Assert.Equal("waiting_for_payment", payment.Status);
         Assert.Equal("BTC", payment.SelectedCurrency);
         Assert.Equal("0.00039980", payment.ExpectedCryptoAmount);
-        Assert.Equal("btc-test-address", payment.PaymentAddress);
+        Assert.Equal("bc1qpayaffetestaddress0000000000000000000000000", payment.PaymentAddress);
+    }
+
+    [Theory]
+    [InlineData(
+        "BTC",
+        "39980",
+        "bc1qpayaffetestaddress0000000000000000000000000",
+        "bitcoin:bc1qpayaffetestaddress0000000000000000000000000?amount=0.00039980",
+        null)]
+    [InlineData(
+        "LTC",
+        "39980",
+        "ltc1qpayaffetestaddress000000000000000000000000",
+        "litecoin:ltc1qpayaffetestaddress000000000000000000000000?amount=0.00039980",
+        null)]
+    [InlineData(
+        "ETH",
+        "399800000000000",
+        "0x1111111111111111111111111111111111111111",
+        "ethereum:0x1111111111111111111111111111111111111111@1?value=399800000000000",
+        1L)]
+    public async Task Integration_currency_selection_returns_exact_wallet_instruction(
+        string supportedCurrency,
+        string amountAtomic,
+        string paymentAddress,
+        string paymentUri,
+        long? chainId)
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", $"instruction-{supportedCurrency}");
+        var createResponse = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{createdPayment!.PaymentId}/currency-selection",
+            new { supportedCurrency });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var selected = await response.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        Assert.NotNull(selected);
+        Assert.Equal("waiting_for_payment", selected.Status);
+        Assert.Equal("none", selected.ObservedAmountState);
+        Assert.Equal(selected.ExpiresAt, selected.LateAcceptanceEndsAt.AddHours(-24));
+        Assert.NotEqual(default, selected.CreatedAt);
+        Assert.NotEqual(default, selected.UpdatedAt);
+
+        Assert.NotNull(selected.RateLock);
+        Assert.Equal("EUR", selected.RateLock.FiatCurrency);
+        Assert.Equal(1999, selected.RateLock.FiatAmountMinor);
+        Assert.Equal(supportedCurrency, selected.RateLock.SupportedCurrency);
+        Assert.Equal("0.00039980", selected.RateLock.ExpectedCryptoAmount);
+        Assert.Equal(amountAtomic, selected.RateLock.ExpectedCryptoAmountAtomic);
+        Assert.Equal("50000.00", selected.RateLock.FiatPerCryptoUnit);
+        Assert.Equal("test-rate-source", selected.RateLock.Source);
+        Assert.Equal(selected.ExpiresAt, selected.RateLock.ValidUntil);
+
+        Assert.NotNull(selected.PaymentInstruction);
+        Assert.Equal(supportedCurrency, selected.PaymentInstruction.SupportedCurrency);
+        Assert.Equal("mainnet", selected.PaymentInstruction.Network);
+        Assert.Equal(chainId, selected.PaymentInstruction.ChainId);
+        Assert.Equal("0.00039980", selected.PaymentInstruction.Amount);
+        Assert.Equal(amountAtomic, selected.PaymentInstruction.AmountAtomic);
+        Assert.Equal(paymentAddress, selected.PaymentInstruction.PaymentAddress);
+        Assert.Equal(paymentUri, selected.PaymentInstruction.Uri);
+        Assert.Equal(selected.ExpiresAt, selected.PaymentInstruction.ExpiresAt);
+
+        var pollResponse = await client.GetAsync($"/api/v1/payments/{createdPayment.PaymentId}");
+        var polled = await pollResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        Assert.Equal(selected.PaymentInstruction, polled!.PaymentInstruction);
+        Assert.Equal(selected.RateLock, polled.RateLock);
+    }
+
+    [Fact]
+    public async Task Get_payment_reports_received_and_expected_amount_state()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "observed-amount-state");
+        var createResponse = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var created = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        var selectionResponse = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{created!.PaymentId}/currency-selection",
+            new { supportedCurrency = "BTC" });
+        var selected = await selectionResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<PaymentApplicationService>();
+            await service.RecordBlockchainObservationAsync(
+                new RecordBlockchainObservationCommand(
+                    created.PaymentId,
+                    "BTC",
+                    selected!.PaymentAddress!,
+                    "tx-underpaid",
+                    "0.00010000",
+                    DateTimeOffset.UtcNow,
+                    0,
+                    "test-provider",
+                    "observation-underpaid",
+                    ProjectDefaults.DefaultProjectId),
+                CancellationToken.None);
+        }
+
+        var response = await client.GetAsync($"/api/v1/payments/{created.PaymentId}");
+        var payment = await response.Content.ReadFromJsonAsync<PaymentApiResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("0.0001", payment!.ObservedTotal);
+        Assert.Null(payment.ConfirmedEligibleTotal);
+        Assert.Equal("0.00039980", payment.ExpectedCryptoAmount);
+        Assert.Equal("underpaid", payment.ObservedAmountState);
+    }
+
+    [Fact]
+    public async Task Integration_currency_selection_requires_authentication()
+    {
+        await using var factory = new PaymentApiFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{Guid.NewGuid()}/currency-selection",
+            new { supportedCurrency = "BTC" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await AssertProblemCodeAsync(response, "authentication.required");
+    }
+
+    [Fact]
+    public async Task Integration_currency_selection_is_idempotent_and_rejects_a_different_currency()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "integration-select-currency");
+        var createResponse = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+
+        var selectedResponse = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{createdPayment!.PaymentId}/currency-selection",
+            new { supportedCurrency = "btc" });
+        var replayResponse = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{createdPayment.PaymentId}/currency-selection",
+            new { supportedCurrency = "BTC" });
+        var conflictResponse = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{createdPayment.PaymentId}/currency-selection",
+            new { supportedCurrency = "LTC" });
+
+        Assert.Equal(HttpStatusCode.OK, selectedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
+        var selected = await selectedResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        var replayed = await replayResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        Assert.Equal("waiting_for_payment", selected!.Status);
+        Assert.Equal("BTC", selected.SelectedCurrency);
+        Assert.Equal(selected.ExpectedCryptoAmount, replayed!.ExpectedCryptoAmount);
+        Assert.Equal(selected.PaymentAddress, replayed.PaymentAddress);
+        Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
+        await AssertProblemCodeAsync(conflictResponse, "payment.currency_already_selected");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Single(dbContext.RateLocks.Where(rateLock => rateLock.PaymentId == createdPayment.PaymentId));
+        Assert.Single(dbContext.PaymentAddressAssignments.Where(
+            assignment => assignment.PaymentId == createdPayment.PaymentId));
+    }
+
+    [Fact]
+    public async Task Integration_currency_selection_hides_another_projects_payment()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync("owner-token");
+        var otherProjectId = await factory.SeedProjectAsync();
+        await factory.SeedCredentialAsync("other-token", projectId: otherProjectId);
+        using var owner = CreateAuthenticatedClient(factory, "owner-token");
+        owner.DefaultRequestHeaders.Add("Idempotency-Key", "cross-project-selection");
+        var createResponse = await owner.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        using var other = CreateAuthenticatedClient(factory, "other-token");
+
+        var response = await other.PutAsJsonAsync(
+            $"/api/v1/payments/{createdPayment!.PaymentId}/currency-selection",
+            new { supportedCurrency = "BTC" });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await AssertProblemCodeAsync(response, "payment.not_found");
+    }
+
+    [Theory]
+    [InlineData("rate", "exchange_rate.unavailable")]
+    [InlineData("address", "payment_address.unavailable")]
+    [InlineData("observation", "blockchain_observation.unavailable")]
+    public async Task Integration_currency_selection_rechecks_live_availability(
+        string unavailableDependency,
+        string expectedCode)
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", $"unavailable-{unavailableDependency}");
+        var createResponse = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        var unavailableCurrencies = unavailableDependency switch
+        {
+            "rate" => factory.UnavailableRateCurrencies,
+            "address" => factory.UnavailableAddressCurrencies,
+            "observation" => factory.UnavailableObservationCurrencies,
+            _ => throw new ArgumentOutOfRangeException(nameof(unavailableDependency)),
+        };
+        unavailableCurrencies.Add("BTC");
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{createdPayment!.PaymentId}/currency-selection",
+            new { supportedCurrency = "BTC" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await AssertProblemCodeAsync(response, expectedCode);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var stored = await dbContext.Payments.SingleAsync(payment => payment.Id == createdPayment.PaymentId);
+        Assert.Equal("pending_currency_selection", stored.Status);
+        Assert.Empty(dbContext.RateLocks.Where(rateLock => rateLock.PaymentId == createdPayment.PaymentId));
+    }
+
+    [Fact]
+    public async Task Integration_currency_selection_rejects_disabled_currency_and_expired_payment()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "disabled-currency");
+        var disabledCreateResponse = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var disabledPayment = await disabledCreateResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        await factory.SetCurrencyEnabledAsync(ProjectDefaults.DefaultProjectId, "BTC", enabled: false);
+
+        var disabledResponse = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{disabledPayment!.PaymentId}/currency-selection",
+            new { supportedCurrency = "BTC" });
+
+        Assert.Equal(HttpStatusCode.Conflict, disabledResponse.StatusCode);
+        await AssertProblemCodeAsync(disabledResponse, "project_configuration.disabled");
+
+        await factory.SetCurrencyEnabledAsync(ProjectDefaults.DefaultProjectId, "BTC", enabled: true);
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "expired-selection");
+        var expiredCreateResponse = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var expiredPayment = await expiredCreateResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        await factory.ExpirePaymentAsync(expiredPayment!.PaymentId);
+
+        var expiredResponse = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{expiredPayment.PaymentId}/currency-selection",
+            new { supportedCurrency = "BTC" });
+
+        Assert.Equal(HttpStatusCode.Conflict, expiredResponse.StatusCode);
+        await AssertProblemCodeAsync(expiredResponse, "payment.expired");
+    }
+
+    [Theory]
+    [InlineData("disabled", HttpStatusCode.OK, null)]
+    [InlineData("archived", HttpStatusCode.Conflict, "project.archived")]
+    public async Task Integration_currency_selection_respects_project_lifecycle(
+        string projectStatus,
+        HttpStatusCode expectedStatus,
+        string? expectedCode)
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", $"project-{projectStatus}");
+        var createResponse = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        await factory.SetProjectStatusAsync(ProjectDefaults.DefaultProjectId, projectStatus);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/payments/{createdPayment!.PaymentId}/currency-selection",
+            new { supportedCurrency = "BTC" });
+
+        Assert.Equal(expectedStatus, response.StatusCode);
+        if (expectedCode is not null)
+        {
+            await AssertProblemCodeAsync(response, expectedCode);
+        }
     }
 
     private static HttpClient CreateAuthenticatedClient(
@@ -407,5 +691,41 @@ public sealed class PaymentApiTests
         string? ObservedTotal,
         DateTimeOffset? CompletedAt,
         DateTimeOffset? SettledAt,
-        string? ReturnUrl);
+        string? ReturnUrl,
+        IReadOnlyList<PaymentOptionApiResponse>? PaymentOptions = null,
+        DateTimeOffset CreatedAt = default,
+        DateTimeOffset UpdatedAt = default,
+        DateTimeOffset LateAcceptanceEndsAt = default,
+        string? ConfirmedEligibleTotal = null,
+        string? ObservedAmountState = null,
+        RateLockApiResponse? RateLock = null,
+        PaymentInstructionApiResponse? PaymentInstruction = null);
+
+    private sealed record PaymentOptionApiResponse(
+        string SupportedCurrency,
+        string Status,
+        string? UnavailableReasonCode,
+        DateTimeOffset CheckedAt);
+
+    private sealed record RateLockApiResponse(
+        string FiatCurrency,
+        long FiatAmountMinor,
+        string SupportedCurrency,
+        string ExpectedCryptoAmount,
+        string ExpectedCryptoAmountAtomic,
+        string FiatPerCryptoUnit,
+        string Source,
+        DateTimeOffset RateObservedAt,
+        DateTimeOffset LockedAt,
+        DateTimeOffset ValidUntil);
+
+    private sealed record PaymentInstructionApiResponse(
+        string SupportedCurrency,
+        string Network,
+        long? ChainId,
+        string Amount,
+        string AmountAtomic,
+        string PaymentAddress,
+        string Uri,
+        DateTimeOffset ExpiresAt);
 }

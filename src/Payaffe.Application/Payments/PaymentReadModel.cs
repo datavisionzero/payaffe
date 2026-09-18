@@ -25,9 +25,29 @@ public sealed record PaymentReadModel(
     DateTimeOffset UpdatedAt,
     IReadOnlyList<PaymentOptionReadModel>? PaymentOptions = null,
     DateTimeOffset? SettledAt = null,
-    Guid ProjectId = default);
+    Guid ProjectId = default,
+    RateLockReadModel? RateLock = null,
+    PaymentInstructionReadModel? PaymentInstruction = null);
 
 public sealed record PaymentOptionReadModel(
     string SupportedCurrency,
     string Status,
-    string? UnavailableReason);
+    string? UnavailableReason,
+    DateTimeOffset CheckedAt = default);
+
+public sealed record RateLockReadModel(
+    string FiatCurrency,
+    long FiatAmountMinor,
+    string SupportedCurrency,
+    string ExpectedCryptoAmount,
+    string FiatPerCryptoUnit,
+    string Source,
+    DateTimeOffset RateObservedAt,
+    DateTimeOffset LockedAt);
+
+public sealed record PaymentInstructionReadModel(
+    string SupportedCurrency,
+    string Network,
+    long? ChainId,
+    string Amount,
+    string PaymentAddress);

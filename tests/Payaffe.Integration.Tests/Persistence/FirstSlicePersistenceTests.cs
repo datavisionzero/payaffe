@@ -86,6 +86,17 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal("timestamp with time zone", paymentColumns["settled_at"]);
         Assert.Equal("bigint", paymentColumns["version"]);
 
+        var paymentAddressAssignmentColumns = await QueryDictionaryAsync(
+            connectionString,
+            """
+            select column_name, data_type
+            from information_schema.columns
+            where table_schema = 'app' and table_name = 'payment_address_assignments'
+            """);
+
+        Assert.Equal("text", paymentAddressAssignmentColumns["network"]);
+        Assert.Equal("bigint", paymentAddressAssignmentColumns["chain_id"]);
+
         var eventColumns = await QueryDictionaryAsync(
             connectionString,
             """
@@ -400,7 +411,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal("waiting_for_payment", selectResult.Payment.Status);
         Assert.Equal("BTC", selectResult.Payment.SelectedCurrency);
         Assert.Equal("0.00039980", selectResult.Payment.ExpectedCryptoAmount);
-        Assert.Equal("btc-test-address", selectResult.Payment.PaymentAddress);
+        Assert.Equal("bc1qpayaffetestaddress0000000000000000000000000", selectResult.Payment.PaymentAddress);
 
         using var scope = serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
@@ -408,7 +419,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal("waiting_for_payment", payment.Status);
         Assert.Equal("BTC", payment.SelectedCurrency);
         Assert.Equal("0.00039980", payment.ExpectedCryptoAmount);
-        Assert.Equal("btc-test-address", payment.PaymentAddress);
+        Assert.Equal("bc1qpayaffetestaddress0000000000000000000000000", payment.PaymentAddress);
         Assert.Equal(1, payment.ConfirmationRequirement);
         Assert.Equal(1m, payment.PaymentTolerancePercent);
         Assert.Equal(6, payment.ReorgMonitoringDepth);
@@ -422,7 +433,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
         var addressAssignment = Assert.Single(dbContext.PaymentAddressAssignments);
         Assert.Equal(payment.Id, addressAssignment.PaymentId);
         Assert.Equal("BTC", addressAssignment.SupportedCurrency);
-        Assert.Equal("btc-test-address", addressAssignment.PaymentAddress);
+        Assert.Equal("bc1qpayaffetestaddress0000000000000000000000000", addressAssignment.PaymentAddress);
 
         Assert.Contains(
             dbContext.PaymentEventHistory,
@@ -464,7 +475,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 created.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-policy-snapshot",
                 "0.00039980",
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
@@ -587,7 +598,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-123",
                 "0.00039980",
                 observedAt,
@@ -608,7 +619,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
         var matchingTransaction = Assert.Single(dbContext.MatchingBlockchainTransactions);
         Assert.Equal(payment.Id, matchingTransaction.PaymentId);
         Assert.Equal("BTC", matchingTransaction.SupportedCurrency);
-        Assert.Equal("btc-test-address", matchingTransaction.PaymentAddress);
+        Assert.Equal("bc1qpayaffetestaddress0000000000000000000000000", matchingTransaction.PaymentAddress);
         Assert.Equal("tx-123", matchingTransaction.TransactionHash);
         Assert.Equal("0.00039980", matchingTransaction.ObservedAmount);
         Assert.Equal(observedAt, matchingTransaction.ObservedAt);
@@ -652,7 +663,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-confirmed-123",
                 "0.00039980",
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
@@ -689,6 +700,59 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             paymentEvent => paymentEvent.EventType == "payment.completed");
     }
 
+    [Theory]
+    [InlineData("0.00030000", "observed", "underpaid", false)]
+    [InlineData("0.00050000", "completed", "overpaid", true)]
+    public async Task Confirmed_underpayment_and_overpayment_expose_actionable_amount_state(
+        string observedAmount,
+        string expectedStatus,
+        string expectedAmountState,
+        bool expectedCompletion)
+    {
+        var connectionString = await postgres.CreateDatabaseAsync();
+
+        await using var serviceProvider = BuildMigratedServiceProvider(connectionString);
+        await SeedCredentialAsync(serviceProvider, "valid-token");
+        var payments = serviceProvider.GetRequiredService<PaymentApplicationService>();
+        var createResult = await payments.CreateAsync(
+            TestIds.CredentialId,
+            new CreatePaymentCommand(
+                "EUR",
+                1999,
+                $"order-{expectedAmountState}",
+                PaymentContext: null,
+                ReturnUrl: null,
+                $"create-{expectedAmountState}"),
+            CancellationToken.None);
+        await payments.SelectCurrencyAsync(
+            new SelectPaymentCurrencyCommand("fixed-payer-page-id", "BTC"),
+            CancellationToken.None);
+
+        var result = await payments.RecordBlockchainObservationAsync(
+            new RecordBlockchainObservationCommand(
+                createResult.Payment!.PaymentId,
+                "BTC",
+                "bc1qpayaffetestaddress0000000000000000000000000",
+                $"tx-{expectedAmountState}",
+                observedAmount,
+                DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
+                Confirmations: 1,
+                "test-provider",
+                $"provider-{expectedAmountState}"),
+            CancellationToken.None);
+
+        Assert.Equal(expectedCompletion, result.Kind == RecordBlockchainObservationResultKind.Completed);
+        Assert.Equal(expectedStatus, result.Payment!.Status);
+        Assert.Equal(expectedAmountState, result.Payment.ObservedAmountState);
+        Assert.Equal(expectedCompletion, result.Payment.CompletedAt is not null);
+
+        using var scope = serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Equal(
+            expectedCompletion,
+            dbContext.WebhookOutboxEvents.Any(webhook => webhook.EventType == "payment.completed"));
+    }
+
     [Fact]
     public async Task Confirmation_update_completes_previously_observed_payment()
     {
@@ -714,7 +778,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-later-confirmed-123",
                 "0.00039980",
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
@@ -783,7 +847,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-reorg-123",
                 "0.00039980",
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
@@ -887,7 +951,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-before-expiration-123",
                 "0.00039980",
                 DateTimeOffset.Parse("2026-07-04T10:55:00Z"),
@@ -957,7 +1021,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-within-late-window-123",
                 "0.00039980",
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
@@ -1017,7 +1081,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-at-late-window-boundary-123",
                 "0.00039980",
                 DateTimeOffset.Parse("2026-07-04T12:00:00Z"),
@@ -1068,7 +1132,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             new RecordBlockchainObservationCommand(
                 createResult.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-too-late-123",
                 "0.00039980",
                 DateTimeOffset.Parse("2026-07-04T11:00:01Z"),
@@ -1255,9 +1319,24 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             string supportedCurrency,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult<PaymentAddressAssignment?>(new PaymentAddressAssignment(
-                supportedCurrency,
-                $"{supportedCurrency.ToLowerInvariant()}-test-address"));
+            var assignment = supportedCurrency switch
+            {
+                "BTC" => new PaymentAddressAssignment(
+                    "BTC",
+                    "bc1qpayaffetestaddress0000000000000000000000000",
+                    "mainnet"),
+                "LTC" => new PaymentAddressAssignment(
+                    "LTC",
+                    "ltc1qpayaffetestaddress000000000000000000000000",
+                    "mainnet"),
+                "ETH" => new PaymentAddressAssignment(
+                    "ETH",
+                    "0x1111111111111111111111111111111111111111",
+                    "mainnet",
+                    1),
+                _ => throw new ArgumentOutOfRangeException(nameof(supportedCurrency)),
+            };
+            return Task.FromResult<PaymentAddressAssignment?>(assignment);
         }
     }
 }

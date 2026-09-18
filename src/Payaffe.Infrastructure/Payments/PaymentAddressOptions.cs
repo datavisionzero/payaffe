@@ -6,6 +6,10 @@ public sealed class PaymentAddressOptions
 
     public WatchOnlyWalletSourceOptions Ltc { get; set; } = new();
 
+    public string NativeEthNetwork { get; set; } = "mainnet";
+
+    public long NativeEthChainId { get; set; } = 1;
+
     public int NativeEthLowCapacityThreshold { get; set; } = 20;
 }
 

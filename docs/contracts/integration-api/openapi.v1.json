@@ -178,6 +178,109 @@
           }
         ]
       }
+    },
+    "/api/v1/payments/{paymentId}/currency-selection": {
+      "put": {
+        "tags": [
+          "Payments"
+        ],
+        "operationId": "SelectPaymentCurrency",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SelectPaymentCurrencyHttpRequest"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -332,11 +435,58 @@
           }
         }
       },
+      "PaymentInstructionResponse": {
+        "required": [
+          "supportedCurrency",
+          "network",
+          "chainId",
+          "amount",
+          "amountAtomic",
+          "paymentAddress",
+          "uri",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "chainId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "amountAtomic": {
+            "type": "string"
+          },
+          "paymentAddress": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "PaymentOptionResponse": {
         "required": [
           "supportedCurrency",
           "status",
-          "unavailableReasonCode"
+          "unavailableReasonCode",
+          "checkedAt"
         ],
         "type": "object",
         "properties": {
@@ -351,6 +501,10 @@
               "null",
               "string"
             ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -370,7 +524,14 @@
           "completedAt",
           "settledAt",
           "returnUrl",
-          "paymentOptions"
+          "paymentOptions",
+          "createdAt",
+          "updatedAt",
+          "lateAcceptanceEndsAt",
+          "confirmedEligibleTotal",
+          "observedAmountState",
+          "rateLock",
+          "paymentInstruction"
         ],
         "type": "object",
         "properties": {
@@ -451,6 +612,119 @@
             "items": {
               "$ref": "#/components/schemas/PaymentOptionResponse"
             }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lateAcceptanceEndsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "confirmedEligibleTotal": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "observedAmountState": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rateLock": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RateLockResponse"
+              }
+            ]
+          },
+          "paymentInstruction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PaymentInstructionResponse"
+              }
+            ]
+          }
+        }
+      },
+      "RateLockResponse": {
+        "required": [
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "supportedCurrency",
+          "expectedCryptoAmount",
+          "expectedCryptoAmountAtomic",
+          "fiatPerCryptoUnit",
+          "source",
+          "rateObservedAt",
+          "lockedAt",
+          "validUntil"
+        ],
+        "type": "object",
+        "properties": {
+          "fiatCurrency": {
+            "type": "string"
+          },
+          "fiatAmountMinor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "expectedCryptoAmount": {
+            "type": "string"
+          },
+          "expectedCryptoAmountAtomic": {
+            "type": "string"
+          },
+          "fiatPerCryptoUnit": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "rateObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lockedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SelectPaymentCurrencyHttpRequest": {
+        "required": [
+          "supportedCurrency"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       }

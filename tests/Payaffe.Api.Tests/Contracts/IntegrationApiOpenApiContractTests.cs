@@ -50,6 +50,9 @@ public sealed class IntegrationApiOpenApiContractTests
         Assert.DoesNotContain(paths.EnumerateObject(), path => path.Name.StartsWith("/health/", StringComparison.Ordinal));
         Assert.True(paths.TryGetProperty("/api/v1/payments", out var paymentsPath));
         Assert.True(paths.TryGetProperty("/api/v1/payments/{paymentId}", out var paymentByIdPath));
+        Assert.True(paths.TryGetProperty(
+            "/api/v1/payments/{paymentId}/currency-selection",
+            out var currencySelectionPath));
 
         var createPayment = paymentsPath.GetProperty("post");
         Assert.Equal("CreatePayment", createPayment.GetProperty("operationId").GetString());
@@ -71,12 +74,43 @@ public sealed class IntegrationApiOpenApiContractTests
         AssertHasResponse(getPayment, "404");
         AssertHasResponse(getPayment, "429");
 
+        var selectCurrency = currencySelectionPath.GetProperty("put");
+        Assert.Equal("SelectPaymentCurrency", selectCurrency.GetProperty("operationId").GetString());
+        AssertHasBearerSecurity(selectCurrency);
+        Assert.True(selectCurrency.GetProperty("requestBody").GetProperty("required").GetBoolean());
+        AssertHasResponse(selectCurrency, "200");
+        AssertHasResponse(selectCurrency, "400");
+        AssertHasResponse(selectCurrency, "401");
+        AssertHasResponse(selectCurrency, "404");
+        AssertHasResponse(selectCurrency, "409");
+        AssertHasResponse(selectCurrency, "429");
+
         var schemas = root.GetProperty("components").GetProperty("schemas");
         var problem = schemas.GetProperty("IntegrationApiProblemResponse");
         var problemRequiredProperties = problem.GetProperty("required").EnumerateArray().Select(value => value.GetString());
         Assert.Contains("code", problemRequiredProperties);
         Assert.Contains("correlationId", problemRequiredProperties);
         Assert.True(problem.GetProperty("properties").TryGetProperty("errors", out _));
+
+        var paymentResponse = schemas.GetProperty("PaymentResponse");
+        var paymentProperties = paymentResponse.GetProperty("properties");
+        Assert.True(paymentProperties.TryGetProperty("createdAt", out _));
+        Assert.True(paymentProperties.TryGetProperty("updatedAt", out _));
+        Assert.True(paymentProperties.TryGetProperty("lateAcceptanceEndsAt", out _));
+        Assert.True(paymentProperties.TryGetProperty("confirmedEligibleTotal", out _));
+        Assert.True(paymentProperties.TryGetProperty("observedAmountState", out _));
+        Assert.True(paymentProperties.TryGetProperty("rateLock", out _));
+        Assert.True(paymentProperties.TryGetProperty("paymentInstruction", out _));
+
+        var rateLock = schemas.GetProperty("RateLockResponse").GetProperty("properties");
+        Assert.True(rateLock.TryGetProperty("expectedCryptoAmountAtomic", out _));
+        Assert.True(rateLock.TryGetProperty("validUntil", out _));
+
+        var instruction = schemas.GetProperty("PaymentInstructionResponse").GetProperty("properties");
+        Assert.True(instruction.TryGetProperty("network", out _));
+        Assert.True(instruction.TryGetProperty("chainId", out _));
+        Assert.True(instruction.TryGetProperty("amountAtomic", out _));
+        Assert.True(instruction.TryGetProperty("uri", out _));
     }
 
     private static bool ShouldUpdateSnapshot()

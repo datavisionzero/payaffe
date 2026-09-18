@@ -72,6 +72,25 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
     }
 
     [Fact]
+    public async Task ProcessNextAsync_records_retry_when_receiver_times_out()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.NoContent);
+        context.Handler.SimulateTimeout = true;
+
+        var processed = await context.Processor.ProcessNextAsync(CancellationToken.None);
+
+        Assert.True(processed);
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        Assert.Equal("retry_pending", webhookEvent.Status);
+        Assert.Equal(1, webhookEvent.AttemptCount);
+        Assert.Equal("http.timeout", webhookEvent.LastErrorCode);
+        Assert.Equal(ProcessorNow.AddMinutes(1), webhookEvent.NextAttemptAt);
+        var attempt = Assert.Single(context.DbContext.WebhookDeliveryAttempts);
+        Assert.Equal("retry_pending", attempt.Result);
+        Assert.Equal("http.timeout", attempt.SafeErrorCode);
+    }
+
+    [Fact]
     public async Task ProcessNextAsync_continues_existing_delivery_for_disabled_project()
     {
         await using var context = await BuildContextAsync(HttpStatusCode.NoContent);
@@ -422,6 +441,8 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
 
         public HttpStatusCode ResponseStatusCode { get; set; } = statusCode;
 
+        public bool SimulateTimeout { get; set; }
+
         public int RequestCount { get; private set; }
 
         public HttpRequestMessage? Request { get; private set; }
@@ -444,6 +465,11 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             _requestCaptured.TrySetResult();
+            if (SimulateTimeout)
+            {
+                throw new TaskCanceledException("Simulated receiver timeout.");
+            }
+
             return new HttpResponseMessage(ResponseStatusCode);
         }
     }

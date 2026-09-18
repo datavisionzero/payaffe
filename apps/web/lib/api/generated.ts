@@ -881,10 +881,24 @@ export interface components {
             lastFailedAt: null | string;
             lastSafeErrorCode: null | string;
         };
+        PaymentInstructionResponse: {
+            supportedCurrency: string;
+            network: string;
+            /** Format: int64 */
+            chainId: null | number | string;
+            amount: string;
+            amountAtomic: string;
+            paymentAddress: string;
+            uri: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
         PaymentOptionResponse: {
             supportedCurrency: string;
             status: string;
             unavailableReasonCode: null | string;
+            /** Format: date-time */
+            checkedAt: string;
         };
         PaymentResponse: {
             /** Format: uuid */
@@ -907,6 +921,32 @@ export interface components {
             settledAt: null | string;
             returnUrl: null | string;
             paymentOptions: components["schemas"]["PaymentOptionResponse"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            lateAcceptanceEndsAt: string;
+            confirmedEligibleTotal: null | string;
+            observedAmountState: null | string;
+            rateLock: null | components["schemas"]["RateLockResponse"];
+            paymentInstruction: null | components["schemas"]["PaymentInstructionResponse"];
+        };
+        RateLockResponse: {
+            fiatCurrency: string;
+            /** Format: int64 */
+            fiatAmountMinor: number | string;
+            supportedCurrency: string;
+            expectedCryptoAmount: string;
+            expectedCryptoAmountAtomic: string;
+            fiatPerCryptoUnit: string;
+            source: string;
+            /** Format: date-time */
+            rateObservedAt: string;
+            /** Format: date-time */
+            lockedAt: string;
+            /** Format: date-time */
+            validUntil: string;
         };
         SelectPayerPaymentCurrencyHttpRequest: {
             supportedCurrency: null | string;

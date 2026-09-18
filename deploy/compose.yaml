@@ -54,6 +54,8 @@ x-backend-environment: &backend-environment
   PaymentAddresses__Ltc__Network: ${PAYAFFE_LTC_WATCH_ONLY_NETWORK:-mainnet}
   PaymentAddresses__Ltc__AddressType: ${PAYAFFE_LTC_WATCH_ONLY_ADDRESS_TYPE:-segwit}
   PaymentAddresses__Ltc__StartingIndex: ${PAYAFFE_LTC_WATCH_ONLY_STARTING_INDEX:-0}
+  PaymentAddresses__NativeEthNetwork: ${PAYAFFE_NATIVE_ETH_NETWORK:-mainnet}
+  PaymentAddresses__NativeEthChainId: ${PAYAFFE_NATIVE_ETH_CHAIN_ID:-1}
   PaymentAddresses__NativeEthLowCapacityThreshold: ${PAYAFFE_NATIVE_ETH_LOW_CAPACITY_THRESHOLD:-20}
   BlockchainObservation__Mode: ${PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE:-none}
   BlockchainObservation__Blockchair__BaseUrl: ${PAYAFFE_BLOCKCHAIN_OBSERVATION_BLOCKCHAIR_BASE_URL:-https://api.blockchair.com}

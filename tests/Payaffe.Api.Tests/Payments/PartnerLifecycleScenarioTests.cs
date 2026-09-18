@@ -55,8 +55,13 @@ public sealed class PartnerLifecycleScenarioTests
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
         var createdJson = await createdResponse.Content.ReadFromJsonAsync<JsonElement>();
         var paymentId = createdJson.GetProperty("paymentId").GetGuid();
-        var payerPageId = new Uri(createdJson.GetProperty("payerPageUrl").GetString()!)
-            .Segments.Last().Trim('/');
+        Assert.Equal("pending_currency_selection", createdJson.GetProperty("status").GetString());
+        var paymentOptions = createdJson.GetProperty("paymentOptions").EnumerateArray().ToArray();
+        Assert.Equal(["BTC", "ETH", "LTC"], paymentOptions
+            .Select(option => option.GetProperty("supportedCurrency").GetString())
+            .Order(StringComparer.Ordinal));
+        Assert.All(paymentOptions, option =>
+            Assert.Equal("available", option.GetProperty("status").GetString()));
 
         var idempotentResponse = await partnerClient.PostAsJsonAsync(
             "/api/v1/payments",
@@ -65,12 +70,25 @@ public sealed class PartnerLifecycleScenarioTests
         var idempotentJson = await idempotentResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(paymentId, idempotentJson.GetProperty("paymentId").GetGuid());
 
-        using var payerClient = factory.CreateClient();
-        payerClient.DefaultRequestHeaders.Add("Idempotency-Key", "select-btc");
-        var selectionResponse = await payerClient.PostAsJsonAsync(
-            $"/api/payer/payments/{payerPageId}/currency-selection",
+        var selectionResponse = await partnerClient.PutAsJsonAsync(
+            $"/api/v1/payments/{paymentId:D}/currency-selection",
             new { supportedCurrency = "BTC" });
         selectionResponse.EnsureSuccessStatusCode();
+        var selectedJson = await selectionResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("waiting_for_payment", selectedJson.GetProperty("status").GetString());
+        var instruction = selectedJson.GetProperty("paymentInstruction");
+        Assert.Equal("BTC", instruction.GetProperty("supportedCurrency").GetString());
+        Assert.Equal("39980", instruction.GetProperty("amountAtomic").GetString());
+        Assert.StartsWith("bitcoin:", instruction.GetProperty("uri").GetString(), StringComparison.Ordinal);
+
+        var selectionRetryResponse = await partnerClient.PutAsJsonAsync(
+            $"/api/v1/payments/{paymentId:D}/currency-selection",
+            new { supportedCurrency = "btc" });
+        selectionRetryResponse.EnsureSuccessStatusCode();
+        var retriedSelection = await selectionRetryResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(
+            instruction.GetProperty("uri").GetString(),
+            retriedSelection.GetProperty("paymentInstruction").GetProperty("uri").GetString());
 
         using (var observationScope = factory.Services.CreateScope())
         {
@@ -80,7 +98,7 @@ public sealed class PartnerLifecycleScenarioTests
                 new RecordBlockchainObservationCommand(
                     paymentId,
                     "BTC",
-                    "btc-test-address",
+                    "bc1qpayaffetestaddress0000000000000000000000000",
                     "partner-controlled-transaction",
                     "0.00039980",
                     DateTimeOffset.UtcNow,
@@ -95,6 +113,7 @@ public sealed class PartnerLifecycleScenarioTests
         pollingResponse.EnsureSuccessStatusCode();
         var reconciled = await pollingResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("completed", reconciled.GetProperty("status").GetString());
+        Assert.Equal("exact", reconciled.GetProperty("observedAmountState").GetString());
 
         var receiver = new DeduplicatingReceiver(webhookSecret);
         var deliveryClock = new MutableClock(DateTimeOffset.UtcNow.AddMinutes(1));
@@ -122,6 +141,15 @@ public sealed class PartnerLifecycleScenarioTests
         Assert.True(receiver.RequestCount > receiver.UniqueEventIds.Count);
         Assert.Equal(4, receiver.UniqueEventIds.Count);
         Assert.Equal(4, receiver.ProcessedEventIds.Count);
+        Assert.Equal(
+            [
+                "payment.created",
+                "payment.currency_selected",
+                "payment.observed",
+                "payment.completed",
+                "payment.created",
+            ],
+            receiver.EventTypes);
         using var verifyScope = factory.Services.CreateScope();
         var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
         Assert.All(verifyDbContext.WebhookOutboxEvents, webhook =>
@@ -136,6 +164,8 @@ public sealed class PartnerLifecycleScenarioTests
 
         public HashSet<Guid> ProcessedEventIds { get; } = [];
 
+        public List<string> EventTypes { get; } = [];
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -144,6 +174,7 @@ public sealed class PartnerLifecycleScenarioTests
             var body = await request.Content!.ReadAsStringAsync(cancellationToken);
             using var document = JsonDocument.Parse(body);
             var eventId = document.RootElement.GetProperty("event_id").GetGuid();
+            EventTypes.Add(document.RootElement.GetProperty("event_type").GetString()!);
             UniqueEventIds.Add(eventId);
             if (ProcessedEventIds.Add(eventId))
             {

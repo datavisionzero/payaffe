@@ -16,6 +16,8 @@
     "fiat_amount_minor": 1999,
     "selected_currency": "BTC",
     "expected_crypto_amount": "0.00039980",
+    "expected_crypto_amount_atomic": "39980",
+    "observed_amount_state": "none",
     "payer_page_id": "fixed-payer-page-id",
     "expires_at": "2026-07-04T13:00:00+00:00"
   }
