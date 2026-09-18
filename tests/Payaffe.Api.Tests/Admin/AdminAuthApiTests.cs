@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Payaffe.Api.Tests.Payments;
 using Payaffe.Infrastructure.Auth;
@@ -2343,6 +2345,15 @@ public sealed class AdminAuthApiTests
         Assert.Equal("settled", settled!.Status);
         Assert.NotNull(settled.SettledAt);
         Assert.Equal(2, settled.Version);
+
+        using var integrationClient = factory.CreateClient();
+        integrationClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", "settlement-token");
+        var pollingResponse = await integrationClient.GetAsync($"/api/v1/payments/{paymentId:D}");
+        pollingResponse.EnsureSuccessStatusCode();
+        var pollingPayment = await pollingResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("settled", pollingPayment.GetProperty("status").GetString());
+        Assert.NotEqual(JsonValueKind.Null, pollingPayment.GetProperty("settledAt").ValueKind);
 
         using var verifyScope = factory.Services.CreateScope();
         var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();

@@ -43,6 +43,12 @@ documented migration path.
 
 Additive fields are allowed when receivers can safely ignore unknown fields.
 
+The embedded-flow additions are additive within event version `1`:
+`expected_crypto_amount_atomic`, `observed_total`,
+`confirmed_eligible_total`, and `observed_amount_state` appear when their
+values exist. Existing receivers must continue to ignore unknown fields. The
+hosted Payer flow and its existing event types remain compatible.
+
 ## Event Envelope
 
 Webhook payloads use snake_case field names.
@@ -71,6 +77,12 @@ events because they do not change the Payment. `payment.currency_selected`
 confirms that the immutable Rate Lock and Payment Instruction exist; a receiver
 that needs the full instruction reconciles through
 `GET /api/v1/payments/{paymentId}` rather than relying on delivery order.
+
+An embedded target backend can create, inspect Payment Options, select a
+currency, and poll entirely through `/api/v1`. `payer_page_id` and the hosted
+Payer Page remain in the contract for compatibility, but consuming either is
+optional for an embedded flow. No customer browser request to `payaffe` is
+required.
 
 Payloads must not include:
 

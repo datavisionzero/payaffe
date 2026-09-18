@@ -112,6 +112,22 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
             Assert.Equal("1", document.RootElement.GetProperty("event_version").GetString());
             Assert.Equal("payment", document.RootElement.GetProperty("resource").GetProperty("type").GetString());
         }
+
+        using var selectedDocument = JsonDocument.Parse(payloads["payment.currency_selected"]);
+        var selectedPayment = selectedDocument.RootElement.GetProperty("payment");
+        Assert.Equal("39980", selectedPayment.GetProperty("expected_crypto_amount_atomic").GetString());
+        Assert.Equal("none", selectedPayment.GetProperty("observed_amount_state").GetString());
+        Assert.False(selectedPayment.TryGetProperty("observed_total", out _));
+
+        using var observedDocument = JsonDocument.Parse(payloads["payment.observed"]);
+        var observedPayment = observedDocument.RootElement.GetProperty("payment");
+        Assert.Equal("0.0003998", observedPayment.GetProperty("observed_total").GetString());
+        Assert.Equal("exact", observedPayment.GetProperty("observed_amount_state").GetString());
+        Assert.False(observedPayment.TryGetProperty("confirmed_eligible_total", out _));
+
+        using var completedDocument = JsonDocument.Parse(payloads["payment.completed"]);
+        var completedPayment = completedDocument.RootElement.GetProperty("payment");
+        Assert.Equal("0.0003998", completedPayment.GetProperty("confirmed_eligible_total").GetString());
     }
 
     /// <summary>

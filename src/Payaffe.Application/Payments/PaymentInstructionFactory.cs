@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Payaffe.Application.Payments;
 
-internal static class PaymentInstructionFactory
+public static class PaymentInstructionFactory
 {
     public static string ToAtomicAmount(string supportedCurrency, string amount)
     {

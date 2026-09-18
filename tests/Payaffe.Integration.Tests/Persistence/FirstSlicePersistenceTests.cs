@@ -700,6 +700,59 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             paymentEvent => paymentEvent.EventType == "payment.completed");
     }
 
+    [Theory]
+    [InlineData("0.00030000", "observed", "underpaid", false)]
+    [InlineData("0.00050000", "completed", "overpaid", true)]
+    public async Task Confirmed_underpayment_and_overpayment_expose_actionable_amount_state(
+        string observedAmount,
+        string expectedStatus,
+        string expectedAmountState,
+        bool expectedCompletion)
+    {
+        var connectionString = await postgres.CreateDatabaseAsync();
+
+        await using var serviceProvider = BuildMigratedServiceProvider(connectionString);
+        await SeedCredentialAsync(serviceProvider, "valid-token");
+        var payments = serviceProvider.GetRequiredService<PaymentApplicationService>();
+        var createResult = await payments.CreateAsync(
+            TestIds.CredentialId,
+            new CreatePaymentCommand(
+                "EUR",
+                1999,
+                $"order-{expectedAmountState}",
+                PaymentContext: null,
+                ReturnUrl: null,
+                $"create-{expectedAmountState}"),
+            CancellationToken.None);
+        await payments.SelectCurrencyAsync(
+            new SelectPaymentCurrencyCommand("fixed-payer-page-id", "BTC"),
+            CancellationToken.None);
+
+        var result = await payments.RecordBlockchainObservationAsync(
+            new RecordBlockchainObservationCommand(
+                createResult.Payment!.PaymentId,
+                "BTC",
+                "bc1qpayaffetestaddress0000000000000000000000000",
+                $"tx-{expectedAmountState}",
+                observedAmount,
+                DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
+                Confirmations: 1,
+                "test-provider",
+                $"provider-{expectedAmountState}"),
+            CancellationToken.None);
+
+        Assert.Equal(expectedCompletion, result.Kind == RecordBlockchainObservationResultKind.Completed);
+        Assert.Equal(expectedStatus, result.Payment!.Status);
+        Assert.Equal(expectedAmountState, result.Payment.ObservedAmountState);
+        Assert.Equal(expectedCompletion, result.Payment.CompletedAt is not null);
+
+        using var scope = serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Equal(
+            expectedCompletion,
+            dbContext.WebhookOutboxEvents.Any(webhook => webhook.EventType == "payment.completed"));
+    }
+
     [Fact]
     public async Task Confirmation_update_completes_previously_observed_payment()
     {

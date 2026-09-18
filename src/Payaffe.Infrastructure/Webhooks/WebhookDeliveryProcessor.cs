@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -198,7 +199,7 @@ public sealed class WebhookDeliveryProcessor(
             return;
         }
 
-        var payload = BuildPayload(webhookEvent, payment);
+        var payload = await BuildPayloadAsync(webhookEvent, payment, cancellationToken);
         var rawBody = JsonSerializer.Serialize(payload, JsonOptions);
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint.Url)
         {
@@ -385,10 +386,29 @@ public sealed class WebhookDeliveryProcessor(
         return TimeSpan.FromTicks(Math.Max(1, delay.Ticks + offsetTicks));
     }
 
-    private static WebhookPayload BuildPayload(
+    private async Task<WebhookPayload> BuildPayloadAsync(
         WebhookOutboxEventRecord webhookEvent,
-        PaymentRecord payment)
+        PaymentRecord payment,
+        CancellationToken cancellationToken)
     {
+        var observedAmounts = await dbContext.MatchingBlockchainTransactions
+            .AsNoTracking()
+            .Where(transaction =>
+                transaction.ProjectId == payment.ProjectId &&
+                transaction.PaymentId == payment.Id)
+            .Select(transaction => transaction.ObservedAmount)
+            .ToListAsync(cancellationToken);
+        var observedTotal = observedAmounts.Count == 0
+            ? null
+            : observedAmounts
+                .Sum(amount => decimal.Parse(amount, CultureInfo.InvariantCulture))
+                .ToString("0.############################", CultureInfo.InvariantCulture);
+        var expectedCryptoAmountAtomic = payment.SelectedCurrency is null || payment.ExpectedCryptoAmount is null
+            ? null
+            : PaymentInstructionFactory.ToAtomicAmount(
+                payment.SelectedCurrency,
+                payment.ExpectedCryptoAmount);
+
         return new WebhookPayload(
             webhookEvent.Id,
             webhookEvent.EventType,
@@ -404,6 +424,13 @@ public sealed class WebhookDeliveryProcessor(
                 payment.FiatAmountMinor,
                 payment.SelectedCurrency,
                 payment.ExpectedCryptoAmount,
+                expectedCryptoAmountAtomic,
+                observedTotal,
+                payment.ConfirmedEligibleTotal,
+                PaymentInstructionFactory.GetObservedAmountState(
+                    payment.SelectedCurrency,
+                    payment.ExpectedCryptoAmount,
+                    observedTotal),
                 payment.PayerPageId,
                 payment.ExpiresAt,
                 payment.CompletedAt,
@@ -431,6 +458,10 @@ public sealed class WebhookDeliveryProcessor(
         long FiatAmountMinor,
         string? SelectedCurrency,
         string? ExpectedCryptoAmount,
+        string? ExpectedCryptoAmountAtomic,
+        string? ObservedTotal,
+        string? ConfirmedEligibleTotal,
+        string? ObservedAmountState,
         string PayerPageId,
         DateTimeOffset ExpiresAt,
         DateTimeOffset? CompletedAt,
