@@ -655,6 +655,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(assignment => assignment.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(assignment => assignment.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
             entity.Property(assignment => assignment.PaymentAddress).HasColumnName("payment_address").HasColumnType("text");
+            entity.Property(assignment => assignment.Network).HasColumnName("network").HasColumnType("text");
+            entity.Property(assignment => assignment.ChainId).HasColumnName("chain_id").HasColumnType("bigint");
             entity.Property(assignment => assignment.SourceFingerprint).HasColumnName("source_fingerprint").HasColumnType("text");
             entity.Property(assignment => assignment.DerivationIndex).HasColumnName("derivation_index").HasColumnType("bigint");
             entity.Property(assignment => assignment.AssignedAt).HasColumnName("assigned_at").HasColumnType("timestamp with time zone");
@@ -671,6 +673,15 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .IsUnique()
                 .HasFilter("source_fingerprint is not null")
                 .HasDatabaseName("uq_payment_address_assignments_currency_address");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_payment_address_assignments_network",
+                    "network in ('mainnet', 'testnet')");
+                table.HasCheckConstraint(
+                    "ck_payment_address_assignments_chain_id",
+                    "(supported_currency = 'ETH' and chain_id is not null and chain_id > 0) or (supported_currency <> 'ETH' and chain_id is null)");
+            });
         });
     }
 

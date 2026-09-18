@@ -46,7 +46,11 @@ public sealed class EfPaymentAddressProvider(
         if (existing is not null)
         {
             return StringComparer.Ordinal.Equals(existing.SupportedCurrency, supportedCurrency)
-                ? new PaymentAddressAssignment(existing.SupportedCurrency, existing.PaymentAddress)
+                ? new PaymentAddressAssignment(
+                    existing.SupportedCurrency,
+                    existing.PaymentAddress,
+                    existing.Network,
+                    existing.ChainId)
                 : null;
         }
 
@@ -91,7 +95,11 @@ public sealed class EfPaymentAddressProvider(
         if (existing is not null)
         {
             return StringComparer.Ordinal.Equals(existing.SupportedCurrency, supportedCurrency)
-                ? new PaymentAddressAssignment(existing.SupportedCurrency, existing.PaymentAddress)
+                ? new PaymentAddressAssignment(
+                    existing.SupportedCurrency,
+                    existing.PaymentAddress,
+                    existing.Network,
+                    existing.ChainId)
                 : null;
         }
 
@@ -140,6 +148,8 @@ public sealed class EfPaymentAddressProvider(
             PaymentId = paymentId,
             SupportedCurrency = supportedCurrency,
             PaymentAddress = paymentAddress,
+            Network = source.Network,
+            ChainId = null,
             SourceFingerprint = source.SourceFingerprint,
             DerivationIndex = cursor.NextDerivationIndex - 1,
             AssignedAt = now,
@@ -150,7 +160,10 @@ public sealed class EfPaymentAddressProvider(
             await transaction.CommitAsync(cancellationToken);
         }
 
-        return new PaymentAddressAssignment(supportedCurrency, paymentAddress);
+        return new PaymentAddressAssignment(
+            supportedCurrency,
+            paymentAddress,
+            source.Network);
     }
 
     private async Task<PaymentAddressAssignment?> AssignNativeEthAsync(
@@ -170,7 +183,11 @@ public sealed class EfPaymentAddressProvider(
         if (existing is not null)
         {
             return StringComparer.Ordinal.Equals(existing.SupportedCurrency, "ETH")
-                ? new PaymentAddressAssignment("ETH", existing.PaymentAddress)
+                ? new PaymentAddressAssignment(
+                    "ETH",
+                    existing.PaymentAddress,
+                    existing.Network,
+                    existing.ChainId)
                 : null;
         }
 
@@ -196,6 +213,8 @@ public sealed class EfPaymentAddressProvider(
             PaymentId = paymentId,
             SupportedCurrency = "ETH",
             PaymentAddress = poolAddress.Address,
+            Network = _options.NativeEthNetwork,
+            ChainId = _options.NativeEthChainId,
             AssignedAt = now,
         });
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -204,7 +223,11 @@ public sealed class EfPaymentAddressProvider(
             await transaction.CommitAsync(cancellationToken);
         }
 
-        return new PaymentAddressAssignment("ETH", poolAddress.Address);
+        return new PaymentAddressAssignment(
+            "ETH",
+            poolAddress.Address,
+            _options.NativeEthNetwork,
+            _options.NativeEthChainId);
     }
 
     private Task AcquireSourceLockAsync(

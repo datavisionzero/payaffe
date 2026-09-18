@@ -214,6 +214,8 @@ public sealed record PaymentSelectionDraft(
     string SupportedCurrency,
     string ExpectedCryptoAmount,
     string PaymentAddress,
+    string Network,
+    long? ChainId,
     string RateSource,
     string RateValue,
     DateTimeOffset RateObservedAt,

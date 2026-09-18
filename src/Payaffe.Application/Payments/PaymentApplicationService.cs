@@ -264,6 +264,8 @@ public sealed class PaymentApplicationService(
             supportedCurrency,
             quote.ExpectedCryptoAmount,
             address.PaymentAddress,
+            address.Network,
+            address.ChainId,
             quote.RateSource,
             quote.RateValue,
             quote.ObservedAt,
@@ -899,6 +901,35 @@ public sealed class PaymentApplicationService(
 
     private PaymentResponse ToResponse(PaymentReadModel payment)
     {
+        var rateLock = payment.RateLock is null
+            ? null
+            : new RateLockResponse(
+                payment.RateLock.FiatCurrency,
+                payment.RateLock.FiatAmountMinor,
+                payment.RateLock.SupportedCurrency,
+                payment.RateLock.ExpectedCryptoAmount,
+                PaymentInstructionFactory.ToAtomicAmount(
+                    payment.RateLock.SupportedCurrency,
+                    payment.RateLock.ExpectedCryptoAmount),
+                payment.RateLock.FiatPerCryptoUnit,
+                payment.RateLock.Source,
+                payment.RateLock.RateObservedAt,
+                payment.RateLock.LockedAt,
+                payment.ExpiresAt);
+        var instruction = payment.PaymentInstruction is null
+            ? null
+            : new PaymentInstructionResponse(
+                payment.PaymentInstruction.SupportedCurrency,
+                payment.PaymentInstruction.Network,
+                payment.PaymentInstruction.ChainId,
+                payment.PaymentInstruction.Amount,
+                PaymentInstructionFactory.ToAtomicAmount(
+                    payment.PaymentInstruction.SupportedCurrency,
+                    payment.PaymentInstruction.Amount),
+                payment.PaymentInstruction.PaymentAddress,
+                PaymentInstructionFactory.BuildUri(payment.PaymentInstruction),
+                payment.ExpiresAt);
+
         return new PaymentResponse(
             payment.Id,
             payment.Status,
@@ -918,8 +949,19 @@ public sealed class PaymentApplicationService(
                 .Select(option => new PaymentOptionResponse(
                     option.SupportedCurrency,
                     option.Status,
-                    option.UnavailableReason))
-                .ToArray());
+                    option.UnavailableReason,
+                    option.CheckedAt))
+                .ToArray(),
+            payment.CreatedAt,
+            payment.UpdatedAt,
+            payment.LateAcceptanceEndsAt,
+            payment.ConfirmedEligibleTotal,
+            PaymentInstructionFactory.GetObservedAmountState(
+                payment.SelectedCurrency,
+                payment.ExpectedCryptoAmount,
+                payment.ObservedTotal),
+            rateLock,
+            instruction);
     }
 
     private string BuildPayerPageUrl(string payerPageId)

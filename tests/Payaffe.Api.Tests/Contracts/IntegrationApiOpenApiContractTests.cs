@@ -91,6 +91,26 @@ public sealed class IntegrationApiOpenApiContractTests
         Assert.Contains("code", problemRequiredProperties);
         Assert.Contains("correlationId", problemRequiredProperties);
         Assert.True(problem.GetProperty("properties").TryGetProperty("errors", out _));
+
+        var paymentResponse = schemas.GetProperty("PaymentResponse");
+        var paymentProperties = paymentResponse.GetProperty("properties");
+        Assert.True(paymentProperties.TryGetProperty("createdAt", out _));
+        Assert.True(paymentProperties.TryGetProperty("updatedAt", out _));
+        Assert.True(paymentProperties.TryGetProperty("lateAcceptanceEndsAt", out _));
+        Assert.True(paymentProperties.TryGetProperty("confirmedEligibleTotal", out _));
+        Assert.True(paymentProperties.TryGetProperty("observedAmountState", out _));
+        Assert.True(paymentProperties.TryGetProperty("rateLock", out _));
+        Assert.True(paymentProperties.TryGetProperty("paymentInstruction", out _));
+
+        var rateLock = schemas.GetProperty("RateLockResponse").GetProperty("properties");
+        Assert.True(rateLock.TryGetProperty("expectedCryptoAmountAtomic", out _));
+        Assert.True(rateLock.TryGetProperty("validUntil", out _));
+
+        var instruction = schemas.GetProperty("PaymentInstructionResponse").GetProperty("properties");
+        Assert.True(instruction.TryGetProperty("network", out _));
+        Assert.True(instruction.TryGetProperty("chainId", out _));
+        Assert.True(instruction.TryGetProperty("amountAtomic", out _));
+        Assert.True(instruction.TryGetProperty("uri", out _));
     }
 
     private static bool ShouldUpdateSnapshot()

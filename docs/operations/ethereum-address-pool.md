@@ -44,6 +44,11 @@ authentication. Imports are atomic and audited. Capacity is available through
 `GET /api/admin/native-eth-address-pool`; the low-capacity threshold is configured
 with `PAYAFFE_NATIVE_ETH_LOW_CAPACITY_THRESHOLD`.
 
+`PAYAFFE_NATIVE_ETH_NETWORK` and `PAYAFFE_NATIVE_ETH_CHAIN_ID` identify the
+chain for imported addresses and for generated wallet URIs. They default to
+Ethereum mainnet and chain ID `1`; configure both consistently before assigning
+an imported address on another supported network.
+
 ## Recommended Provisioning Workflow
 
 Use a dedicated Ethereum HD wallet seed for the `payaffe` receiving address pool. Generate and export the public addresses outside `payaffe`, then import only the addresses into `payaffe`.

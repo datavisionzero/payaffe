@@ -322,12 +322,27 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
             string supportedCurrency,
             CancellationToken cancellationToken)
         {
+            var assignment = supportedCurrency switch
+            {
+                "BTC" => new PaymentAddressAssignment(
+                    "BTC",
+                    "bc1qpayaffetestaddress0000000000000000000000000",
+                    "mainnet"),
+                "LTC" => new PaymentAddressAssignment(
+                    "LTC",
+                    "ltc1qpayaffetestaddress000000000000000000000000",
+                    "mainnet"),
+                "ETH" => new PaymentAddressAssignment(
+                    "ETH",
+                    "0x1111111111111111111111111111111111111111",
+                    "mainnet",
+                    1),
+                _ => throw new ArgumentOutOfRangeException(nameof(supportedCurrency)),
+            };
             return Task.FromResult(
                 unavailableCurrencies.Contains(supportedCurrency)
                     ? null
-                    : new PaymentAddressAssignment(
-                        supportedCurrency,
-                        $"{supportedCurrency.ToLowerInvariant()}-test-address"));
+                    : assignment);
         }
 
         public Task<bool> IsAddressAvailableAsync(

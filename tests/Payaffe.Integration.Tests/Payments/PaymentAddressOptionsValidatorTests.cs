@@ -48,4 +48,20 @@ public sealed class PaymentAddressOptionsValidatorTests
         Assert.Contains("StartingIndex", result.FailureMessage, StringComparison.Ordinal);
         Assert.Contains("NativeEthLowCapacityThreshold", result.FailureMessage, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Rejects_invalid_native_eth_network_and_chain_id()
+    {
+        var result = new PaymentAddressOptionsValidator().Validate(
+            null,
+            new PaymentAddressOptions
+            {
+                NativeEthNetwork = "sepolia",
+                NativeEthChainId = 0,
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("NativeEthNetwork", result.FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("NativeEthChainId", result.FailureMessage, StringComparison.Ordinal);
+    }
 }

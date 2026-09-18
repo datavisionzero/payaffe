@@ -11,6 +11,16 @@ public sealed class PaymentAddressOptionsValidator : IValidateOptions<PaymentAdd
         var failures = new List<string>();
         ValidateSource("BTC", options.Btc, failures);
         ValidateSource("LTC", options.Ltc, failures);
+        if (options.NativeEthNetwork is not ("mainnet" or "testnet"))
+        {
+            failures.Add("PaymentAddresses:NativeEthNetwork must be mainnet or testnet.");
+        }
+
+        if (options.NativeEthChainId <= 0)
+        {
+            failures.Add("PaymentAddresses:NativeEthChainId must be greater than zero.");
+        }
+
         if (options.NativeEthLowCapacityThreshold < 0)
         {
             failures.Add("PaymentAddresses:NativeEthLowCapacityThreshold must not be negative.");

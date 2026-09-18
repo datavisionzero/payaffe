@@ -80,7 +80,7 @@ public sealed class PartnerLifecycleScenarioTests
                 new RecordBlockchainObservationCommand(
                     paymentId,
                     "BTC",
-                    "btc-test-address",
+                    "bc1qpayaffetestaddress0000000000000000000000000",
                     "partner-controlled-transaction",
                     "0.00039980",
                     DateTimeOffset.UtcNow,

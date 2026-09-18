@@ -17,4 +17,6 @@ public interface IPaymentAddressProvider
 
 public sealed record PaymentAddressAssignment(
     string SupportedCurrency,
-    string PaymentAddress);
+    string PaymentAddress,
+    string Network = "mainnet",
+    long? ChainId = null);

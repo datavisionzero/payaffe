@@ -108,7 +108,9 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             : ToReadModel(
                 payment,
                 await CalculateObservedTotalAsync(payment.ProjectId, payment.Id, cancellationToken),
-                await LoadPaymentOptionsAsync(payment.ProjectId, payment.Id, cancellationToken));
+                await LoadPaymentOptionsAsync(payment.ProjectId, payment.Id, cancellationToken),
+                await LoadRateLockAsync(payment.ProjectId, payment.Id, cancellationToken),
+                await LoadPaymentInstructionAsync(payment.ProjectId, payment.Id, cancellationToken));
     }
 
     public async Task<PaymentReadModel?> FindByPayerPageIdAsync(
@@ -126,7 +128,9 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             : ToReadModel(
                 payment,
                 await CalculateObservedTotalAsync(payment.ProjectId, payment.Id, cancellationToken),
-                await LoadPaymentOptionsAsync(payment.ProjectId, payment.Id, cancellationToken));
+                await LoadPaymentOptionsAsync(payment.ProjectId, payment.Id, cancellationToken),
+                await LoadRateLockAsync(payment.ProjectId, payment.Id, cancellationToken),
+                await LoadPaymentInstructionAsync(payment.ProjectId, payment.Id, cancellationToken));
     }
 
     public async Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
@@ -224,7 +228,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         payment.UpdatedAt = selection.SelectedAt;
         payment.Version++;
 
-        dbContext.RateLocks.Add(new RateLockRecord
+        var rateLock = new RateLockRecord
         {
             ProjectId = payment.ProjectId,
             PaymentId = selection.PaymentId,
@@ -236,7 +240,8 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             RateValue = selection.RateValue,
             RateObservedAt = selection.RateObservedAt,
             CreatedAt = selection.SelectedAt,
-        });
+        };
+        dbContext.RateLocks.Add(rateLock);
         var addressAssignment = await dbContext.PaymentAddressAssignments
             .SingleOrDefaultAsync(
                 assignment => assignment.ProjectId == payment.ProjectId &&
@@ -250,6 +255,8 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                 PaymentId = selection.PaymentId,
                 SupportedCurrency = selection.SupportedCurrency,
                 PaymentAddress = selection.PaymentAddress,
+                Network = selection.Network,
+                ChainId = selection.ChainId,
                 AssignedAt = selection.SelectedAt,
             });
         }
@@ -258,7 +265,11 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                      selection.SupportedCurrency) ||
                  !StringComparer.Ordinal.Equals(
                      addressAssignment.PaymentAddress,
-                     selection.PaymentAddress))
+                     selection.PaymentAddress) ||
+                 !StringComparer.Ordinal.Equals(
+                     addressAssignment.Network,
+                     selection.Network) ||
+                 addressAssignment.ChainId != selection.ChainId)
         {
             throw new InvalidOperationException(
                 "The reserved Payment Address does not match the currency selection.");
@@ -273,7 +284,15 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             await transaction.CommitAsync(cancellationToken);
         }
 
-        return SelectCurrencyStoreResult.Selected(ToReadModel(payment));
+        return SelectCurrencyStoreResult.Selected(ToReadModel(
+            payment,
+            rateLock: ToReadModel(rateLock),
+            paymentInstruction: new PaymentInstructionReadModel(
+                selection.SupportedCurrency,
+                selection.Network,
+                selection.ChainId,
+                selection.ExpectedCryptoAmount,
+                selection.PaymentAddress)));
     }
 
     public async Task<RecordBlockchainObservationStoreResult> RecordBlockchainObservationAsync(
@@ -818,14 +837,61 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             .Select(option => new PaymentOptionReadModel(
                 option.SupportedCurrency,
                 option.Status,
-                option.UnavailableReason))
+                option.UnavailableReason,
+                option.CreatedAt))
             .ToListAsync(cancellationToken);
     }
+
+    private async Task<RateLockReadModel?> LoadRateLockAsync(
+        Guid projectId,
+        Guid paymentId,
+        CancellationToken cancellationToken)
+    {
+        var rateLock = await dbContext.RateLocks
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == projectId && candidate.PaymentId == paymentId,
+                cancellationToken);
+        return rateLock is null ? null : ToReadModel(rateLock);
+    }
+
+    private async Task<PaymentInstructionReadModel?> LoadPaymentInstructionAsync(
+        Guid projectId,
+        Guid paymentId,
+        CancellationToken cancellationToken)
+    {
+        return await (
+                from assignment in dbContext.PaymentAddressAssignments.AsNoTracking()
+                join payment in dbContext.Payments.AsNoTracking()
+                    on new { assignment.ProjectId, assignment.PaymentId }
+                    equals new { payment.ProjectId, PaymentId = payment.Id }
+                where assignment.ProjectId == projectId && assignment.PaymentId == paymentId
+                select new PaymentInstructionReadModel(
+                    assignment.SupportedCurrency,
+                    assignment.Network,
+                    assignment.ChainId,
+                    payment.ExpectedCryptoAmount!,
+                    assignment.PaymentAddress))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    private static RateLockReadModel ToReadModel(RateLockRecord rateLock) =>
+        new(
+            rateLock.FiatCurrency,
+            rateLock.FiatAmountMinor,
+            rateLock.SupportedCurrency,
+            rateLock.ExpectedCryptoAmount,
+            rateLock.RateValue,
+            rateLock.RateSource,
+            rateLock.RateObservedAt,
+            rateLock.CreatedAt);
 
     private static PaymentReadModel ToReadModel(
         PaymentRecord payment,
         string? observedTotal = null,
-        IReadOnlyList<PaymentOptionReadModel>? paymentOptions = null)
+        IReadOnlyList<PaymentOptionReadModel>? paymentOptions = null,
+        RateLockReadModel? rateLock = null,
+        PaymentInstructionReadModel? paymentInstruction = null)
     {
         return new PaymentReadModel(
             payment.Id,
@@ -852,7 +918,9 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             payment.UpdatedAt,
             paymentOptions,
             payment.SettledAt,
-            payment.ProjectId);
+            payment.ProjectId,
+            rateLock,
+            paymentInstruction);
     }
 
     private static PaymentReadModel ToReadModel(
@@ -888,7 +956,8 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                 .Select(option => new PaymentOptionReadModel(
                     option.SupportedCurrency,
                     option.Status,
-                    option.UnavailableReason))
+                    option.UnavailableReason,
+                    option.CreatedAt))
                 .ToArray(),
             SettledAt: null,
             ProjectId: projectId);

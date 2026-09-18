@@ -68,9 +68,19 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
         }
         await ExecuteAsync(
             connectionString,
-            "delete from \"__EFMigrationsHistory\" where \"MigrationId\" in (@migration_id, @address_migration_id)",
+            """
+            delete from "__EFMigrationsHistory"
+            where "MigrationId" in (@migration_id, @address_migration_id, @instruction_migration_id);
+            alter table app.payment_address_assignments
+                drop constraint ck_payment_address_assignments_chain_id;
+            alter table app.payment_address_assignments
+                drop constraint ck_payment_address_assignments_network;
+            alter table app.payment_address_assignments drop column chain_id;
+            alter table app.payment_address_assignments drop column network;
+            """,
             ("migration_id", ProjectMigration),
-            ("address_migration_id", "202609160002_AddProjectPaymentConfigurationAndAddressSources"));
+            ("address_migration_id", "202609160002_AddProjectPaymentConfigurationAndAddressSources"),
+            ("instruction_migration_id", "202609180001_AddPaymentInstructionNetwork"));
 
         var credentialId = Guid.NewGuid();
         var activePaymentId = Guid.NewGuid();

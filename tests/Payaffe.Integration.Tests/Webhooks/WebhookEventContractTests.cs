@@ -161,7 +161,7 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
             new RecordBlockchainObservationCommand(
                 expiring.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-unconfirmed-456",
                 "0.00039980",
                 ObservationTime,
@@ -178,7 +178,7 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
             new RecordBlockchainObservationCommand(
                 completing.Payment!.PaymentId,
                 "btc",
-                "btc-test-address",
+                "bc1qpayaffetestaddress0000000000000000000000000",
                 "tx-confirmed-123",
                 "0.00039980",
                 ObservationTime,
@@ -433,8 +433,9 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
             CancellationToken cancellationToken)
         {
             return Task.FromResult<PaymentAddressAssignment?>(new PaymentAddressAssignment(
-                supportedCurrency,
-                $"{supportedCurrency.ToLowerInvariant()}-test-address"));
+                "BTC",
+                "bc1qpayaffetestaddress0000000000000000000000000",
+                "mainnet"));
         }
     }
 }
