@@ -117,11 +117,14 @@ public sealed class WebhookDeliveryProcessor(
     }
 
     public async Task<WebhookManualResendResult> ResendAsync(
+        Guid projectId,
         Guid webhookEventId,
         CancellationToken cancellationToken)
     {
         var webhookEvent = await dbContext.WebhookOutboxEvents
-            .SingleOrDefaultAsync(candidate => candidate.Id == webhookEventId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == projectId && candidate.Id == webhookEventId,
+                cancellationToken);
         if (webhookEvent is null)
         {
             return WebhookManualResendResult.NotFound();
@@ -142,6 +145,7 @@ public sealed class WebhookDeliveryProcessor(
     {
         var endpoints = await dbContext.WebhookEndpoints
             .Where(candidate =>
+                candidate.ProjectId == webhookEvent.ProjectId &&
                 candidate.IntegrationApiCredentialId == webhookEvent.IntegrationApiCredentialId &&
                 candidate.Status == "active")
             .OrderBy(candidate => candidate.CreatedAt)
@@ -157,8 +161,27 @@ public sealed class WebhookDeliveryProcessor(
 
         var payment = await dbContext.Payments
             .AsNoTracking()
-            .SingleAsync(candidate => candidate.Id == webhookEvent.PaymentId, cancellationToken);
-        var secret = await secretResolver.ResolveAsync(endpoint.SecretReference, cancellationToken);
+            .SingleAsync(
+                candidate => candidate.ProjectId == webhookEvent.ProjectId &&
+                             candidate.Id == webhookEvent.PaymentId,
+                cancellationToken);
+        string? secret;
+        try
+        {
+            secret = await secretResolver.ResolveForProjectAsync(
+                webhookEvent.ProjectId,
+                endpoint.SecretReference,
+                cancellationToken);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            await ApplyRetryableFailureAsync(
+                webhookEvent,
+                endpoint,
+                "webhook_secret.resolve_failed",
+                cancellationToken);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(secret))
         {
             await RecordAttemptAsync(
@@ -288,6 +311,7 @@ public sealed class WebhookDeliveryProcessor(
     {
         dbContext.WebhookDeliveryAttempts.Add(new WebhookDeliveryAttemptRecord
         {
+            ProjectId = webhookEvent.ProjectId,
             Id = Guid.NewGuid(),
             WebhookEventId = webhookEvent.Id,
             WebhookEndpointId = endpoint.Id,

@@ -351,6 +351,31 @@ public sealed class PaymentApplicationServiceTests
     }
 
     [Fact]
+    public async Task Poll_blockchain_observations_isolates_one_project_failure_and_preserves_project_context()
+    {
+        var failingProjectId = Guid.NewGuid();
+        var healthyProjectId = Guid.NewGuid();
+        var store = new CapturingObservationStore();
+        store.AddObservationTarget(new BlockchainObservationTarget(
+            Guid.NewGuid(), "BTC", "failing-address", "0.1", failingProjectId));
+        store.AddObservationTarget(new BlockchainObservationTarget(
+            PaymentId, "BTC", "btc-test-address", "0.00039980", healthyProjectId));
+        var service = CreateService(
+            store,
+            TimeSpan.FromHours(1),
+            new FixedExchangeRateSource(),
+            new FixedPaymentAddressProvider(),
+            new ProjectSelectiveBlockchainObservationAdapter(failingProjectId));
+
+        var result = await service.PollBlockchainObservationsAsync(25, CancellationToken.None);
+
+        Assert.Equal(2, result.TargetCount);
+        Assert.Equal(1, result.FailedCount);
+        Assert.Equal(1, result.RecordedCount);
+        Assert.Equal(healthyProjectId, store.Observation!.ProjectId);
+    }
+
+    [Fact]
     public async Task Monitor_blockchain_reorgs_updates_matching_transaction_confirmations()
     {
         var store = new CapturingReorgMonitoringStore();
@@ -476,6 +501,7 @@ public sealed class PaymentApplicationServiceTests
             new FixedPayerPageIdGenerator(),
             exchangeRateSource,
             paymentAddressProvider,
+            new FixedProjectPaymentConfigurationStore(paymentExpiration),
             blockchainObservationAdapter,
             new FixedClock(),
             Options.Create(new PaymentApplicationOptions
@@ -484,6 +510,28 @@ public sealed class PaymentApplicationServiceTests
                 PaymentExpiration = paymentExpiration,
                 LateAcceptanceWindow = TimeSpan.FromHours(24),
             }));
+    }
+
+    private sealed class FixedProjectPaymentConfigurationStore(TimeSpan paymentExpiration)
+        : IProjectPaymentConfigurationStore
+    {
+        private readonly ProjectPaymentConfiguration _configuration = new(
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            "active",
+            paymentExpiration,
+            TimeSpan.FromHours(24),
+            1m,
+            new ProjectCurrencyConfiguration(true, 1, 6),
+            new ProjectCurrencyConfiguration(true, 1, 12),
+            new ProjectCurrencyConfiguration(true, 12, 64));
+
+        public Task<ProjectPaymentConfiguration?> FindByCredentialAsync(
+            Guid integrationApiCredentialId,
+            CancellationToken cancellationToken) => Task.FromResult<ProjectPaymentConfiguration?>(_configuration);
+
+        public Task<ProjectPaymentConfiguration?> FindByProjectAsync(
+            Guid projectId,
+            CancellationToken cancellationToken) => Task.FromResult<ProjectPaymentConfiguration?>(_configuration);
     }
 
     private sealed class CapturingPaymentStore : IPaymentStore
@@ -1209,6 +1257,7 @@ public sealed class PaymentApplicationServiceTests
     private sealed class FixedPaymentAddressProvider : IPaymentAddressProvider
     {
         public Task<PaymentAddressAssignment?> AssignAsync(
+            Guid projectId,
             Guid paymentId,
             string supportedCurrency,
             CancellationToken cancellationToken)
@@ -1226,12 +1275,14 @@ public sealed class PaymentApplicationServiceTests
             availableCurrencies.ToHashSet(StringComparer.Ordinal);
 
         public Task<PaymentAddressAssignment?> AssignAsync(
+            Guid projectId,
             Guid paymentId,
             string supportedCurrency,
             CancellationToken cancellationToken) =>
             Task.FromResult<PaymentAddressAssignment?>(null);
 
         public Task<bool> IsAddressAvailableAsync(
+            Guid projectId,
             string supportedCurrency,
             CancellationToken cancellationToken) =>
             Task.FromResult(_availableCurrencies.Contains(supportedCurrency));
@@ -1262,6 +1313,35 @@ public sealed class PaymentApplicationServiceTests
         {
             Target = target;
             return Task.FromResult<IReadOnlyList<BlockchainObservation>>(_observations);
+        }
+    }
+
+    private sealed class ProjectSelectiveBlockchainObservationAdapter(Guid failingProjectId)
+        : IBlockchainObservationAdapter
+    {
+        public Task StartWatchingAsync(
+            BlockchainObservationTarget target,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<BlockchainObservation>> PollAsync(
+            BlockchainObservationTarget target,
+            CancellationToken cancellationToken)
+        {
+            if (target.ProjectId == failingProjectId)
+            {
+                throw new HttpRequestException("Simulated provider failure.");
+            }
+
+            return Task.FromResult<IReadOnlyList<BlockchainObservation>>(
+            [
+                new BlockchainObservation(
+                    "tx-healthy",
+                    "0.00039980",
+                    DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
+                    0,
+                    "test-provider",
+                    "healthy-observation"),
+            ]);
         }
     }
 

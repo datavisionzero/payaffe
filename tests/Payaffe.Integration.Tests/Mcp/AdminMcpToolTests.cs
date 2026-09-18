@@ -24,7 +24,7 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
     {
         await using var context = await BuildContextAsync();
 
-        var result = await AdminMcpTools.SearchPaymentsAsync(context.Services, 25);
+        var result = await AdminMcpTools.SearchPaymentsAsync(context.Services, ProjectDefaults.DefaultProjectId, 25);
 
         Assert.Equal("resolved", result.Status);
         Assert.Equal("payments.listed", result.Code);
@@ -33,11 +33,44 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
     }
 
     [Fact]
+    public async Task Project_list_returns_the_installation_Projects()
+    {
+        await using var context = await BuildContextAsync();
+
+        var result = await AdminMcpTools.ListProjectsAsync(context.Services);
+
+        Assert.Equal("resolved", result.Status);
+        var project = Assert.Single(result.Projects);
+        Assert.Equal(ProjectDefaults.DefaultProjectId, project.ProjectId);
+        Assert.Equal("active", project.Status);
+    }
+
+    [Fact]
+    public async Task Payment_tools_do_not_resolve_a_Payment_through_another_Project()
+    {
+        await using var context = await BuildContextAsync();
+        var payment = Assert.Single((await AdminMcpTools.SearchPaymentsAsync(
+            context.Services,
+            ProjectDefaults.DefaultProjectId,
+            25)).Payments);
+        var otherProjectId = Guid.NewGuid();
+
+        var search = await AdminMcpTools.SearchPaymentsAsync(context.Services, otherProjectId, 25);
+        var inspect = await AdminMcpTools.InspectPaymentAsync(
+            context.Services,
+            otherProjectId,
+            payment.PaymentId);
+
+        Assert.Empty(search.Payments);
+        Assert.Equal("payment.not_found", inspect.Code);
+    }
+
+    [Fact]
     public async Task Address_pool_summary_reports_capacity()
     {
         await using var context = await BuildContextAsync();
 
-        var result = await AdminMcpTools.SummarizeAddressPoolAsync(context.Services);
+        var result = await AdminMcpTools.SummarizeAddressPoolAsync(context.Services, ProjectDefaults.DefaultProjectId);
 
         Assert.Equal("resolved", result.Status);
         Assert.Equal(0, result.Pool.UnusedCount);
@@ -49,7 +82,7 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
     {
         await using var context = await BuildContextAsync();
 
-        var result = AdminMcpTools.SummarizeConfiguration(context.Services);
+        var result = await AdminMcpTools.SummarizeConfigurationAsync(context.Services, ProjectDefaults.DefaultProjectId);
 
         Assert.Equal("resolved", result.Status);
         Assert.Equal("none", result.ObservationMode);
@@ -67,6 +100,7 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
 
         var result = await AdminMcpTools.SettlePaymentAsync(
             context.Services,
+            ProjectDefaults.DefaultProjectId,
             Guid.NewGuid(),
             expectedVersion: 1,
             reason: "operator reason",
@@ -80,6 +114,7 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
         Assert.Equal("product_user", entry.ActorType);
         Assert.Equal("mcp", entry.SourceService);
         Assert.Equal(AdminAccountId.ToString("D"), entry.ActorId);
+        Assert.Equal(ProjectDefaults.DefaultProjectId, entry.ProjectId);
         Assert.Equal(result.CorrelationId, entry.CorrelationId);
     }
 
@@ -88,7 +123,7 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
     {
         await using var context = await BuildContextAsync();
 
-        var result = await AdminMcpTools.SearchAuditLogAsync(context.Services, 25);
+        var result = await AdminMcpTools.SearchAuditLogAsync(context.Services, null, 25);
 
         Assert.Equal("resolved", result.Status);
         var entry = Assert.Single(await context.ReadAuditEntriesAsync("mcp.audit_log.search"));
@@ -103,6 +138,7 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
 
         var result = await AdminMcpTools.SettlePaymentAsync(
             context.Services,
+            ProjectDefaults.DefaultProjectId,
             Guid.NewGuid(),
             expectedVersion: 1,
             reason: "operator reason",

@@ -25,12 +25,28 @@ namespace Payaffe.Mcp;
 public sealed class AdminMcpTools
 {
     [McpServerTool(
+        Name = "project.list", Title = "List Projects", ReadOnly = true,
+        Destructive = false, Idempotent = true, OpenWorld = false,
+        UseStructuredContent = true, OutputSchemaType = typeof(ProjectListToolResult))]
+    [Description("Lists Projects available to the installation-wide Admin.")]
+    public static async Task<ProjectListToolResult> ListProjectsAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken = default)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var projects = await scope.ServiceProvider.GetRequiredService<AdminProjectService>()
+            .ListAsync(cancellationToken);
+        return ProjectListToolResult.Resolved(projects, NewCorrelationId());
+    }
+
+    [McpServerTool(
         Name = "payment.search", Title = "Search Payments", ReadOnly = true,
         Destructive = false, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true, OutputSchemaType = typeof(PaymentSearchToolResult))]
     [Description("Lists recent Payments for operational review.")]
     public static async Task<PaymentSearchToolResult> SearchPaymentsAsync(
         IServiceProvider services,
+        Guid projectId,
         int limit = 25,
         CancellationToken cancellationToken = default)
     {
@@ -41,7 +57,7 @@ public sealed class AdminMcpTools
 
         await using var scope = services.CreateAsyncScope();
         var payments = await scope.ServiceProvider.GetRequiredService<AdminPaymentQueryService>()
-            .ListRecentPaymentsAsync(limit, cancellationToken);
+            .ListRecentPaymentsAsync(projectId, limit, cancellationToken);
         return PaymentSearchToolResult.Resolved(payments, NewCorrelationId());
     }
 
@@ -52,13 +68,14 @@ public sealed class AdminMcpTools
     [Description("Inspects one Payment including operational completion and Settlement evidence.")]
     public static async Task<PaymentInspectToolResult> InspectPaymentAsync(
         IServiceProvider services,
+        Guid projectId,
         Guid paymentId,
         CancellationToken cancellationToken = default)
     {
         var correlationId = NewCorrelationId();
         await using var scope = services.CreateAsyncScope();
         var payment = await scope.ServiceProvider.GetRequiredService<AdminPaymentQueryService>()
-            .FindPaymentAsync(paymentId, cancellationToken);
+            .FindPaymentAsync(projectId, paymentId, cancellationToken);
         return payment is null
             ? PaymentInspectToolResult.Rejected("payment.not_found", correlationId)
             : PaymentInspectToolResult.Resolved(payment, correlationId);
@@ -69,19 +86,22 @@ public sealed class AdminMcpTools
         Destructive = false, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true, OutputSchemaType = typeof(ConfigurationSummaryToolResult))]
     [Description("Returns a safe operational configuration summary without secret values or references.")]
-    public static ConfigurationSummaryToolResult SummarizeConfiguration(IServiceProvider services)
+    public static async Task<ConfigurationSummaryToolResult> SummarizeConfigurationAsync(
+        IServiceProvider services,
+        Guid projectId,
+        CancellationToken cancellationToken = default)
     {
         var observation = services.GetRequiredService<IOptions<BlockchainObservationOptions>>().Value;
-        var payments = services.GetRequiredService<IOptions<PaymentApplicationOptions>>().Value;
-        return new ConfigurationSummaryToolResult(
-            "resolved",
-            "configuration.summarized",
-            observation.Mode,
-            payments.PaymentExpiration,
-            payments.LateAcceptanceWindow,
-            payments.PaymentTolerancePercent,
-            NewCorrelationId(),
-            "Safe configuration summary returned.");
+        await using var scope = services.CreateAsyncScope();
+        var payments = await scope.ServiceProvider.GetRequiredService<IProjectPaymentConfigurationStore>()
+            .FindByProjectAsync(projectId, cancellationToken);
+        return payments is null
+            ? ConfigurationSummaryToolResult.Rejected(projectId, NewCorrelationId())
+            : ConfigurationSummaryToolResult.Resolved(
+                projectId,
+                payments,
+                observation.Mode,
+                NewCorrelationId());
     }
 
     [McpServerTool(
@@ -91,6 +111,7 @@ public sealed class AdminMcpTools
     [Description("Lists failed or retry-pending Webhook Deliveries.")]
     public static async Task<WebhookSearchToolResult> SearchWebhookDeliveriesAsync(
         IServiceProvider services,
+        Guid projectId,
         int limit = 25,
         CancellationToken cancellationToken = default)
     {
@@ -101,7 +122,7 @@ public sealed class AdminMcpTools
 
         await using var scope = services.CreateAsyncScope();
         var deliveries = await scope.ServiceProvider.GetRequiredService<AdminWebhookDeliveryQueryService>()
-            .ListResendableDeliveriesAsync(limit, cancellationToken);
+            .ListResendableDeliveriesAsync(projectId, limit, cancellationToken);
         return WebhookSearchToolResult.Resolved(deliveries, NewCorrelationId());
     }
 
@@ -112,6 +133,7 @@ public sealed class AdminMcpTools
     [Description("Lists recent security Audit Log entries and audits the MCP access.")]
     public static async Task<AuditLogSearchToolResult> SearchAuditLogAsync(
         IServiceProvider services,
+        Guid? projectId = null,
         int limit = 25,
         CancellationToken cancellationToken = default)
     {
@@ -124,8 +146,9 @@ public sealed class AdminMcpTools
         await using var scope = services.CreateAsyncScope();
         var entries = await scope.ServiceProvider.GetRequiredService<AdminAuditLogQueryService>()
             .ListRecentEntriesAndRecordAccessAsync(
+                projectId,
                 limit,
-                Audit(services, correlationId, "mcp.audit_log.search", "success", "audit_log.listed", "audit_log", "recent"),
+                Audit(services, correlationId, "mcp.audit_log.search", "success", "audit_log.listed", "audit_log", "recent", projectId),
                 cancellationToken);
         return AuditLogSearchToolResult.Resolved(entries, correlationId);
     }
@@ -137,11 +160,12 @@ public sealed class AdminMcpTools
     [Description("Returns native ETH Address Pool capacity without exposing any spending material.")]
     public static async Task<AddressPoolSummaryToolResult> SummarizeAddressPoolAsync(
         IServiceProvider services,
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
         await using var scope = services.CreateAsyncScope();
         var summary = await scope.ServiceProvider.GetRequiredService<AdminNativeEthAddressPoolService>()
-            .GetSummaryAsync(LowCapacityThreshold(services), cancellationToken);
+            .GetSummaryAsync(projectId, LowCapacityThreshold(services), cancellationToken);
         return new AddressPoolSummaryToolResult(
             "resolved",
             "address_pool.summarized",
@@ -157,6 +181,7 @@ public sealed class AdminMcpTools
     [Description("Risky action: manually settles an eligible observed or expired Payment. Client confirmation is required.")]
     public static async Task<PaymentSettlementToolResult> SettlePaymentAsync(
         IServiceProvider services,
+        Guid projectId,
         Guid paymentId,
         long expectedVersion,
         string reason,
@@ -167,7 +192,7 @@ public sealed class AdminMcpTools
         var subjectId = paymentId.ToString("D");
         var correlationId = NewCorrelationId();
 
-        var guard = await GuardRiskyToolAsync(services, confirmed, correlationId, eventType, "payment", subjectId, cancellationToken);
+        var guard = await GuardRiskyToolAsync(services, confirmed, correlationId, eventType, "payment", subjectId, projectId, cancellationToken);
         if (guard is not null)
         {
             return PaymentSettlementToolResult.Rejected(guard, correlationId);
@@ -175,7 +200,7 @@ public sealed class AdminMcpTools
 
         await using var scope = services.CreateAsyncScope();
         var result = await scope.ServiceProvider.GetRequiredService<AdminPaymentQueryService>()
-            .SettleAsync(paymentId, expectedVersion, reason, OperationContext(services, correlationId), cancellationToken);
+            .SettleAsync(projectId, paymentId, expectedVersion, reason, OperationContext(services, correlationId), cancellationToken);
 
         if (result.Kind == AdminPaymentSettlementResultKind.Settled)
         {
@@ -191,7 +216,7 @@ public sealed class AdminMcpTools
             AdminPaymentSettlementResultKind.InvalidInput => "validation.failed",
             _ => "unexpected_error",
         };
-        await RecordAsync(services, Audit(services, correlationId, eventType, "denied", code, "payment", subjectId), cancellationToken);
+        await RecordAsync(services, Audit(services, correlationId, eventType, "denied", code, "payment", subjectId, projectId), cancellationToken);
         return PaymentSettlementToolResult.Rejected(code, correlationId, result.Payment?.Status);
     }
 
@@ -202,6 +227,7 @@ public sealed class AdminMcpTools
     [Description("Risky action: resends a failed Webhook Delivery to its external endpoint. Client confirmation is required.")]
     public static async Task<WebhookResendToolResult> ResendWebhookDeliveryAsync(
         IServiceProvider services,
+        Guid projectId,
         Guid webhookEventId,
         bool confirmed,
         CancellationToken cancellationToken = default)
@@ -210,7 +236,7 @@ public sealed class AdminMcpTools
         var subjectId = webhookEventId.ToString("D");
         var correlationId = NewCorrelationId();
 
-        var guard = await GuardRiskyToolAsync(services, confirmed, correlationId, eventType, "webhook_delivery", subjectId, cancellationToken);
+        var guard = await GuardRiskyToolAsync(services, confirmed, correlationId, eventType, "webhook_delivery", subjectId, projectId, cancellationToken);
         if (guard is not null)
         {
             return WebhookResendToolResult.Rejected(guard, correlationId);
@@ -218,7 +244,7 @@ public sealed class AdminMcpTools
 
         await using var scope = services.CreateAsyncScope();
         var result = await scope.ServiceProvider.GetRequiredService<WebhookDeliveryProcessor>()
-            .ResendAsync(webhookEventId, cancellationToken);
+            .ResendAsync(projectId, webhookEventId, cancellationToken);
         var resent = result.Kind == WebhookManualResendResultKind.Resent;
         var code = result.Kind switch
         {
@@ -231,7 +257,7 @@ public sealed class AdminMcpTools
         // Webhook Delivery resend has no transactional audit, so record both outcomes here.
         await RecordAsync(
             services,
-            Audit(services, correlationId, eventType, resent ? "success" : "denied", code, "webhook_delivery", subjectId),
+            Audit(services, correlationId, eventType, resent ? "success" : "denied", code, "webhook_delivery", subjectId, projectId),
             cancellationToken);
         return resent
             ? WebhookResendToolResult.Resolved(result.Status!, correlationId)
@@ -245,6 +271,7 @@ public sealed class AdminMcpTools
     [Description("Risky action: imports public native ETH receiving addresses into the non-reusable Address Pool. Client confirmation is required.")]
     public static async Task<AddressPoolImportToolResult> ImportNativeEthAddressesAsync(
         IServiceProvider services,
+        Guid projectId,
         string[] addresses,
         bool confirmed,
         CancellationToken cancellationToken = default)
@@ -252,7 +279,7 @@ public sealed class AdminMcpTools
         const string eventType = "mcp.address_pool.import_native_eth";
         var correlationId = NewCorrelationId();
 
-        var guard = await GuardRiskyToolAsync(services, confirmed, correlationId, eventType, "address_pool", "ETH", cancellationToken);
+        var guard = await GuardRiskyToolAsync(services, confirmed, correlationId, eventType, "address_pool", "ETH", projectId, cancellationToken);
         if (guard is not null)
         {
             return AddressPoolImportToolResult.Rejected(guard, correlationId);
@@ -260,7 +287,7 @@ public sealed class AdminMcpTools
 
         await using var scope = services.CreateAsyncScope();
         var result = await scope.ServiceProvider.GetRequiredService<AdminNativeEthAddressPoolService>()
-            .ImportAsync(addresses, LowCapacityThreshold(services), OperationContext(services, correlationId), cancellationToken);
+            .ImportAsync(projectId, addresses, LowCapacityThreshold(services), OperationContext(services, correlationId), cancellationToken);
 
         if (result.Kind == AdminNativeEthAddressPoolImportResultKind.Success)
         {
@@ -272,9 +299,10 @@ public sealed class AdminMcpTools
         {
             AdminNativeEthAddressPoolImportResultKind.InvalidInput => "validation.failed",
             AdminNativeEthAddressPoolImportResultKind.DuplicateAddress => "address_pool.duplicate_address",
+            AdminNativeEthAddressPoolImportResultKind.ProjectUnavailable => "project.not_active",
             _ => "unexpected_error",
         };
-        await RecordAsync(services, Audit(services, correlationId, eventType, "denied", code, "address_pool", "ETH"), cancellationToken);
+        await RecordAsync(services, Audit(services, correlationId, eventType, "denied", code, "address_pool", "ETH", projectId), cancellationToken);
         return AddressPoolImportToolResult.Rejected(code, correlationId);
     }
 
@@ -289,13 +317,14 @@ public sealed class AdminMcpTools
         string eventType,
         string subjectType,
         string subjectId,
+        Guid projectId,
         CancellationToken cancellationToken)
     {
         if (!confirmed)
         {
             await RecordAsync(
                 services,
-                Audit(services, correlationId, eventType, "denied", "confirmation.required", subjectType, subjectId),
+                Audit(services, correlationId, eventType, "denied", "confirmation.required", subjectType, subjectId, projectId),
                 cancellationToken);
             return "confirmation.required";
         }
@@ -304,7 +333,7 @@ public sealed class AdminMcpTools
         {
             await RecordAsync(
                 services,
-                Audit(services, correlationId, eventType, "denied", "rate_limited", subjectType, subjectId),
+                Audit(services, correlationId, eventType, "denied", "rate_limited", subjectType, subjectId, projectId),
                 cancellationToken);
             return "rate_limited";
         }
@@ -332,7 +361,8 @@ public sealed class AdminMcpTools
         string outcome,
         string reasonCode,
         string subjectType,
-        string subjectId) =>
+        string subjectId,
+        Guid? projectId = null) =>
         new(
             Guid.NewGuid(),
             DateTimeOffset.UtcNow,
@@ -346,7 +376,8 @@ public sealed class AdminMcpTools
             correlationId,
             reasonCode,
             subjectType,
-            subjectId);
+            subjectId,
+            projectId);
 
     private static async Task RecordAsync(
         IServiceProvider services,

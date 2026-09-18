@@ -13,10 +13,14 @@ public sealed record CreatePaymentResult(
 
     public static CreatePaymentResult IdempotencyConflict() =>
         new(CreatePaymentResultKind.IdempotencyConflict, Payment: null, CreatedNew: false);
+
+    public static CreatePaymentResult ProjectUnavailable() =>
+        new(CreatePaymentResultKind.ProjectUnavailable, Payment: null, CreatedNew: false);
 }
 
 public enum CreatePaymentResultKind
 {
     Success,
     IdempotencyConflict,
+    ProjectUnavailable,
 }

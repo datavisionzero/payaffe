@@ -3,15 +3,18 @@ namespace Payaffe.Application.Admin;
 public interface IAdminWebhookEndpointStore
 {
     Task<IReadOnlyList<AdminWebhookEndpointReadModel>> ListAsync(
+        Guid projectId,
         Guid? integrationApiCredentialId,
         CancellationToken cancellationToken);
 
     Task<AdminWebhookEndpointStoreResult> CreateAsync(
+        Guid projectId,
         AdminWebhookEndpointDraft endpoint,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken);
 
     Task<AdminWebhookEndpointStoreResult> UpdateAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         AdminWebhookEndpointUpdate update,
@@ -20,6 +23,7 @@ public interface IAdminWebhookEndpointStore
         CancellationToken cancellationToken);
 
     Task<AdminWebhookEndpointStoreResult> RotateSecretAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         string secretReference,
@@ -28,6 +32,7 @@ public interface IAdminWebhookEndpointStore
         CancellationToken cancellationToken);
 
     Task<AdminWebhookEndpointStoreResult> DisableAsync(
+        Guid projectId,
         Guid endpointId,
         long expectedVersion,
         DateTimeOffset occurredAt,

@@ -10,4 +10,5 @@ public static class PaymentOptionUnavailableReasons
     public const string ExchangeRate = "exchange_rate.unavailable";
     public const string PaymentAddress = "payment_address.unavailable";
     public const string BlockchainObservation = "blockchain_observation.unavailable";
+    public const string ProjectConfiguration = "project_configuration.disabled";
 }

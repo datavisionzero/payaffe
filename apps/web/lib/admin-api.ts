@@ -11,6 +11,7 @@ type Schema<Name extends keyof components["schemas"]> = components["schemas"][Na
 
 export type AdminLoginStart = Schema<"AdminLoginStartHttpResponse">;
 export type AdminSession = Schema<"AdminSessionHttpResponse">;
+export type AdminProject = Schema<"AdminProjectReadModel">;
 export type AdminPaymentSummary = Schema<"AdminPaymentSummaryReadModel">;
 export type AdminPaymentDetail = Schema<"AdminPaymentDetailReadModel">;
 export type AdminAuditLogEntry = Schema<"AdminAuditLogEntryReadModel">;
@@ -29,6 +30,17 @@ export type AdminNativeEthAddressPoolImport =
 export type AdminObservationHealth = Schema<"ObservationHealthReadModel">;
 export type AdminReorgAlert = Schema<"AdminReorgAlertReadModel">;
 export { ApiError as AdminApiError };
+
+export const defaultAdminProjectId = "00000000-0000-0000-0000-000000000001";
+let selectedAdminProjectId = defaultAdminProjectId;
+
+export function setSelectedAdminProjectId(projectId: string) {
+  selectedAdminProjectId = projectId;
+}
+
+export function getSelectedAdminProjectId() {
+  return selectedAdminProjectId;
+}
 
 export const adminLoginFormSchema = z.object({
   username: z.string().trim().min(1),
@@ -91,16 +103,21 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   return requireData(data, error, response);
 }
 
+export async function listAdminProjects(): Promise<AdminProject[]> {
+  const { data, error, response } = await webApi.GET("/api/admin/projects");
+  return requireData(data, error, response).projects;
+}
+
 export async function listAdminPayments(): Promise<AdminPaymentSummary[]> {
   const { data, error, response } = await webApi.GET("/api/admin/payments", {
-    params: { query: { limit: 25 } }
+    params: { query: { projectId: selectedAdminProjectId, limit: 25 } }
   });
   return requireData(data, error, response).payments;
 }
 
 export async function getAdminPayment(paymentId: string): Promise<AdminPaymentDetail> {
   const { data, error, response } = await webApi.GET("/api/admin/payments/{paymentId}", {
-    params: { path: { paymentId } }
+    params: { path: { paymentId }, query: { projectId: selectedAdminProjectId } }
   });
   return requireData(data, error, response);
 }
@@ -110,10 +127,11 @@ export async function settleAdminPayment(
   expectedVersion: number | string,
   reason: string
 ): Promise<AdminPaymentDetail> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST("/api/admin/payments/{paymentId}/settle", {
     params: { path: { paymentId } },
     headers: await adminMutationHeaders(),
-    body: { expectedVersion, reason }
+    body: { projectId, expectedVersion, reason }
   });
   return requireData(data, error, response);
 }
@@ -128,29 +146,30 @@ export async function stepUpAdmin(command: AdminMfaForm): Promise<void> {
 
 export async function listAdminAuditLog(): Promise<AdminAuditLogEntry[]> {
   const { data, error, response } = await webApi.GET("/api/admin/audit-log", {
-    params: { query: { limit: 25 } }
+    params: { query: { projectId: selectedAdminProjectId, limit: 25 } }
   });
   return requireData(data, error, response).entries;
 }
 
 export async function getAdminAuditLogEntry(eventId: string): Promise<AdminAuditLogEntryDetail> {
   const { data, error, response } = await webApi.GET("/api/admin/audit-log/{eventId}", {
-    params: { path: { eventId } }
+    params: { path: { eventId }, query: { projectId: selectedAdminProjectId } }
   });
   return requireData(data, error, response);
 }
 
 export async function exportAdminAuditLog(): Promise<AdminAuditLogExport> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST("/api/admin/audit-log/export", {
     headers: await adminMutationHeaders(),
-    body: { limit: 100 }
+    body: { projectId, limit: 100 }
   });
   return requireData(data, error, response);
 }
 
 export async function listAdminWebhookDeliveries(): Promise<AdminWebhookDelivery[]> {
   const { data, error, response } = await webApi.GET("/api/admin/webhook-deliveries", {
-    params: { query: { limit: 25 } }
+    params: { query: { projectId: selectedAdminProjectId, limit: 25 } }
   });
   return requireData(data, error, response).deliveries;
 }
@@ -158,10 +177,11 @@ export async function listAdminWebhookDeliveries(): Promise<AdminWebhookDelivery
 export async function resendAdminWebhookDelivery(
   eventId: string
 ): Promise<AdminWebhookDeliveryResend> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST(
     "/api/admin/webhook-deliveries/{eventId}/resend",
     {
-      params: { path: { eventId } },
+      params: { path: { eventId }, query: { projectId } },
       headers: await adminMutationHeaders()
     }
   );
@@ -176,16 +196,19 @@ export async function generateAdminRecoveryCodes(): Promise<AdminRecoveryCodes> 
 }
 
 export async function listAdminIntegrationApiCredentials(): Promise<AdminIntegrationApiCredential[]> {
-  const { data, error, response } = await webApi.GET("/api/admin/integration-api-credentials");
+  const { data, error, response } = await webApi.GET("/api/admin/integration-api-credentials", {
+    params: { query: { projectId: selectedAdminProjectId } }
+  });
   return requireData(data, error, response).credentials;
 }
 
 export async function createAdminIntegrationApiCredential(
   name: string
 ): Promise<AdminIntegrationApiCredentialSecret> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST("/api/admin/integration-api-credentials", {
     headers: await adminMutationHeaders(),
-    body: { name }
+    body: { projectId, name }
   });
   return requireData(data, error, response);
 }
@@ -193,12 +216,13 @@ export async function createAdminIntegrationApiCredential(
 export async function rotateAdminIntegrationApiCredential(
   credential: AdminIntegrationApiCredential
 ): Promise<AdminIntegrationApiCredentialSecret> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST(
     "/api/admin/integration-api-credentials/{credentialId}/rotate",
     {
       params: { path: { credentialId: credential.id } },
       headers: await adminMutationHeaders(),
-      body: { expectedVersion: credential.version }
+      body: { projectId, expectedVersion: credential.version }
     }
   );
   return requireData(data, error, response);
@@ -207,12 +231,13 @@ export async function rotateAdminIntegrationApiCredential(
 export async function disableAdminIntegrationApiCredential(
   credential: AdminIntegrationApiCredential
 ): Promise<AdminIntegrationApiCredential> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST(
     "/api/admin/integration-api-credentials/{credentialId}/disable",
     {
       params: { path: { credentialId: credential.id } },
       headers: await adminMutationHeaders(),
-      body: { expectedVersion: credential.version }
+      body: { projectId, expectedVersion: credential.version }
     }
   );
   return requireData(data, error, response).credential;
@@ -220,7 +245,7 @@ export async function disableAdminIntegrationApiCredential(
 
 export async function listAdminWebhookEndpoints(): Promise<AdminWebhookEndpoint[]> {
   const { data, error, response } = await webApi.GET("/api/admin/webhook-endpoints", {
-    params: { query: {} }
+    params: { query: { projectId: selectedAdminProjectId } }
   });
   return requireData(data, error, response).endpoints;
 }
@@ -228,9 +253,10 @@ export async function listAdminWebhookEndpoints(): Promise<AdminWebhookEndpoint[
 export async function createAdminWebhookEndpoint(
   command: WebhookEndpointForm
 ): Promise<AdminWebhookEndpoint> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST("/api/admin/webhook-endpoints", {
     headers: await adminMutationHeaders(),
-    body: command
+    body: { projectId, ...command }
   });
   return requireData(data, error, response).endpoint;
 }
@@ -239,12 +265,13 @@ export async function updateAdminWebhookEndpoint(
   endpoint: AdminWebhookEndpoint,
   command: Pick<WebhookEndpointForm, "url" | "eventTypes">
 ): Promise<AdminWebhookEndpoint> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST(
     "/api/admin/webhook-endpoints/{endpointId}/update",
     {
       params: { path: { endpointId: endpoint.id } },
       headers: await adminMutationHeaders(),
-      body: { expectedVersion: endpoint.version, ...command }
+      body: { projectId, expectedVersion: endpoint.version, ...command }
     }
   );
   return requireData(data, error, response).endpoint;
@@ -254,12 +281,13 @@ export async function rotateAdminWebhookEndpointSecret(
   endpoint: AdminWebhookEndpoint,
   secretReference: string
 ): Promise<AdminWebhookEndpoint> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST(
     "/api/admin/webhook-endpoints/{endpointId}/rotate-secret",
     {
       params: { path: { endpointId: endpoint.id } },
       headers: await adminMutationHeaders(),
-      body: { expectedVersion: endpoint.version, secretReference }
+      body: { projectId, expectedVersion: endpoint.version, secretReference }
     }
   );
   return requireData(data, error, response).endpoint;
@@ -268,28 +296,32 @@ export async function rotateAdminWebhookEndpointSecret(
 export async function disableAdminWebhookEndpoint(
   endpoint: AdminWebhookEndpoint
 ): Promise<AdminWebhookEndpoint> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST(
     "/api/admin/webhook-endpoints/{endpointId}/disable",
     {
       params: { path: { endpointId: endpoint.id } },
       headers: await adminMutationHeaders(),
-      body: { expectedVersion: endpoint.version }
+      body: { projectId, expectedVersion: endpoint.version }
     }
   );
   return requireData(data, error, response).endpoint;
 }
 
 export async function getAdminNativeEthAddressPool(): Promise<AdminNativeEthAddressPool> {
-  const { data, error, response } = await webApi.GET("/api/admin/native-eth-address-pool");
+  const { data, error, response } = await webApi.GET("/api/admin/native-eth-address-pool", {
+    params: { query: { projectId: selectedAdminProjectId } }
+  });
   return requireData(data, error, response);
 }
 
 export async function importAdminNativeEthAddressPool(
   addresses: string[]
 ): Promise<AdminNativeEthAddressPoolImport> {
+  const projectId = selectedAdminProjectId;
   const { data, error, response } = await webApi.POST("/api/admin/native-eth-address-pool/import", {
     headers: await adminMutationHeaders(),
-    body: { addresses }
+    body: { projectId, addresses }
   });
   return requireData(data, error, response);
 }
@@ -301,7 +333,7 @@ export async function getAdminObservationHealth(): Promise<AdminObservationHealt
 
 export async function listAdminReorgAlerts(): Promise<AdminReorgAlert[]> {
   const { data, error, response } = await webApi.GET("/api/admin/reorg-alerts", {
-    params: { query: { limit: 25 } }
+    params: { query: { projectId: selectedAdminProjectId, limit: 25 } }
   });
   return requireData(data, error, response).alerts;
 }

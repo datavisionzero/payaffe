@@ -1,6 +1,20 @@
 using Payaffe.Application.Admin;
+using Payaffe.Application.Payments;
 
 namespace Payaffe.Mcp;
+
+public sealed record ProjectListToolResult(
+    string Status,
+    string Code,
+    IReadOnlyList<AdminProjectReadModel> Projects,
+    string CorrelationId,
+    string Summary)
+{
+    public static ProjectListToolResult Resolved(
+        IReadOnlyList<AdminProjectReadModel> projects,
+        string correlationId) =>
+        new("resolved", "projects.listed", projects, correlationId, $"Found {projects.Count} Projects.");
+}
 
 public sealed record PaymentSearchToolResult(
     string Status,
@@ -34,12 +48,32 @@ public sealed record PaymentInspectToolResult(
 public sealed record ConfigurationSummaryToolResult(
     string Status,
     string Code,
+    Guid ProjectId,
+    string? ProjectStatus,
     string ObservationMode,
-    TimeSpan PaymentExpiration,
-    TimeSpan LateAcceptanceWindow,
-    decimal PaymentTolerancePercent,
+    TimeSpan? PaymentExpiration,
+    TimeSpan? LateAcceptanceWindow,
+    decimal? PaymentTolerancePercent,
+    ProjectCurrencyConfiguration? Btc,
+    ProjectCurrencyConfiguration? Ltc,
+    ProjectCurrencyConfiguration? Eth,
     string CorrelationId,
-    string Summary);
+    string Summary)
+{
+    public static ConfigurationSummaryToolResult Resolved(
+        Guid projectId,
+        ProjectPaymentConfiguration configuration,
+        string observationMode,
+        string correlationId) => new(
+            "resolved", "configuration.summarized", projectId, configuration.ProjectStatus,
+            observationMode, configuration.PaymentExpiration, configuration.LateAcceptanceWindow,
+            configuration.PaymentTolerancePercent, configuration.Btc, configuration.Ltc, configuration.Eth,
+            correlationId, "Safe Project configuration summary returned.");
+
+    public static ConfigurationSummaryToolResult Rejected(Guid projectId, string correlationId) => new(
+        "rejected", "project.not_found", projectId, null, string.Empty, null, null, null,
+        null, null, null, correlationId, "Project configuration was not found.");
+}
 
 public sealed record WebhookSearchToolResult(
     string Status,

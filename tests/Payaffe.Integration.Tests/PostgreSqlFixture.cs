@@ -38,6 +38,26 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
         return builder.ToString();
     }
 
+    public async Task<string> CloneDatabaseAsync(string sourceConnectionString)
+    {
+        var sourceDatabase = new NpgsqlConnectionStringBuilder(sourceConnectionString).Database
+            ?? throw new ArgumentException("Source database is required.", nameof(sourceConnectionString));
+        var databaseName = "payaffe_" + Guid.NewGuid().ToString("N");
+        await using var connection = new NpgsqlConnection(GetAdminConnectionString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"create database {QuoteIdentifier(databaseName)} template {QuoteIdentifier(sourceDatabase)}";
+        await command.ExecuteNonQueryAsync();
+
+        var builder = new NpgsqlConnectionStringBuilder(_container.GetConnectionString())
+        {
+            Database = databaseName,
+        };
+
+        return builder.ToString();
+    }
+
     private string GetAdminConnectionString()
     {
         var builder = new NpgsqlConnectionStringBuilder(_container.GetConnectionString())

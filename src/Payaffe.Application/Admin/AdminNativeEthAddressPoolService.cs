@@ -10,17 +10,19 @@ public sealed partial class AdminNativeEthAddressPoolService(
     private const int MaxImportAddresses = 10_000;
 
     public Task<AdminNativeEthAddressPoolSummary> GetSummaryAsync(
+        Guid projectId,
         int lowCapacityThreshold,
         CancellationToken cancellationToken) =>
-        store.GetSummaryAsync(lowCapacityThreshold, cancellationToken);
+        store.GetSummaryAsync(projectId, lowCapacityThreshold, cancellationToken);
 
     public async Task<AdminNativeEthAddressPoolImportResult> ImportAsync(
+        Guid projectId,
         IReadOnlyList<string>? addresses,
         int lowCapacityThreshold,
         AdminOperationContext context,
         CancellationToken cancellationToken)
     {
-        if (addresses is null or { Count: 0 } ||
+        if (projectId == Guid.Empty || addresses is null or { Count: 0 } ||
             addresses.Count > MaxImportAddresses ||
             lowCapacityThreshold < 0)
         {
@@ -41,7 +43,9 @@ public sealed partial class AdminNativeEthAddressPoolService(
         var importedAt = clock.UtcNow;
         var importId = Guid.NewGuid();
         return await store.ImportAsync(
+            projectId,
             new AdminNativeEthAddressPoolImportDraft(
+                projectId,
                 importId,
                 context.AdminAccountId,
                 normalized!,

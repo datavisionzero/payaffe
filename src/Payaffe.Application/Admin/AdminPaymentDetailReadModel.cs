@@ -1,6 +1,7 @@
 namespace Payaffe.Application.Admin;
 
 public sealed record AdminPaymentDetailReadModel(
+    Guid ProjectId,
     Guid PaymentId,
     string ExternalReference,
     string FiatCurrency,

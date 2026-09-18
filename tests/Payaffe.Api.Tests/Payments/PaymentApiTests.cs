@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Payaffe.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Payaffe.Api.Tests.Payments;
@@ -188,6 +189,97 @@ public sealed class PaymentApiTests
     }
 
     [Fact]
+    public async Task Credential_can_read_a_payment_created_by_another_credential_in_its_project()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync("project-token-a");
+        await factory.SeedCredentialAsync("project-token-b");
+        using var creator = CreateAuthenticatedClient(factory, "project-token-a");
+        creator.DefaultRequestHeaders.Add("Idempotency-Key", "shared-project-read");
+        var createResponse = await creator.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        using var reader = CreateAuthenticatedClient(factory, "project-token-b");
+
+        var response = await reader.GetAsync($"/api/v1/payments/{createdPayment!.PaymentId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Cross_project_payment_id_and_spoofed_project_header_return_safe_not_found()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync("default-project-token");
+        var otherProjectId = await factory.SeedProjectAsync();
+        await factory.SeedCredentialAsync("other-project-token", projectId: otherProjectId);
+        using var creator = CreateAuthenticatedClient(factory, "default-project-token");
+        creator.DefaultRequestHeaders.Add("Idempotency-Key", "cross-project-read");
+        var createResponse = await creator.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        using var reader = CreateAuthenticatedClient(factory, "other-project-token");
+        reader.DefaultRequestHeaders.Add("X-Payaffe-Project-Id", ProjectDefaults.DefaultProjectId.ToString("D"));
+
+        var response = await reader.GetAsync($"/api/v1/payments/{createdPayment!.PaymentId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await AssertProblemCodeAsync(response, "payment.not_found");
+    }
+
+    [Fact]
+    public async Task Projects_can_reuse_the_same_idempotency_key_and_external_reference()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync("first-project-token");
+        var otherProjectId = await factory.SeedProjectAsync();
+        await factory.SeedCredentialAsync("second-project-token", projectId: otherProjectId);
+        using var first = CreateAuthenticatedClient(factory, "first-project-token");
+        using var second = CreateAuthenticatedClient(factory, "second-project-token");
+        first.DefaultRequestHeaders.Add("Idempotency-Key", "same-key");
+        second.DefaultRequestHeaders.Add("Idempotency-Key", "same-key");
+
+        var firstResponse = await first.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var secondResponse = await second.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
+        Assert.NotEqual(firstPayment!.PaymentId, secondPayment!.PaymentId);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Equal(2, dbContext.Payments.Select(payment => payment.ProjectId).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task Disabled_project_rejects_new_payment_but_allows_existing_payment_polling()
+    {
+        await using var factory = new PaymentApiFactory();
+        var projectId = await factory.SeedProjectAsync();
+        await factory.SeedCredentialAsync("disabled-project-token", projectId: projectId);
+        using var client = CreateAuthenticatedClient(factory, "disabled-project-token");
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "before-project-disabled");
+        var createResponse = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+        var createdPayment = await createResponse.Content.ReadFromJsonAsync<PaymentApiResponse>();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+            var project = await dbContext.Projects.SingleAsync(candidate => candidate.Id == projectId);
+            project.Status = "disabled";
+            await dbContext.SaveChangesAsync();
+        }
+
+        var existingResponse = await client.GetAsync($"/api/v1/payments/{createdPayment!.PaymentId}");
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "disabled-project-create");
+
+        var response = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+
+        Assert.Equal(HttpStatusCode.OK, existingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await AssertProblemCodeAsync(response, "project.not_active");
+    }
+
+    [Fact]
     public async Task Get_payment_returns_not_found_problem_for_unknown_payment()
     {
         await using var factory = new PaymentApiFactory();
@@ -246,10 +338,12 @@ public sealed class PaymentApiTests
         Assert.Equal("btc-test-address", payment.PaymentAddress);
     }
 
-    private static HttpClient CreateAuthenticatedClient(PaymentApiFactory factory)
+    private static HttpClient CreateAuthenticatedClient(
+        PaymentApiFactory factory,
+        string token = ValidToken)
     {
         var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ValidToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
     }
 

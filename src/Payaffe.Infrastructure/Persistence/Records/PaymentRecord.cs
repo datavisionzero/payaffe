@@ -2,6 +2,8 @@ namespace Payaffe.Infrastructure.Persistence.Records;
 
 public sealed class PaymentRecord
 {
+    public Guid ProjectId { get; set; } = ProjectDefaults.DefaultProjectId;
+
     public Guid Id { get; set; }
 
     public Guid IntegrationApiCredentialId { get; set; }
@@ -35,6 +37,12 @@ public sealed class PaymentRecord
     public string? ExpectedCryptoAmount { get; set; }
 
     public string? PaymentAddress { get; set; }
+
+    public int? ConfirmationRequirement { get; set; }
+
+    public decimal? PaymentTolerancePercent { get; set; }
+
+    public int? ReorgMonitoringDepth { get; set; }
 
     public string? ConfirmedEligibleTotal { get; set; }
 

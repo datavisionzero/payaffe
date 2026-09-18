@@ -5,6 +5,7 @@ using Payaffe.Infrastructure.Auth;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
 using Payaffe.Migrations;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -41,6 +42,9 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 "app.payment_event_history",
                 "app.payment_options",
                 "app.payments",
+                "app.project_configuration",
+                "app.project_watch_only_wallet_sources",
+                "app.projects",
                 "app.rate_cache",
                 "app.rate_locks",
                 "app.reorg_alerts",
@@ -66,6 +70,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             """);
 
         Assert.Equal("uuid", paymentColumns["id"]);
+        Assert.Equal("uuid", paymentColumns["project_id"]);
         Assert.Equal("uuid", paymentColumns["integration_api_credential_id"]);
         Assert.Equal("bigint", paymentColumns["fiat_amount_minor"]);
         Assert.Equal("timestamp with time zone", paymentColumns["expires_at"]);
@@ -73,6 +78,9 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal("text", paymentColumns["selected_currency"]);
         Assert.Equal("text", paymentColumns["expected_crypto_amount"]);
         Assert.Equal("text", paymentColumns["payment_address"]);
+        Assert.Equal("integer", paymentColumns["confirmation_requirement"]);
+        Assert.Equal("numeric", paymentColumns["payment_tolerance_percent"]);
+        Assert.Equal("integer", paymentColumns["reorg_monitoring_depth"]);
         Assert.Equal("text", paymentColumns["confirmed_eligible_total"]);
         Assert.Equal("timestamp with time zone", paymentColumns["completed_at"]);
         Assert.Equal("timestamp with time zone", paymentColumns["settled_at"]);
@@ -266,6 +274,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             """);
 
         Assert.Equal("uuid", auditLogColumns["event_id"]);
+        Assert.Equal("uuid", auditLogColumns["project_id"]);
         Assert.Equal("timestamp with time zone", auditLogColumns["occurred_at"]);
         Assert.Equal("text", auditLogColumns["event_type"]);
         Assert.Equal("text", auditLogColumns["outcome"]);
@@ -304,11 +313,12 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             from pg_indexes
             where schemaname = 'app'
               and tablename = 'payment_creation_idempotency'
-              and indexname = 'uq_payment_creation_idempotency_credential_key'
+              and indexname = 'uq_payment_creation_idempotency_project_credential_key'
             """;
 
         var indexDefinition = Assert.IsType<string>(await command.ExecuteScalarAsync());
         Assert.Contains("UNIQUE", indexDefinition, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("project_id", indexDefinition, StringComparison.Ordinal);
         Assert.Contains("integration_api_credential_id", indexDefinition, StringComparison.Ordinal);
         Assert.Contains("idempotency_key", indexDefinition, StringComparison.Ordinal);
     }
@@ -399,6 +409,9 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal("BTC", payment.SelectedCurrency);
         Assert.Equal("0.00039980", payment.ExpectedCryptoAmount);
         Assert.Equal("btc-test-address", payment.PaymentAddress);
+        Assert.Equal(1, payment.ConfirmationRequirement);
+        Assert.Equal(1m, payment.PaymentTolerancePercent);
+        Assert.Equal(6, payment.ReorgMonitoringDepth);
 
         var rateLock = Assert.Single(dbContext.RateLocks);
         Assert.Equal(payment.Id, rateLock.PaymentId);
@@ -420,6 +433,67 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 .OrderBy(webhookEvent => webhookEvent.OccurredAt)
                 .Select(webhookEvent => webhookEvent.EventType)
                 .ToArray());
+    }
+
+    [Fact]
+    public async Task Selected_payment_keeps_its_project_policy_after_configuration_changes()
+    {
+        var connectionString = await postgres.CreateDatabaseAsync();
+        await using var serviceProvider = BuildMigratedServiceProvider(connectionString);
+        await SeedCredentialAsync(serviceProvider, "valid-token");
+
+        await UpdateConfigurationAsync(requiredConfirmations: 3, tolerancePercent: 2m, reorgDepth: 9);
+        var payments = serviceProvider.GetRequiredService<PaymentApplicationService>();
+        var created = await payments.CreateAsync(
+            TestIds.CredentialId,
+            new CreatePaymentCommand(
+                "EUR",
+                1999,
+                "policy-snapshot",
+                PaymentContext: null,
+                ReturnUrl: null,
+                "policy-snapshot"),
+            CancellationToken.None);
+        var selected = await payments.SelectCurrencyAsync(
+            new SelectPaymentCurrencyCommand("fixed-payer-page-id", "btc"),
+            CancellationToken.None);
+        Assert.Equal(SelectPaymentCurrencyResultKind.Selected, selected.Kind);
+
+        await UpdateConfigurationAsync(requiredConfirmations: 1, tolerancePercent: 0m, reorgDepth: 1);
+        var observation = await payments.RecordBlockchainObservationAsync(
+            new RecordBlockchainObservationCommand(
+                created.Payment!.PaymentId,
+                "btc",
+                "btc-test-address",
+                "tx-policy-snapshot",
+                "0.00039980",
+                DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
+                Confirmations: 1,
+                "test-provider",
+                "provider-policy-snapshot"),
+            CancellationToken.None);
+
+        Assert.Equal(RecordBlockchainObservationResultKind.Observed, observation.Kind);
+        await using var verificationScope = serviceProvider.CreateAsyncScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var payment = await verificationDb.Payments.SingleAsync();
+        Assert.Equal(3, payment.ConfirmationRequirement);
+        Assert.Equal(2m, payment.PaymentTolerancePercent);
+        Assert.Equal(9, payment.ReorgMonitoringDepth);
+
+        async Task UpdateConfigurationAsync(
+            int requiredConfirmations,
+            decimal tolerancePercent,
+            int reorgDepth)
+        {
+            await using var scope = serviceProvider.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+            var configuration = await dbContext.ProjectConfigurations.SingleAsync();
+            configuration.BtcConfirmationRequirement = requiredConfirmations;
+            configuration.PaymentTolerancePercent = tolerancePercent;
+            configuration.BtcReorgMonitoringDepth = reorgDepth;
+            await dbContext.SaveChangesAsync();
+        }
     }
 
     [Fact]
@@ -1176,6 +1250,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
     private sealed class FixedPaymentAddressProvider : IPaymentAddressProvider
     {
         public Task<PaymentAddressAssignment?> AssignAsync(
+            Guid projectId,
             Guid paymentId,
             string supportedCurrency,
             CancellationToken cancellationToken)

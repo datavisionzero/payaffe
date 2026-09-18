@@ -2,6 +2,8 @@ namespace Payaffe.Infrastructure.Persistence.Records;
 
 public sealed class IntegrationApiCredentialRecord
 {
+    public Guid ProjectId { get; set; } = ProjectDefaults.DefaultProjectId;
+
     public Guid Id { get; set; }
 
     public string Name { get; set; } = string.Empty;

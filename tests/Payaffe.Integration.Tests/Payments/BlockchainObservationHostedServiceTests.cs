@@ -336,6 +336,7 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
     private sealed class FixedPaymentAddressProvider : IPaymentAddressProvider
     {
         public Task<PaymentAddressAssignment?> AssignAsync(
+            Guid projectId,
             Guid paymentId,
             string supportedCurrency,
             CancellationToken cancellationToken)

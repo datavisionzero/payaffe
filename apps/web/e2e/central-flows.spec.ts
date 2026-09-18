@@ -101,6 +101,19 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
     }
 
     const emptyResponses: Record<string, unknown> = {
+      "/api/admin/projects": {
+        projects: [
+          {
+            projectId: "00000000-0000-0000-0000-000000000001",
+            name: "Default Project",
+            slug: "default",
+            status: "active",
+            createdAt: "2026-07-05T10:00:00Z",
+            updatedAt: "2026-07-05T10:00:00Z",
+            version: 1
+          }
+        ]
+      },
       "/api/admin/payments": { payments: [] },
       "/api/admin/audit-log": { entries: [] },
       "/api/admin/webhook-deliveries": { deliveries: [] },
@@ -213,6 +226,19 @@ test("Admin reaches the Webhook Deliveries view by its own URL", async ({ page }
     }
 
     const emptyResponses: Record<string, unknown> = {
+      "/api/admin/projects": {
+        projects: [
+          {
+            projectId: "00000000-0000-0000-0000-000000000001",
+            name: "Default Project",
+            slug: "default",
+            status: "active",
+            createdAt: "2026-07-05T10:00:00Z",
+            updatedAt: "2026-07-05T10:00:00Z",
+            version: 1
+          }
+        ]
+      },
       "/api/admin/payments": { payments: [] },
       "/api/admin/audit-log": { entries: [] },
       "/api/admin/reorg-alerts": { alerts: [] },

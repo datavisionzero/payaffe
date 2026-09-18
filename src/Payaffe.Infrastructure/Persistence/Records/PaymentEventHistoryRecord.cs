@@ -2,6 +2,8 @@ namespace Payaffe.Infrastructure.Persistence.Records;
 
 public sealed class PaymentEventHistoryRecord
 {
+    public Guid ProjectId { get; set; } = ProjectDefaults.DefaultProjectId;
+
     public Guid Id { get; set; }
 
     public Guid PaymentId { get; set; }

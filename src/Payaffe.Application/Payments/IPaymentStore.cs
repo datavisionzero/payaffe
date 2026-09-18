@@ -72,6 +72,9 @@ public sealed record CreatePaymentStoreResult(
 
     public static CreatePaymentStoreResult IdempotencyConflict() =>
         new(CreatePaymentStoreResultKind.IdempotencyConflict, Payment: null);
+
+    public static CreatePaymentStoreResult ProjectUnavailable() =>
+        new(CreatePaymentStoreResultKind.ProjectUnavailable, Payment: null);
 }
 
 public enum CreatePaymentStoreResultKind
@@ -79,6 +82,7 @@ public enum CreatePaymentStoreResultKind
     Created,
     Existing,
     IdempotencyConflict,
+    ProjectUnavailable,
 }
 
 public sealed record SelectCurrencyStoreResult(
@@ -176,7 +180,8 @@ public sealed record BlockchainReorgMonitoringTarget(
     string PaymentAddress,
     string ExpectedCryptoAmount,
     string TransactionHash,
-    int CurrentConfirmations);
+    int CurrentConfirmations,
+    Guid ProjectId = default);
 
 public sealed record ReorgMonitoringPolicyDraft(
     int BtcRequiredConfirmations,
@@ -212,6 +217,9 @@ public sealed record PaymentSelectionDraft(
     string RateSource,
     string RateValue,
     DateTimeOffset RateObservedAt,
+    int ConfirmationRequirement,
+    decimal PaymentTolerancePercent,
+    int ReorgMonitoringDepth,
     DateTimeOffset SelectedAt);
 
 public sealed record BlockchainObservationDraft(
@@ -227,7 +235,8 @@ public sealed record BlockchainObservationDraft(
     string ProviderName,
     string? ProviderObservationId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid ProjectId = default);
 
 public sealed record PaymentCompletionPolicyDraft(
     int RequiredConfirmations,
@@ -240,7 +249,8 @@ public sealed record BlockchainTransactionConfirmationUpdateDraft(
     int Confirmations,
     string? BlockHash,
     long? BlockHeight,
-    DateTimeOffset CheckedAt);
+    DateTimeOffset CheckedAt,
+    Guid ProjectId = default);
 
 public sealed record PaymentOptionDraft(
     Guid PaymentId,

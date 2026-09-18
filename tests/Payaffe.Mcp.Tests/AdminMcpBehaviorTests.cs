@@ -9,6 +9,7 @@ namespace Payaffe.Mcp.Tests;
 public sealed class AdminMcpBehaviorTests
 {
     private static readonly Guid AdminAccountId = Guid.Parse("6f1d4d0f-0b6e-4a0e-9a6c-2f0a4d3b7c11");
+    private static readonly Guid ProjectId = Guid.Parse("1b2fe0ab-b9ab-4772-97a6-0543a5a56a31");
     private static readonly string[] SampleAddresses = ["0x0000000000000000000000000000000000000001"];
 
     [Theory]
@@ -53,7 +54,7 @@ public sealed class AdminMcpBehaviorTests
         var context = CreateContext();
 
         await AdminMcpTools.SettlePaymentAsync(
-            context.Services, Guid.NewGuid(), 1, "operator reason", confirmed: false);
+            context.Services, ProjectId, Guid.NewGuid(), 1, "operator reason", confirmed: false);
 
         await context.SecurityStore.Received(1).RecordSecurityAuditAsync(
             Arg.Is<AdminAuditEntry>(entry =>
@@ -70,7 +71,7 @@ public sealed class AdminMcpBehaviorTests
         var context = CreateContext();
 
         var result = await AdminMcpTools.ResendWebhookDeliveryAsync(
-            context.Services, Guid.NewGuid(), confirmed: false);
+            context.Services, ProjectId, Guid.NewGuid(), confirmed: false);
 
         Assert.False(string.IsNullOrWhiteSpace(result.CorrelationId));
         Assert.Equal("rejected", result.Status);
@@ -83,9 +84,9 @@ public sealed class AdminMcpBehaviorTests
     {
         var context = CreateContext();
 
-        var payments = await AdminMcpTools.SearchPaymentsAsync(context.Services, limit);
-        var deliveries = await AdminMcpTools.SearchWebhookDeliveriesAsync(context.Services, limit);
-        var auditLog = await AdminMcpTools.SearchAuditLogAsync(context.Services, limit);
+        var payments = await AdminMcpTools.SearchPaymentsAsync(context.Services, ProjectId, limit);
+        var deliveries = await AdminMcpTools.SearchWebhookDeliveriesAsync(context.Services, ProjectId, limit);
+        var auditLog = await AdminMcpTools.SearchAuditLogAsync(context.Services, ProjectId, limit);
 
         Assert.Equal("validation.failed", payments.Code);
         Assert.Equal("validation.failed", deliveries.Code);
@@ -115,11 +116,11 @@ public sealed class AdminMcpBehaviorTests
         return tool switch
         {
             "settle" => (await AdminMcpTools.SettlePaymentAsync(
-                context.Services, Guid.NewGuid(), 1, "operator reason", confirmed)).Code,
+                context.Services, ProjectId, Guid.NewGuid(), 1, "operator reason", confirmed)).Code,
             "resend" => (await AdminMcpTools.ResendWebhookDeliveryAsync(
-                context.Services, Guid.NewGuid(), confirmed)).Code,
+                context.Services, ProjectId, Guid.NewGuid(), confirmed)).Code,
             _ => (await AdminMcpTools.ImportNativeEthAddressesAsync(
-                context.Services, SampleAddresses, confirmed)).Code,
+                context.Services, ProjectId, SampleAddresses, confirmed)).Code,
         };
     }
 

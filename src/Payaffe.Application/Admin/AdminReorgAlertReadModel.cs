@@ -1,6 +1,7 @@
 namespace Payaffe.Application.Admin;
 
 public sealed record AdminReorgAlertReadModel(
+    Guid ProjectId,
     Guid Id,
     Guid PaymentId,
     string SupportedCurrency,

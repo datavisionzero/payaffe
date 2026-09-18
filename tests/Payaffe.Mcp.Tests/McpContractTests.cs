@@ -19,6 +19,7 @@ public sealed class McpContractTests
         "payment.inspect",
         "payment.search",
         "payment.settle",
+        "project.list",
         "webhook_delivery.resend",
         "webhook_delivery.search",
     ];

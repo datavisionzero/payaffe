@@ -2,6 +2,8 @@ namespace Payaffe.Infrastructure.Persistence.Records;
 
 public sealed class AuditLogEntryRecord
 {
+    public Guid? ProjectId { get; set; }
+
     public Guid EventId { get; set; }
 
     public DateTimeOffset OccurredAt { get; set; }

@@ -20,7 +20,8 @@ public sealed record BlockchainObservationTarget(
     Guid PaymentId,
     string SupportedCurrency,
     string PaymentAddress,
-    string ExpectedCryptoAmount);
+    string ExpectedCryptoAmount,
+    Guid ProjectId = default);
 
 public sealed record BlockchainObservation(
     string TransactionHash,

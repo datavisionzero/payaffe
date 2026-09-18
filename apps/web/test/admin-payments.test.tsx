@@ -3,10 +3,12 @@ import { HttpResponse, http } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminPaymentDetailPage } from "../components/admin/payment-detail-page";
 import { AdminPaymentsPage } from "../components/admin/payments-page";
+import { setSelectedAdminProjectId, settleAdminPayment } from "../lib/admin-api";
 import {
   adminServer,
   paymentDetail,
   paymentId,
+  projectId,
   renderAdmin,
   resetAdminState,
   state
@@ -145,8 +147,45 @@ describe("AdminPaymentDetailPage", () => {
     await vi.waitFor(() => {
       expect(state.settlementRequest).toEqual({
         csrf: "csrf-token",
-        body: { expectedVersion: 3, reason: "Confirmed with the partner." }
+        body: {
+          projectId,
+          expectedVersion: 3,
+          reason: "Confirmed with the partner."
+        }
       });
     });
+  });
+
+  it("keeps the initiating Project when selection changes while CSRF is loading", async () => {
+    const otherProjectId = "ebc46c0b-c785-47d5-a2b6-5d417374bd79";
+    let releaseCsrf!: () => void;
+    const csrfGate = new Promise<void>((resolve) => {
+      releaseCsrf = resolve;
+    });
+    adminServer.use(
+      http.get("/api/admin/csrf", async () => {
+        await csrfGate;
+        return HttpResponse.json({ csrfToken: "csrf-token" });
+      }),
+      http.post(`/api/admin/payments/${paymentId}/settle`, async ({ request }) => {
+        state.settlementRequest = {
+          csrf: request.headers.get("X-CSRF-TOKEN"),
+          body: (await request.json()) as {
+            projectId?: string;
+            expectedVersion?: number;
+            reason?: string;
+          }
+        };
+        return HttpResponse.json({ ...paymentDetail, status: "settled", version: 4 });
+      })
+    );
+
+    setSelectedAdminProjectId(projectId);
+    const settlement = settleAdminPayment(paymentId, 3, "Captured Project");
+    setSelectedAdminProjectId(otherProjectId);
+    releaseCsrf();
+    await settlement;
+
+    expect(state.settlementRequest?.body.projectId).toBe(projectId);
   });
 });

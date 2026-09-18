@@ -3,14 +3,16 @@ namespace Payaffe.Application.Admin;
 public interface IAdminIntegrationApiCredentialStore
 {
     Task<IReadOnlyList<AdminIntegrationApiCredentialReadModel>> ListAsync(
+        Guid projectId,
         CancellationToken cancellationToken);
 
-    Task<AdminIntegrationApiCredentialReadModel> CreateAsync(
+    Task<AdminIntegrationApiCredentialReadModel?> CreateAsync(
         AdminIntegrationApiCredentialDraft credential,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken);
 
     Task<AdminIntegrationApiCredentialStoreResult> RotateAsync(
+        Guid projectId,
         Guid credentialId,
         long expectedVersion,
         string tokenHash,
@@ -19,6 +21,7 @@ public interface IAdminIntegrationApiCredentialStore
         CancellationToken cancellationToken);
 
     Task<AdminIntegrationApiCredentialStoreResult> DisableAsync(
+        Guid projectId,
         Guid credentialId,
         long expectedVersion,
         DateTimeOffset occurredAt,

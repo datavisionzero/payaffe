@@ -1,4 +1,5 @@
 using Payaffe.Application;
+using Payaffe.Application.Admin;
 using Payaffe.Infrastructure;
 using Payaffe.Infrastructure.Payments;
 using Payaffe.Infrastructure.Telemetry;
@@ -19,6 +20,7 @@ builder.AddPayaffeTelemetry("payaffe-mcp", logToStandardError: true);
 builder.Services.AddPayaffeApplication();
 builder.Services.AddPayaffeInfrastructure(connectionString, registerHostedWorkers: false);
 builder.Services.Configure<PaymentAddressOptions>(builder.Configuration.GetSection("PaymentAddresses"));
+builder.Services.Configure<AdminProjectDefaultsOptions>(builder.Configuration.GetSection("PaymentAddresses"));
 builder.Services.AddOptions<AdminMcpOptions>()
     .Bind(builder.Configuration.GetSection("Mcp:Admin"))
     .ValidateDataAnnotations()

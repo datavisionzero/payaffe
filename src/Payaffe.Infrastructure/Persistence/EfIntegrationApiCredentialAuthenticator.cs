@@ -14,20 +14,30 @@ public sealed class EfIntegrationApiCredentialAuthenticator(
         CancellationToken cancellationToken)
     {
         var tokenHash = IntegrationApiCredentialTokenHasher.HashToken(bearerToken);
-        var credential = await dbContext.IntegrationApiCredentials
-            .SingleOrDefaultAsync(
-                candidate => candidate.TokenHash == tokenHash && candidate.Status == "active",
-                cancellationToken);
+        var credential = await (
+                from candidate in dbContext.IntegrationApiCredentials
+                join project in dbContext.Projects on candidate.ProjectId equals project.Id
+                where candidate.TokenHash == tokenHash && candidate.Status == "active"
+                select new
+                {
+                    Credential = candidate,
+                    ProjectStatus = project.Status,
+                })
+            .SingleOrDefaultAsync(cancellationToken);
 
         if (credential is null)
         {
             return null;
         }
 
-        credential.LastUsedAt = clock.UtcNow;
-        credential.UpdatedAt = credential.LastUsedAt.Value;
+        credential.Credential.LastUsedAt = clock.UtcNow;
+        credential.Credential.UpdatedAt = credential.Credential.LastUsedAt.Value;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new AuthenticatedIntegrationApiCredential(credential.Id, credential.Name);
+        return new AuthenticatedIntegrationApiCredential(
+            credential.Credential.Id,
+            credential.Credential.ProjectId,
+            credential.ProjectStatus,
+            credential.Credential.Name);
     }
 }

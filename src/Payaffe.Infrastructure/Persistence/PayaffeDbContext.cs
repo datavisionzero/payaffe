@@ -5,6 +5,12 @@ namespace Payaffe.Infrastructure.Persistence;
 
 public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options) : DbContext(options)
 {
+    public DbSet<ProjectRecord> Projects => Set<ProjectRecord>();
+
+    public DbSet<ProjectConfigurationRecord> ProjectConfigurations => Set<ProjectConfigurationRecord>();
+
+    public DbSet<ProjectWatchOnlyWalletSourceRecord> ProjectWatchOnlyWalletSources => Set<ProjectWatchOnlyWalletSourceRecord>();
+
     public DbSet<AdminAccountRecord> AdminAccounts => Set<AdminAccountRecord>();
 
     public DbSet<AdminLoginChallengeRecord> AdminLoginChallenges => Set<AdminLoginChallengeRecord>();
@@ -53,6 +59,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ConfigureProjects(modelBuilder);
+        ConfigureProjectWatchOnlyWalletSources(modelBuilder);
         ConfigureAdminAccounts(modelBuilder);
         ConfigureAdminLoginChallenges(modelBuilder);
         ConfigureAdminSessions(modelBuilder);
@@ -75,6 +83,108 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
         ConfigureWebhookEndpoints(modelBuilder);
         ConfigureWebhookOutboxEvents(modelBuilder);
         ConfigureWebhookDeliveryAttempts(modelBuilder);
+    }
+
+    private static void ConfigureProjects(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectRecord>(entity =>
+        {
+            entity.ToTable("projects", "app");
+            entity.HasKey(project => project.Id).HasName("pk_projects");
+            entity.Property(project => project.Id).HasColumnName("id").HasColumnType("uuid");
+            entity.Property(project => project.Name).HasColumnName("name").HasColumnType("text");
+            entity.Property(project => project.Slug).HasColumnName("slug").HasColumnType("text");
+            entity.Property(project => project.Status).HasColumnName("status").HasColumnType("text");
+            entity.Property(project => project.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(project => project.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(project => project.Version)
+                .HasColumnName("version")
+                .HasColumnType("bigint")
+                .HasDefaultValue(1L)
+                .IsConcurrencyToken();
+            entity.HasIndex(project => project.Slug)
+                .IsUnique()
+                .HasDatabaseName("uq_projects_slug");
+            entity.ToTable(table => table.HasCheckConstraint(
+                "ck_projects_status",
+                "status in ('active', 'disabled', 'archived')"));
+        });
+
+        modelBuilder.Entity<ProjectConfigurationRecord>(entity =>
+        {
+            entity.ToTable("project_configuration", "app");
+            entity.HasKey(configuration => configuration.ProjectId)
+                .HasName("pk_project_configuration");
+            entity.Property(configuration => configuration.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
+            entity.Property(configuration => configuration.PaymentExpirationSeconds).HasColumnName("payment_expiration_seconds").HasColumnType("bigint");
+            entity.Property(configuration => configuration.LateAcceptanceWindowSeconds).HasColumnName("late_acceptance_window_seconds").HasColumnType("bigint");
+            entity.Property(configuration => configuration.PaymentTolerancePercent).HasColumnName("payment_tolerance_percent").HasColumnType("numeric");
+            entity.Property(configuration => configuration.BtcEnabled).HasColumnName("btc_enabled").HasColumnType("boolean").HasDefaultValue(true);
+            entity.Property(configuration => configuration.LtcEnabled).HasColumnName("ltc_enabled").HasColumnType("boolean").HasDefaultValue(true);
+            entity.Property(configuration => configuration.EthEnabled).HasColumnName("eth_enabled").HasColumnType("boolean").HasDefaultValue(true);
+            entity.Property(configuration => configuration.BtcConfirmationRequirement).HasColumnName("btc_confirmation_requirement").HasColumnType("integer");
+            entity.Property(configuration => configuration.LtcConfirmationRequirement).HasColumnName("ltc_confirmation_requirement").HasColumnType("integer");
+            entity.Property(configuration => configuration.EthConfirmationRequirement).HasColumnName("eth_confirmation_requirement").HasColumnType("integer");
+            entity.Property(configuration => configuration.BtcReorgMonitoringDepth).HasColumnName("btc_reorg_monitoring_depth").HasColumnType("integer");
+            entity.Property(configuration => configuration.LtcReorgMonitoringDepth).HasColumnName("ltc_reorg_monitoring_depth").HasColumnType("integer");
+            entity.Property(configuration => configuration.EthReorgMonitoringDepth).HasColumnName("eth_reorg_monitoring_depth").HasColumnType("integer");
+            entity.Property(configuration => configuration.NativeEthLowCapacityThreshold).HasColumnName("native_eth_low_capacity_threshold").HasColumnType("integer");
+            entity.Property(configuration => configuration.LegacySettingsFingerprint).HasColumnName("legacy_settings_fingerprint").HasColumnType("text");
+            entity.Property(configuration => configuration.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(configuration => configuration.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(configuration => configuration.Version)
+                .HasColumnName("version")
+                .HasColumnType("bigint")
+                .HasDefaultValue(1L)
+                .IsConcurrencyToken();
+            entity.HasOne<ProjectRecord>()
+                .WithOne()
+                .HasForeignKey<ProjectConfigurationRecord>(configuration => configuration.ProjectId)
+                .HasConstraintName("fk_project_configuration_projects")
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("ck_project_configuration_payment_expiration", "payment_expiration_seconds > 0");
+                table.HasCheckConstraint("ck_project_configuration_late_acceptance", "late_acceptance_window_seconds >= 0");
+                table.HasCheckConstraint("ck_project_configuration_tolerance", "payment_tolerance_percent >= 0 and payment_tolerance_percent <= 100");
+                table.HasCheckConstraint("ck_project_configuration_confirmations", "btc_confirmation_requirement >= 0 and ltc_confirmation_requirement >= 0 and eth_confirmation_requirement >= 0");
+                table.HasCheckConstraint("ck_project_configuration_reorg_depths", "btc_reorg_monitoring_depth >= 0 and ltc_reorg_monitoring_depth >= 0 and eth_reorg_monitoring_depth >= 0");
+                table.HasCheckConstraint("ck_project_configuration_eth_threshold", "native_eth_low_capacity_threshold >= 0");
+            });
+        });
+    }
+
+    private static void ConfigureProjectWatchOnlyWalletSources(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectWatchOnlyWalletSourceRecord>(entity =>
+        {
+            entity.ToTable("project_watch_only_wallet_sources", "app");
+            entity.HasKey(source => new { source.ProjectId, source.SupportedCurrency })
+                .HasName("pk_project_watch_only_wallet_sources");
+            entity.Property(source => source.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
+            entity.Property(source => source.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
+            entity.Property(source => source.SourceFingerprint).HasColumnName("source_fingerprint").HasColumnType("text");
+            entity.Property(source => source.Network).HasColumnName("network").HasColumnType("text");
+            entity.Property(source => source.AddressType).HasColumnName("address_type").HasColumnType("text");
+            entity.Property(source => source.StartingIndex).HasColumnName("starting_index").HasColumnType("bigint");
+            entity.Property(source => source.SourceReference).HasColumnName("source_reference").HasColumnType("text");
+            entity.Property(source => source.Enabled).HasColumnName("enabled").HasColumnType("boolean");
+            entity.Property(source => source.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(source => source.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(source => source.Version).HasColumnName("version").HasColumnType("bigint").HasDefaultValue(1L).IsConcurrencyToken();
+            entity.HasOne<ProjectRecord>()
+                .WithMany()
+                .HasForeignKey(source => source.ProjectId)
+                .HasConstraintName("fk_project_watch_only_wallet_sources_projects")
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(source => new { source.SupportedCurrency, source.SourceFingerprint })
+                .HasDatabaseName("ix_project_watch_only_wallet_sources_fingerprint");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("ck_project_watch_only_wallet_sources_currency", "supported_currency in ('BTC', 'LTC')");
+                table.HasCheckConstraint("ck_project_watch_only_wallet_sources_starting_index", "starting_index >= 0 and starting_index <= 2147483647");
+            });
+        });
     }
 
     private static void ConfigureAdminLoginChallenges(ModelBuilder modelBuilder)
@@ -230,6 +340,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("audit_log_entries", "audit");
             entity.HasKey(auditEntry => auditEntry.EventId).HasName("pk_audit_log_entries");
 
+            entity.Property(auditEntry => auditEntry.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(auditEntry => auditEntry.EventId).HasColumnName("event_id").HasColumnType("uuid");
             entity.Property(auditEntry => auditEntry.OccurredAt).HasColumnName("occurred_at").HasColumnType("timestamp with time zone");
             entity.Property(auditEntry => auditEntry.EventType).HasColumnName("event_type").HasColumnType("text");
@@ -248,6 +359,13 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasDatabaseName("ix_audit_log_entries_occurred_at");
             entity.HasIndex(auditEntry => new { auditEntry.EventType, auditEntry.OccurredAt })
                 .HasDatabaseName("ix_audit_log_entries_event_type_occurred_at");
+            entity.HasIndex(auditEntry => new { auditEntry.ProjectId, auditEntry.OccurredAt })
+                .HasDatabaseName("ix_audit_log_entries_project_occurred_at");
+            entity.HasOne<ProjectRecord>()
+                .WithMany()
+                .HasForeignKey(auditEntry => auditEntry.ProjectId)
+                .HasConstraintName("fk_audit_log_entries_projects")
+                .OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
@@ -267,6 +385,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("integration_api_credentials", "auth");
             entity.HasKey(credential => credential.Id).HasName("pk_integration_api_credentials");
 
+            entity.Property(credential => credential.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(credential => credential.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(credential => credential.Name).HasColumnName("name").HasColumnType("text");
             entity.Property(credential => credential.TokenHash).HasColumnName("token_hash").HasColumnType("text");
@@ -283,6 +402,15 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(credential => credential.TokenHash)
                 .IsUnique()
                 .HasDatabaseName("uq_integration_api_credentials_token_hash");
+            entity.HasAlternateKey(credential => new { credential.ProjectId, credential.Id })
+                .HasName("ak_integration_api_credentials_project_id_id");
+            entity.HasIndex(credential => new { credential.ProjectId, credential.Status })
+                .HasDatabaseName("ix_integration_api_credentials_project_status");
+            entity.HasOne<ProjectRecord>()
+                .WithMany()
+                .HasForeignKey(credential => credential.ProjectId)
+                .HasConstraintName("fk_integration_api_credentials_projects")
+                .OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
@@ -299,6 +427,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("payments", "app");
             entity.HasKey(payment => payment.Id).HasName("pk_payments");
 
+            entity.Property(payment => payment.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(payment => payment.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(payment => payment.IntegrationApiCredentialId).HasColumnName("integration_api_credential_id").HasColumnType("uuid");
             entity.Property(payment => payment.ExternalReference).HasColumnName("external_reference").HasColumnType("text");
@@ -316,6 +445,9 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(payment => payment.SelectedCurrency).HasColumnName("selected_currency").HasColumnType("text");
             entity.Property(payment => payment.ExpectedCryptoAmount).HasColumnName("expected_crypto_amount").HasColumnType("text");
             entity.Property(payment => payment.PaymentAddress).HasColumnName("payment_address").HasColumnType("text");
+            entity.Property(payment => payment.ConfirmationRequirement).HasColumnName("confirmation_requirement").HasColumnType("integer");
+            entity.Property(payment => payment.PaymentTolerancePercent).HasColumnName("payment_tolerance_percent").HasColumnType("numeric");
+            entity.Property(payment => payment.ReorgMonitoringDepth).HasColumnName("reorg_monitoring_depth").HasColumnType("integer");
             entity.Property(payment => payment.ConfirmedEligibleTotal).HasColumnName("confirmed_eligible_total").HasColumnType("text");
             entity.Property(payment => payment.CompletedAt).HasColumnName("completed_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.SettledAt).HasColumnName("settled_at").HasColumnType("timestamp with time zone");
@@ -329,9 +461,16 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<IntegrationApiCredentialRecord>()
                 .WithMany()
-                .HasForeignKey(payment => payment.IntegrationApiCredentialId)
+                .HasForeignKey(payment => new { payment.ProjectId, payment.IntegrationApiCredentialId })
+                .HasPrincipalKey(credential => new { credential.ProjectId, credential.Id })
                 .HasConstraintName("fk_payments_integration_api_credentials")
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasAlternateKey(payment => new { payment.ProjectId, payment.Id })
+                .HasName("ak_payments_project_id_id");
+            entity.HasIndex(payment => new { payment.ProjectId, payment.IntegrationApiCredentialId })
+                .HasDatabaseName("ix_payments_project_credential");
+            entity.HasIndex(payment => new { payment.ProjectId, payment.Status, payment.UpdatedAt })
+                .HasDatabaseName("ix_payments_project_status_updated_at");
             entity.HasIndex(payment => payment.PayerPageId)
                 .IsUnique()
                 .HasDatabaseName("uq_payments_payer_page_id");
@@ -352,6 +491,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasKey(option => new { option.PaymentId, option.SupportedCurrency })
                 .HasName("pk_payment_options");
 
+            entity.Property(option => option.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(option => option.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(option => option.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
             entity.Property(option => option.Status).HasColumnName("status").HasColumnType("text");
@@ -360,9 +500,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<PaymentRecord>()
                 .WithMany()
-                .HasForeignKey(option => option.PaymentId)
+                .HasForeignKey(option => new { option.ProjectId, option.PaymentId })
+                .HasPrincipalKey(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_payment_options_payments")
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(option => new { option.ProjectId, option.PaymentId })
+                .HasDatabaseName("ix_payment_options_project_payment");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
@@ -380,23 +523,26 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasKey(record => new { record.IntegrationApiCredentialId, record.IdempotencyKey })
                 .HasName("pk_payment_creation_idempotency");
 
+            entity.Property(record => record.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(record => record.IntegrationApiCredentialId).HasColumnName("integration_api_credential_id").HasColumnType("uuid");
             entity.Property(record => record.IdempotencyKey).HasColumnName("idempotency_key").HasColumnType("text");
             entity.Property(record => record.RequestHash).HasColumnName("request_hash").HasColumnType("text");
             entity.Property(record => record.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(record => record.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
 
-            entity.HasIndex(record => new { record.IntegrationApiCredentialId, record.IdempotencyKey })
+            entity.HasIndex(record => new { record.ProjectId, record.IntegrationApiCredentialId, record.IdempotencyKey })
                 .IsUnique()
-                .HasDatabaseName("uq_payment_creation_idempotency_credential_key");
+                .HasDatabaseName("uq_payment_creation_idempotency_project_credential_key");
             entity.HasOne<IntegrationApiCredentialRecord>()
                 .WithMany()
-                .HasForeignKey(record => record.IntegrationApiCredentialId)
+                .HasForeignKey(record => new { record.ProjectId, record.IntegrationApiCredentialId })
+                .HasPrincipalKey(credential => new { credential.ProjectId, credential.Id })
                 .HasConstraintName("fk_payment_creation_idempotency_integration_api_credentials")
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<PaymentRecord>()
                 .WithMany()
-                .HasForeignKey(record => record.PaymentId)
+                .HasForeignKey(record => new { record.ProjectId, record.PaymentId })
+                .HasPrincipalKey(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_payment_creation_idempotency_payments")
                 .OnDelete(DeleteBehavior.Cascade);
         });
@@ -409,6 +555,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("payment_event_history", "app");
             entity.HasKey(paymentEvent => paymentEvent.Id).HasName("pk_payment_event_history");
 
+            entity.Property(paymentEvent => paymentEvent.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(paymentEvent => paymentEvent.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(paymentEvent => paymentEvent.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(paymentEvent => paymentEvent.EventType).HasColumnName("event_type").HasColumnType("text");
@@ -417,9 +564,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<PaymentRecord>()
                 .WithMany()
-                .HasForeignKey(paymentEvent => paymentEvent.PaymentId)
+                .HasForeignKey(paymentEvent => new { paymentEvent.ProjectId, paymentEvent.PaymentId })
+                .HasPrincipalKey(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_payment_event_history_payments")
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(paymentEvent => new { paymentEvent.ProjectId, paymentEvent.PaymentId, paymentEvent.OccurredAt })
+                .HasDatabaseName("ix_payment_event_history_project_payment_occurred_at");
         });
     }
 
@@ -430,6 +580,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("rate_locks", "app");
             entity.HasKey(rateLock => rateLock.PaymentId).HasName("pk_rate_locks");
 
+            entity.Property(rateLock => rateLock.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(rateLock => rateLock.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(rateLock => rateLock.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
             entity.Property(rateLock => rateLock.FiatCurrency).HasColumnName("fiat_currency").HasColumnType("text");
@@ -442,7 +593,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<PaymentRecord>()
                 .WithOne()
-                .HasForeignKey<RateLockRecord>(rateLock => rateLock.PaymentId)
+                .HasForeignKey<RateLockRecord>(rateLock => new { rateLock.ProjectId, rateLock.PaymentId })
+                .HasPrincipalKey<PaymentRecord>(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_rate_locks_payments")
                 .OnDelete(DeleteBehavior.Cascade);
         });
@@ -499,16 +651,26 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("payment_address_assignments", "app");
             entity.HasKey(assignment => assignment.PaymentId).HasName("pk_payment_address_assignments");
 
+            entity.Property(assignment => assignment.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(assignment => assignment.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(assignment => assignment.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
             entity.Property(assignment => assignment.PaymentAddress).HasColumnName("payment_address").HasColumnType("text");
+            entity.Property(assignment => assignment.SourceFingerprint).HasColumnName("source_fingerprint").HasColumnType("text");
+            entity.Property(assignment => assignment.DerivationIndex).HasColumnName("derivation_index").HasColumnType("bigint");
             entity.Property(assignment => assignment.AssignedAt).HasColumnName("assigned_at").HasColumnType("timestamp with time zone");
 
             entity.HasOne<PaymentRecord>()
                 .WithOne()
-                .HasForeignKey<PaymentAddressAssignmentRecord>(assignment => assignment.PaymentId)
+                .HasForeignKey<PaymentAddressAssignmentRecord>(assignment => new { assignment.ProjectId, assignment.PaymentId })
+                .HasPrincipalKey<PaymentRecord>(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_payment_address_assignments_payments")
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(assignment => new { assignment.ProjectId, assignment.PaymentId })
+                .HasDatabaseName("ix_payment_address_assignments_project_payment");
+            entity.HasIndex(assignment => new { assignment.SupportedCurrency, assignment.PaymentAddress })
+                .IsUnique()
+                .HasFilter("source_fingerprint is not null")
+                .HasDatabaseName("uq_payment_address_assignments_currency_address");
         });
     }
 
@@ -517,7 +679,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
         modelBuilder.Entity<WatchOnlyWalletCursorRecord>(entity =>
         {
             entity.ToTable("watch_only_wallet_cursors", "app");
-            entity.HasKey(cursor => cursor.SupportedCurrency)
+            entity.HasKey(cursor => new { cursor.SupportedCurrency, cursor.SourceFingerprint })
                 .HasName("pk_watch_only_wallet_cursors");
             entity.Property(cursor => cursor.SupportedCurrency)
                 .HasColumnName("supported_currency")
@@ -558,6 +720,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("native_eth_address_pool_imports", "app");
             entity.HasKey(import => import.Id)
                 .HasName("pk_native_eth_address_pool_imports");
+            entity.Property(import => import.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(import => import.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(import => import.ImportedByAdminAccountId)
                 .HasColumnName("imported_by_admin_account_id")
@@ -573,12 +736,22 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasForeignKey(import => import.ImportedByAdminAccountId)
                 .HasConstraintName("fk_native_eth_address_pool_imports_admin_accounts")
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasAlternateKey(import => new { import.ProjectId, import.Id })
+                .HasName("ak_native_eth_address_pool_imports_project_id_id");
+            entity.HasOne<ProjectRecord>()
+                .WithMany()
+                .HasForeignKey(import => import.ProjectId)
+                .HasConstraintName("fk_native_eth_address_pool_imports_projects")
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(import => new { import.ProjectId, import.ImportedAt })
+                .HasDatabaseName("ix_native_eth_address_pool_imports_project_imported_at");
         });
 
         modelBuilder.Entity<NativeEthAddressRecord>(entity =>
         {
             entity.ToTable("native_eth_addresses", "app");
             entity.HasKey(address => address.Id).HasName("pk_native_eth_addresses");
+            entity.Property(address => address.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(address => address.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(address => address.ImportId).HasColumnName("import_id").HasColumnType("uuid");
             entity.Property(address => address.Address).HasColumnName("address").HasColumnType("text");
@@ -602,12 +775,14 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .IsConcurrencyToken();
             entity.HasOne<NativeEthAddressPoolImportRecord>()
                 .WithMany()
-                .HasForeignKey(address => address.ImportId)
+                .HasForeignKey(address => new { address.ProjectId, address.ImportId })
+                .HasPrincipalKey(import => new { import.ProjectId, import.Id })
                 .HasConstraintName("fk_native_eth_addresses_imports")
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<PaymentRecord>()
                 .WithOne()
-                .HasForeignKey<NativeEthAddressRecord>(address => address.AssignedPaymentId)
+                .HasForeignKey<NativeEthAddressRecord>(address => new { address.ProjectId, address.AssignedPaymentId })
+                .HasPrincipalKey<PaymentRecord>(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_native_eth_addresses_assigned_payments")
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(address => address.Address)
@@ -617,8 +792,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .IsUnique()
                 .HasFilter("assigned_payment_id is not null")
                 .HasDatabaseName("uq_native_eth_addresses_assigned_payment_id");
-            entity.HasIndex(address => new { address.Status, address.CreatedAt })
-                .HasDatabaseName("ix_native_eth_addresses_status_created_at");
+            entity.HasIndex(address => new { address.ProjectId, address.Status, address.CreatedAt })
+                .HasDatabaseName("ix_native_eth_addresses_project_status_created_at");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
@@ -725,6 +900,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("matching_blockchain_transactions", "app");
             entity.HasKey(transaction => transaction.Id).HasName("pk_matching_blockchain_transactions");
 
+            entity.Property(transaction => transaction.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(transaction => transaction.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(transaction => transaction.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(transaction => transaction.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
@@ -751,11 +927,14 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<PaymentRecord>()
                 .WithMany()
-                .HasForeignKey(transaction => transaction.PaymentId)
+                .HasForeignKey(transaction => new { transaction.ProjectId, transaction.PaymentId })
+                .HasPrincipalKey(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_matching_blockchain_transactions_payments")
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(transaction => transaction.PaymentId)
-                .HasDatabaseName("ix_matching_blockchain_transactions_payment_id");
+            entity.HasAlternateKey(transaction => new { transaction.ProjectId, transaction.Id })
+                .HasName("ak_matching_blockchain_transactions_project_id_id");
+            entity.HasIndex(transaction => new { transaction.ProjectId, transaction.PaymentId })
+                .HasDatabaseName("ix_matching_blockchain_transactions_project_payment");
             entity.HasIndex(transaction => new { transaction.SupportedCurrency, transaction.TransactionHash })
                 .IsUnique()
                 .HasDatabaseName("uq_matching_blockchain_transactions_currency_hash");
@@ -775,6 +954,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("reorg_alerts", "app");
             entity.HasKey(alert => alert.Id).HasName("pk_reorg_alerts");
 
+            entity.Property(alert => alert.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(alert => alert.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(alert => alert.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(alert => alert.MatchingBlockchainTransactionId).HasColumnName("matching_blockchain_transaction_id").HasColumnType("uuid");
@@ -797,18 +977,20 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<PaymentRecord>()
                 .WithMany()
-                .HasForeignKey(alert => alert.PaymentId)
+                .HasForeignKey(alert => new { alert.ProjectId, alert.PaymentId })
+                .HasPrincipalKey(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_reorg_alerts_payments")
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<MatchingBlockchainTransactionRecord>()
                 .WithMany()
-                .HasForeignKey(alert => alert.MatchingBlockchainTransactionId)
+                .HasForeignKey(alert => new { alert.ProjectId, alert.MatchingBlockchainTransactionId })
+                .HasPrincipalKey(transaction => new { transaction.ProjectId, transaction.Id })
                 .HasConstraintName("fk_reorg_alerts_matching_blockchain_transactions")
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(alert => alert.PaymentId)
-                .HasDatabaseName("ix_reorg_alerts_payment_id");
-            entity.HasIndex(alert => alert.MatchingBlockchainTransactionId)
-                .HasDatabaseName("ix_reorg_alerts_matching_blockchain_transaction_id");
+            entity.HasIndex(alert => new { alert.ProjectId, alert.PaymentId })
+                .HasDatabaseName("ix_reorg_alerts_project_payment");
+            entity.HasIndex(alert => new { alert.ProjectId, alert.MatchingBlockchainTransactionId })
+                .HasDatabaseName("ix_reorg_alerts_project_matching_transaction");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
@@ -831,6 +1013,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("webhook_events", "outbox");
             entity.HasKey(webhookEvent => webhookEvent.Id).HasName("pk_webhook_events");
 
+            entity.Property(webhookEvent => webhookEvent.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(webhookEvent => webhookEvent.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(webhookEvent => webhookEvent.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
             entity.Property(webhookEvent => webhookEvent.IntegrationApiCredentialId).HasColumnName("integration_api_credential_id").HasColumnType("uuid");
@@ -851,16 +1034,20 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<PaymentRecord>()
                 .WithMany()
-                .HasForeignKey(webhookEvent => webhookEvent.PaymentId)
+                .HasForeignKey(webhookEvent => new { webhookEvent.ProjectId, webhookEvent.PaymentId })
+                .HasPrincipalKey(payment => new { payment.ProjectId, payment.Id })
                 .HasConstraintName("fk_webhook_events_payments")
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<IntegrationApiCredentialRecord>()
                 .WithMany()
-                .HasForeignKey(webhookEvent => webhookEvent.IntegrationApiCredentialId)
+                .HasForeignKey(webhookEvent => new { webhookEvent.ProjectId, webhookEvent.IntegrationApiCredentialId })
+                .HasPrincipalKey(credential => new { credential.ProjectId, credential.Id })
                 .HasConstraintName("fk_webhook_events_integration_api_credentials")
                 .OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(webhookEvent => new { webhookEvent.Status, webhookEvent.NextAttemptAt })
-                .HasDatabaseName("ix_webhook_events_status_next_attempt_at");
+            entity.HasAlternateKey(webhookEvent => new { webhookEvent.ProjectId, webhookEvent.Id })
+                .HasName("ak_webhook_events_project_id_id");
+            entity.HasIndex(webhookEvent => new { webhookEvent.ProjectId, webhookEvent.Status, webhookEvent.NextAttemptAt })
+                .HasDatabaseName("ix_webhook_events_project_status_next_attempt_at");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
@@ -877,6 +1064,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("webhook_endpoints", "app");
             entity.HasKey(endpoint => endpoint.Id).HasName("pk_webhook_endpoints");
 
+            entity.Property(endpoint => endpoint.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(endpoint => endpoint.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(endpoint => endpoint.IntegrationApiCredentialId).HasColumnName("integration_api_credential_id").HasColumnType("uuid");
             entity.Property(endpoint => endpoint.Url).HasColumnName("url").HasColumnType("text");
@@ -893,9 +1081,14 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<IntegrationApiCredentialRecord>()
                 .WithMany()
-                .HasForeignKey(endpoint => endpoint.IntegrationApiCredentialId)
+                .HasForeignKey(endpoint => new { endpoint.ProjectId, endpoint.IntegrationApiCredentialId })
+                .HasPrincipalKey(credential => new { credential.ProjectId, credential.Id })
                 .HasConstraintName("fk_webhook_endpoints_integration_api_credentials")
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasAlternateKey(endpoint => new { endpoint.ProjectId, endpoint.Id })
+                .HasName("ak_webhook_endpoints_project_id_id");
+            entity.HasIndex(endpoint => new { endpoint.ProjectId, endpoint.IntegrationApiCredentialId })
+                .HasDatabaseName("ix_webhook_endpoints_project_credential");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
@@ -912,6 +1105,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.ToTable("webhook_delivery_attempts", "outbox");
             entity.HasKey(attempt => attempt.Id).HasName("pk_webhook_delivery_attempts");
 
+            entity.Property(attempt => attempt.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
             entity.Property(attempt => attempt.Id).HasColumnName("id").HasColumnType("uuid");
             entity.Property(attempt => attempt.WebhookEventId).HasColumnName("webhook_event_id").HasColumnType("uuid");
             entity.Property(attempt => attempt.WebhookEndpointId).HasColumnName("webhook_endpoint_id").HasColumnType("uuid");
@@ -925,18 +1119,20 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
             entity.HasOne<WebhookOutboxEventRecord>()
                 .WithMany()
-                .HasForeignKey(attempt => attempt.WebhookEventId)
+                .HasForeignKey(attempt => new { attempt.ProjectId, attempt.WebhookEventId })
+                .HasPrincipalKey(webhookEvent => new { webhookEvent.ProjectId, webhookEvent.Id })
                 .HasConstraintName("fk_webhook_delivery_attempts_webhook_events")
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<WebhookEndpointRecord>()
                 .WithMany()
-                .HasForeignKey(attempt => attempt.WebhookEndpointId)
+                .HasForeignKey(attempt => new { attempt.ProjectId, attempt.WebhookEndpointId })
+                .HasPrincipalKey(endpoint => new { endpoint.ProjectId, endpoint.Id })
                 .HasConstraintName("fk_webhook_delivery_attempts_webhook_endpoints")
                 .OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(attempt => attempt.WebhookEventId)
-                .HasDatabaseName("ix_webhook_delivery_attempts_webhook_event_id");
-            entity.HasIndex(attempt => attempt.WebhookEndpointId)
-                .HasDatabaseName("ix_webhook_delivery_attempts_webhook_endpoint_id");
+            entity.HasIndex(attempt => new { attempt.ProjectId, attempt.WebhookEventId })
+                .HasDatabaseName("ix_webhook_delivery_attempts_project_event");
+            entity.HasIndex(attempt => new { attempt.ProjectId, attempt.WebhookEndpointId })
+                .HasDatabaseName("ix_webhook_delivery_attempts_project_endpoint");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(

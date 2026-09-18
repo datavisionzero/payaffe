@@ -10,14 +10,23 @@ public sealed class AdminIntegrationApiCredentialService(
     private const int MaxNameLength = 255;
 
     public Task<IReadOnlyList<AdminIntegrationApiCredentialReadModel>> ListAsync(
+        Guid projectId,
         CancellationToken cancellationToken) =>
-        store.ListAsync(cancellationToken);
+        projectId == Guid.Empty
+            ? Task.FromResult<IReadOnlyList<AdminIntegrationApiCredentialReadModel>>([])
+            : store.ListAsync(projectId, cancellationToken);
 
     public async Task<AdminIntegrationApiCredentialCreateResult> CreateAsync(
+        Guid projectId,
         string? name,
         AdminOperationContext context,
         CancellationToken cancellationToken)
     {
+        if (projectId == Guid.Empty)
+        {
+            return AdminIntegrationApiCredentialCreateResult.ProjectUnavailable();
+        }
+
         var normalizedName = name?.Trim();
         if (string.IsNullOrWhiteSpace(normalizedName) || normalizedName.Length > MaxNameLength)
         {
@@ -29,6 +38,7 @@ public sealed class AdminIntegrationApiCredentialService(
         var token = tokenService.GenerateToken();
         var credential = await store.CreateAsync(
             new AdminIntegrationApiCredentialDraft(
+                projectId,
                 credentialId,
                 normalizedName,
                 tokenService.HashToken(token),
@@ -42,16 +52,22 @@ public sealed class AdminIntegrationApiCredentialService(
                 credentialId),
             cancellationToken);
 
+        if (credential is null)
+        {
+            return AdminIntegrationApiCredentialCreateResult.ProjectUnavailable();
+        }
+
         return AdminIntegrationApiCredentialCreateResult.Created(credential, token);
     }
 
     public async Task<AdminIntegrationApiCredentialMutationResult> RotateAsync(
+        Guid projectId,
         Guid credentialId,
         long expectedVersion,
         AdminOperationContext context,
         CancellationToken cancellationToken)
     {
-        if (credentialId == Guid.Empty || expectedVersion <= 0)
+        if (projectId == Guid.Empty || credentialId == Guid.Empty || expectedVersion <= 0)
         {
             return AdminIntegrationApiCredentialMutationResult.InvalidVersion();
         }
@@ -59,6 +75,7 @@ public sealed class AdminIntegrationApiCredentialService(
         var occurredAt = clock.UtcNow;
         var token = tokenService.GenerateToken();
         var result = await store.RotateAsync(
+            projectId,
             credentialId,
             expectedVersion,
             tokenService.HashToken(token),
@@ -87,18 +104,20 @@ public sealed class AdminIntegrationApiCredentialService(
     }
 
     public async Task<AdminIntegrationApiCredentialMutationResult> DisableAsync(
+        Guid projectId,
         Guid credentialId,
         long expectedVersion,
         AdminOperationContext context,
         CancellationToken cancellationToken)
     {
-        if (credentialId == Guid.Empty || expectedVersion <= 0)
+        if (projectId == Guid.Empty || credentialId == Guid.Empty || expectedVersion <= 0)
         {
             return AdminIntegrationApiCredentialMutationResult.InvalidVersion();
         }
 
         var occurredAt = clock.UtcNow;
         var result = await store.DisableAsync(
+            projectId,
             credentialId,
             expectedVersion,
             occurredAt,

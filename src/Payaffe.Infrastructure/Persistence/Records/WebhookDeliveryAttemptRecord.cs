@@ -2,6 +2,8 @@ namespace Payaffe.Infrastructure.Persistence.Records;
 
 public sealed class WebhookDeliveryAttemptRecord
 {
+    public Guid ProjectId { get; set; } = ProjectDefaults.DefaultProjectId;
+
     public Guid Id { get; set; }
 
     public Guid WebhookEventId { get; set; }

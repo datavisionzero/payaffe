@@ -371,6 +371,7 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
     {
         dbContext.AuditLogEntries.Add(new AuditLogEntryRecord
         {
+            ProjectId = auditEntry.ProjectId,
             EventId = auditEntry.EventId,
             OccurredAt = auditEntry.OccurredAt,
             EventType = auditEntry.EventType,

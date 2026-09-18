@@ -118,6 +118,11 @@ Webhook Endpoint records store a secret reference, not the raw secret. The
 first production-capable resolver supports references of the form
 `configuration:Webhooks:EndpointSecrets:<name>`, which resolves server-side
 configuration keys such as `Webhooks__EndpointSecrets__checkout`.
+That legacy form belongs to the migrated default Project. A non-default
+Project uses
+`configuration:Webhooks:Projects:<project-id>:EndpointSecrets:<name>`; the
+delivery worker supplies the persisted Project ID and cannot resolve a sibling
+Project's namespace.
 
 Webhook secrets are not stored in payloads, Delivery history, logs, traces, or
 metrics.

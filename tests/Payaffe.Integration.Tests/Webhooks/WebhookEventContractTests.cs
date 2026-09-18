@@ -235,6 +235,7 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
 
         var admin = scope.ServiceProvider.GetRequiredService<AdminPaymentQueryService>();
         var result = await admin.SettleAsync(
+            ProjectDefaults.DefaultProjectId,
             paymentId,
             version,
             "Payer confirmed the transfer out of band.",
@@ -426,6 +427,7 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
     private sealed class FixedPaymentAddressProvider : IPaymentAddressProvider
     {
         public Task<PaymentAddressAssignment?> AssignAsync(
+            Guid projectId,
             Guid paymentId,
             string supportedCurrency,
             CancellationToken cancellationToken)

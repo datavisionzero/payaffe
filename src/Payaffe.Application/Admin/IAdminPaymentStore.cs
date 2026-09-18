@@ -3,14 +3,17 @@ namespace Payaffe.Application.Admin;
 public interface IAdminPaymentStore
 {
     Task<IReadOnlyList<AdminPaymentSummaryReadModel>> ListRecentPaymentsAsync(
+        Guid projectId,
         int limit,
         CancellationToken cancellationToken);
 
     Task<AdminPaymentDetailReadModel?> FindPaymentAsync(
+        Guid projectId,
         Guid paymentId,
         CancellationToken cancellationToken);
 
     Task<AdminPaymentSettlementResult> SettleAsync(
+        Guid projectId,
         Guid paymentId,
         long expectedVersion,
         string reason,
@@ -19,6 +22,7 @@ public interface IAdminPaymentStore
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<AdminReorgAlertReadModel>> ListReorgAlertsAsync(
+        Guid projectId,
         int limit,
         CancellationToken cancellationToken);
 }

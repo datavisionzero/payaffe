@@ -32,6 +32,7 @@ public static class DependencyInjection
         bool applySchemaOnStartup = false)
     {
         services.AddDbContext<PayaffeDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddOptions<PaymentApplicationOptions>();
 
         // A host that does not migrate takes the schema as given, so its
         // workers must not wait for a migration that is never going to run
@@ -51,6 +52,7 @@ public static class DependencyInjection
         services.AddSingleton<IIntegrationApiCredentialTokenService, IntegrationApiCredentialTokenService>();
         services.AddScoped<IAdminTotpSecretResolver, ConfigurationAdminTotpSecretResolver>();
         services.AddScoped<IAdminSecurityStore, EfAdminSecurityStore>();
+        services.AddScoped<IAdminProjectStore, EfAdminProjectStore>();
         services.AddScoped<IAdminPaymentStore, EfAdminPaymentStore>();
         services.AddScoped<IAdminAuditLogStore, EfAdminAuditLogStore>();
         services.AddScoped<IAdminWebhookDeliveryStore, EfAdminWebhookDeliveryStore>();
@@ -58,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminWebhookEndpointStore, EfAdminWebhookEndpointStore>();
         services.AddScoped<IAdminNativeEthAddressPoolStore, EfAdminNativeEthAddressPoolStore>();
         services.AddScoped<IPaymentStore, EfPaymentStore>();
+        services.AddScoped<IProjectPaymentConfigurationStore, EfProjectPaymentConfigurationStore>();
         services.AddScoped<IPaymentAddressProvider, EfPaymentAddressProvider>();
         services.AddScoped<IRateCacheStore, EfRateCacheStore>();
         services.AddScoped<IObservationHealthStore, EfObservationHealthStore>();

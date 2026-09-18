@@ -12,6 +12,7 @@ public sealed class PaymentApplicationService(
     IPayerPageIdGenerator payerPageIdGenerator,
     IExchangeRateSource exchangeRateSource,
     IPaymentAddressProvider paymentAddressProvider,
+    IProjectPaymentConfigurationStore projectConfigurationStore,
     IBlockchainObservationAdapter blockchainObservationAdapter,
     IClock clock,
     IOptions<PaymentApplicationOptions> options)
@@ -35,6 +36,13 @@ public sealed class PaymentApplicationService(
             command.PaymentContext?.Note);
         var returnUrl = NormalizeReturnUrl(command.ReturnUrl);
         var createdAt = clock.UtcNow;
+        var projectConfiguration = await projectConfigurationStore.FindByCredentialAsync(
+            integrationApiCredentialId,
+            cancellationToken);
+        if (projectConfiguration is null || projectConfiguration.ProjectStatus != "active")
+        {
+            return CreatePaymentResult.ProjectUnavailable();
+        }
 
         var payment = Payment.Create(
             integrationApiCredentialId,
@@ -44,8 +52,8 @@ public sealed class PaymentApplicationService(
             returnUrl,
             payerPageIdGenerator.Generate(),
             createdAt,
-            _options.PaymentExpiration,
-            _options.LateAcceptanceWindow);
+            projectConfiguration.PaymentExpiration,
+            projectConfiguration.LateAcceptanceWindow);
 
         var paymentDraft = ToPaymentDraft(payment);
         var eventDrafts = payment.Events.Select(ToPaymentEventDraft).ToArray();
@@ -58,24 +66,28 @@ public sealed class PaymentApplicationService(
         var optionDrafts = new List<PaymentOptionDraft>();
         foreach (var currency in SupportedCurrencies)
         {
-            var rateAvailable = await exchangeRateSource.IsRateAvailableAsync(
+            var currencyConfiguration = projectConfiguration.For(currency);
+            var rateAvailable = currencyConfiguration.Enabled && await exchangeRateSource.IsRateAvailableAsync(
                 fiatAmount.Currency,
                 currency,
                 createdAt,
                 cancellationToken);
             var addressAvailable = await paymentAddressProvider.IsAddressAvailableAsync(
+                projectConfiguration.ProjectId,
                 currency,
                 cancellationToken);
             var observationAvailable =
                 await blockchainObservationAdapter.IsObservationAvailableAsync(
                     currency,
                     cancellationToken);
-            var optionAvailable = rateAvailable && addressAvailable && observationAvailable;
+            var optionAvailable = currencyConfiguration.Enabled && rateAvailable && addressAvailable && observationAvailable;
             optionDrafts.Add(new PaymentOptionDraft(
                 payment.Id,
                 currency,
                 optionAvailable ? "available" : "unavailable",
-                !rateAvailable
+                !currencyConfiguration.Enabled
+                    ? PaymentOptionUnavailableReasons.ProjectConfiguration
+                    : !rateAvailable
                     ? PaymentOptionUnavailableReasons.ExchangeRate
                     : !addressAvailable
                         ? PaymentOptionUnavailableReasons.PaymentAddress
@@ -101,6 +113,7 @@ public sealed class PaymentApplicationService(
             CreatePaymentStoreResultKind.Created => CreatePaymentResult.Created(ToResponse(storeResult.Payment!)),
             CreatePaymentStoreResultKind.Existing => CreatePaymentResult.Existing(ToResponse(storeResult.Payment!)),
             CreatePaymentStoreResultKind.IdempotencyConflict => CreatePaymentResult.IdempotencyConflict(),
+            CreatePaymentStoreResultKind.ProjectUnavailable => CreatePaymentResult.ProjectUnavailable(),
             _ => throw new InvalidOperationException($"Unsupported store result {storeResult.Kind}."),
         };
     }
@@ -145,6 +158,16 @@ public sealed class PaymentApplicationService(
             return SelectPaymentCurrencyResult.AlreadySelected(ToResponse(payment));
         }
 
+        var projectConfiguration = await projectConfigurationStore.FindByProjectAsync(
+            payment.ProjectId,
+            cancellationToken);
+        var currencyConfiguration = projectConfiguration?.For(supportedCurrency)
+            ?? ProjectCurrencyConfiguration.Disabled;
+        if (!currencyConfiguration.Enabled)
+        {
+            return SelectPaymentCurrencyResult.PaymentAddressUnavailable();
+        }
+
         var selectedOption = payment.PaymentOptions?
             .SingleOrDefault(option =>
                 StringComparer.Ordinal.Equals(option.SupportedCurrency, supportedCurrency));
@@ -182,6 +205,7 @@ public sealed class PaymentApplicationService(
         }
 
         var address = await paymentAddressProvider.AssignAsync(
+            payment.ProjectId,
             payment.Id,
             supportedCurrency,
             cancellationToken);
@@ -198,6 +222,9 @@ public sealed class PaymentApplicationService(
             quote.RateSource,
             quote.RateValue,
             quote.ObservedAt,
+            currencyConfiguration.ConfirmationRequirement,
+            projectConfiguration!.PaymentTolerancePercent,
+            currencyConfiguration.ReorgMonitoringDepth,
             selectedAt);
         var storeResult = await paymentStore.SelectCurrencyAsync(
             selection,
@@ -222,7 +249,8 @@ public sealed class PaymentApplicationService(
                     payment.Id,
                     supportedCurrency,
                     address.PaymentAddress,
-                    quote.ExpectedCryptoAmount),
+                    quote.ExpectedCryptoAmount,
+                    payment.ProjectId),
                 cancellationToken);
         }
 
@@ -285,7 +313,8 @@ public sealed class PaymentApplicationService(
             providerName,
             providerObservationId,
             recordedAt,
-            recordedAt);
+            recordedAt,
+            command.ProjectId);
 
         var storeResult = await paymentStore.RecordBlockchainObservationAsync(
             observation,
@@ -372,25 +401,53 @@ public sealed class PaymentApplicationService(
         var completedCount = 0;
         var alreadyRecordedCount = 0;
         var rejectedCount = 0;
+        var failedCount = 0;
 
         foreach (var target in targets)
         {
-            var observations = await blockchainObservationAdapter.PollAsync(target, cancellationToken);
+            IReadOnlyList<BlockchainObservation> observations;
+            try
+            {
+                observations = await blockchainObservationAdapter.PollAsync(target, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                failedCount++;
+                continue;
+            }
             observationCount += observations.Count;
             foreach (var observation in observations)
             {
-                var result = await RecordBlockchainObservationAsync(
-                    new RecordBlockchainObservationCommand(
-                        target.PaymentId,
-                        target.SupportedCurrency,
-                        target.PaymentAddress,
-                        observation.TransactionHash,
-                        observation.ObservedAmount,
-                        observation.ObservedAt,
-                        observation.Confirmations,
-                        observation.ProviderName,
-                        observation.ProviderObservationId),
-                    cancellationToken);
+                RecordBlockchainObservationResult result;
+                try
+                {
+                    result = await RecordBlockchainObservationAsync(
+                        new RecordBlockchainObservationCommand(
+                            target.PaymentId,
+                            target.SupportedCurrency,
+                            target.PaymentAddress,
+                            observation.TransactionHash,
+                            observation.ObservedAmount,
+                            observation.ObservedAt,
+                            observation.Confirmations,
+                            observation.ProviderName,
+                            observation.ProviderObservationId,
+                            target.ProjectId),
+                        cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    failedCount++;
+                    continue;
+                }
 
                 switch (result.Kind)
                 {
@@ -421,7 +478,8 @@ public sealed class PaymentApplicationService(
             recordedCount,
             completedCount,
             alreadyRecordedCount,
-            rejectedCount);
+            rejectedCount,
+            failedCount);
     }
 
     public async Task<MonitorBlockchainReorgsResult> MonitorBlockchainReorgsAsync(
@@ -450,15 +508,30 @@ public sealed class PaymentApplicationService(
         var updatedCount = 0;
         var reorgAlertCount = 0;
         var missingObservationCount = 0;
+        var failedCount = 0;
         foreach (var target in targets)
         {
-            var observations = await blockchainObservationAdapter.PollAsync(
-                new BlockchainObservationTarget(
-                    target.PaymentId,
-                    target.SupportedCurrency,
-                    target.PaymentAddress,
-                    target.ExpectedCryptoAmount),
-                cancellationToken);
+            IReadOnlyList<BlockchainObservation> observations;
+            try
+            {
+                observations = await blockchainObservationAdapter.PollAsync(
+                    new BlockchainObservationTarget(
+                        target.PaymentId,
+                        target.SupportedCurrency,
+                        target.PaymentAddress,
+                        target.ExpectedCryptoAmount,
+                        target.ProjectId),
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                failedCount++;
+                continue;
+            }
             checkedCount++;
 
             var observation = observations.FirstOrDefault(candidate =>
@@ -476,7 +549,8 @@ public sealed class PaymentApplicationService(
                     target.TransactionHash,
                     observation.Confirmations,
                     BlockHash: null,
-                    BlockHeight: null),
+                    BlockHeight: null,
+                    target.ProjectId),
                 cancellationToken);
 
             switch (updateResult.Kind)
@@ -503,7 +577,8 @@ public sealed class PaymentApplicationService(
             checkedCount,
             updatedCount,
             reorgAlertCount,
-            missingObservationCount);
+            missingObservationCount,
+            failedCount);
     }
 
     public async Task<UpdateBlockchainTransactionConfirmationsResult> UpdateBlockchainTransactionConfirmationsAsync(
@@ -536,7 +611,8 @@ public sealed class PaymentApplicationService(
                 command.Confirmations,
                 string.IsNullOrWhiteSpace(command.BlockHash) ? null : command.BlockHash.Trim(),
                 command.BlockHeight,
-                checkedAt),
+                checkedAt,
+                command.ProjectId),
             new PaymentCompletionPolicyDraft(
                 GetRequiredConfirmations(supportedCurrency),
                 _options.PaymentTolerancePercent),

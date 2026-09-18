@@ -36,6 +36,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListAdminProjects"];
+        put?: never;
+        post: operations["CreateAdminProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/projects/{projectId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ChangeAdminProjectStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/csrf": {
         parameters: {
             query?: never;
@@ -458,6 +490,8 @@ export interface components {
     schemas: {
         AdminAuditLogEntryDetailReadModel: {
             /** Format: uuid */
+            projectId: null | string;
+            /** Format: uuid */
             eventId: string;
             /** Format: date-time */
             occurredAt: string;
@@ -475,6 +509,8 @@ export interface components {
         };
         AdminAuditLogEntryReadModel: {
             /** Format: uuid */
+            projectId: null | string;
+            /** Format: uuid */
             eventId: string;
             /** Format: date-time */
             occurredAt: string;
@@ -487,6 +523,8 @@ export interface components {
             subjectId: string;
         };
         AdminAuditLogExportHttpRequest: {
+            /** Format: uuid */
+            projectId: null | string;
             /** Format: int32 */
             limit: null | number | string;
         };
@@ -502,16 +540,22 @@ export interface components {
             csrfToken: string;
         };
         AdminIntegrationApiCredentialCreateHttpRequest: {
+            /** Format: uuid */
+            projectId: null | string;
             name: null | string;
         };
         AdminIntegrationApiCredentialHttpResponse: {
             credential: components["schemas"]["AdminIntegrationApiCredentialReadModel"];
         };
         AdminIntegrationApiCredentialMutationHttpRequest: {
+            /** Format: uuid */
+            projectId: null | string;
             /** Format: int64 */
             expectedVersion: null | number | string;
         };
         AdminIntegrationApiCredentialReadModel: {
+            /** Format: uuid */
+            projectId: string;
             /** Format: uuid */
             id: string;
             name: string;
@@ -554,6 +598,8 @@ export interface components {
             status: string;
         };
         AdminNativeEthAddressPoolImportHttpRequest: {
+            /** Format: uuid */
+            projectId: null | string;
             addresses: null | string[];
         };
         AdminNativeEthAddressPoolImportHttpResponse: {
@@ -564,6 +610,8 @@ export interface components {
             summary: components["schemas"]["AdminNativeEthAddressPoolSummary"];
         };
         AdminNativeEthAddressPoolSummary: {
+            /** Format: uuid */
+            projectId: string;
             /** Format: int32 */
             unusedCount: number | string;
             /** Format: int32 */
@@ -578,6 +626,8 @@ export interface components {
             currencies: components["schemas"]["ObservationHealthReadModel"][];
         };
         AdminPaymentDetailReadModel: {
+            /** Format: uuid */
+            projectId: string;
             /** Format: uuid */
             paymentId: string;
             externalReference: string;
@@ -607,6 +657,8 @@ export interface components {
             version: number | string;
         };
         AdminPaymentSettlementHttpRequest: {
+            /** Format: uuid */
+            projectId: null | string;
             /** Format: int64 */
             expectedVersion: null | number | string;
             reason: null | string;
@@ -615,6 +667,8 @@ export interface components {
             payments: components["schemas"]["AdminPaymentSummaryReadModel"][];
         };
         AdminPaymentSummaryReadModel: {
+            /** Format: uuid */
+            projectId: string;
             /** Format: uuid */
             paymentId: string;
             externalReference: string;
@@ -634,12 +688,42 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        AdminProjectCreateHttpRequest: {
+            name: null | string;
+            slug: null | string;
+        };
+        AdminProjectHttpResponse: {
+            project: components["schemas"]["AdminProjectReadModel"];
+        };
+        AdminProjectReadModel: {
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            slug: string;
+            status: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: int64 */
+            version: number | string;
+        };
+        AdminProjectsHttpResponse: {
+            projects: components["schemas"]["AdminProjectReadModel"][];
+        };
+        AdminProjectStatusHttpRequest: {
+            /** Format: int64 */
+            expectedVersion: null | number | string;
+            status: null | string;
+        };
         AdminRecoveryCodesHttpResponse: {
             /** Format: date-time */
             generatedAt: string;
             recoveryCodes: string[];
         };
         AdminReorgAlertReadModel: {
+            /** Format: uuid */
+            projectId: string;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -696,6 +780,8 @@ export interface components {
         };
         AdminWebhookDeliveryReadModel: {
             /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
             webhookEventId: string;
             /** Format: uuid */
             paymentId: string;
@@ -726,6 +812,8 @@ export interface components {
         };
         AdminWebhookEndpointCreateHttpRequest: {
             /** Format: uuid */
+            projectId: null | string;
+            /** Format: uuid */
             integrationApiCredentialId: null | string;
             url: null | string;
             secretReference: null | string;
@@ -735,6 +823,8 @@ export interface components {
             endpoint: components["schemas"]["AdminWebhookEndpointReadModel"];
         };
         AdminWebhookEndpointReadModel: {
+            /** Format: uuid */
+            projectId: string;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -751,6 +841,8 @@ export interface components {
             version: number | string;
         };
         AdminWebhookEndpointSecretRotationHttpRequest: {
+            /** Format: uuid */
+            projectId: null | string;
             /** Format: int64 */
             expectedVersion: null | number | string;
             secretReference: null | string;
@@ -759,6 +851,8 @@ export interface components {
             endpoints: components["schemas"]["AdminWebhookEndpointReadModel"][];
         };
         AdminWebhookEndpointUpdateHttpRequest: {
+            /** Format: uuid */
+            projectId: null | string;
             /** Format: int64 */
             expectedVersion: null | number | string;
             url: null | string;
@@ -910,6 +1004,166 @@ export interface operations {
             };
         };
     };
+    ListAdminProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProjectsHttpResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+        };
+    };
+    CreateAdminProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["AdminProjectCreateHttpRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProjectHttpResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+        };
+    };
+    ChangeAdminProjectStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["AdminProjectStatusHttpRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProjectHttpResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+        };
+    };
     GetAdminCsrf: {
         parameters: {
             query?: never;
@@ -962,6 +1216,7 @@ export interface operations {
     ListAdminPayments: {
         parameters: {
             query?: {
+                projectId?: string;
                 limit?: number | string;
             };
             header?: never;
@@ -992,7 +1247,9 @@ export interface operations {
     };
     GetAdminPayment: {
         parameters: {
-            query?: never;
+            query?: {
+                projectId?: string;
+            };
             header?: never;
             path: {
                 paymentId: string;
@@ -1104,6 +1361,7 @@ export interface operations {
     ListAdminReorgAlerts: {
         parameters: {
             query?: {
+                projectId?: string;
                 limit?: number | string;
             };
             header?: never;
@@ -1164,6 +1422,7 @@ export interface operations {
     ListAdminAuditLog: {
         parameters: {
             query?: {
+                projectId?: string;
                 limit?: number | string;
             };
             header?: never;
@@ -1194,7 +1453,9 @@ export interface operations {
     };
     GetAdminAuditLogEntry: {
         parameters: {
-            query?: never;
+            query?: {
+                projectId?: string;
+            };
             header?: never;
             path: {
                 eventId: string;
@@ -1244,6 +1505,7 @@ export interface operations {
     ListAdminWebhookDeliveries: {
         parameters: {
             query?: {
+                projectId?: string;
                 limit?: number | string;
             };
             header?: never;
@@ -1274,7 +1536,9 @@ export interface operations {
     };
     ListAdminIntegrationApiCredentials: {
         parameters: {
-            query?: never;
+            query?: {
+                projectId?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1497,6 +1761,7 @@ export interface operations {
     ListAdminWebhookEndpoints: {
         parameters: {
             query?: {
+                projectId?: string;
                 integrationApiCredentialId?: string;
             };
             header?: never;
@@ -1809,7 +2074,9 @@ export interface operations {
     };
     GetAdminNativeEthAddressPool: {
         parameters: {
-            query?: never;
+            query?: {
+                projectId?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1940,7 +2207,9 @@ export interface operations {
     };
     ResendAdminWebhookDelivery: {
         parameters: {
-            query?: never;
+            query?: {
+                projectId?: string;
+            };
             header?: never;
             path: {
                 eventId: string;

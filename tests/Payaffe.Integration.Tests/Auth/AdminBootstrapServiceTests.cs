@@ -47,7 +47,8 @@ public sealed class AdminBootstrapServiceTests(PostgreSqlFixture postgres) : ICl
         Assert.All(result.RecoveryCodes, plain =>
             Assert.Contains(storedCodes, stored => passwordHasher.VerifyPassword(plain, stored.CodeHash)));
 
-        var audit = await dbContext.AuditLogEntries.SingleAsync();
+        var audit = await dbContext.AuditLogEntries.SingleAsync(
+            entry => entry.CorrelationId == "correlation-1");
         Assert.Equal("admin_account.bootstrap", audit.EventType);
         Assert.Equal("success", audit.Outcome);
         Assert.Equal("system", audit.ActorType);
@@ -160,7 +161,8 @@ public sealed class AdminBootstrapServiceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal(AdminBootstrapStatus.InvalidInput, result.Status);
         var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
         Assert.Empty(await dbContext.AdminAccounts.ToArrayAsync());
-        var audit = await dbContext.AuditLogEntries.SingleAsync();
+        var audit = await dbContext.AuditLogEntries.SingleAsync(
+            entry => entry.CorrelationId == "correlation-invalid");
         Assert.Equal("failure", audit.Outcome);
     }
 
