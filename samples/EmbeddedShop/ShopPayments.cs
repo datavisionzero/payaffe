@@ -153,26 +153,27 @@ internal sealed class ShopPayments(
 
         PayaffeWebhookEvent webhookEvent = verification.Event!;
 
-        // At-least-once means the same event will arrive again. Claiming it before acting is
-        // what makes fulfilment happen once; in a product the claim and the fulfilment share one
-        // database transaction.
-        if (!orders.TryClaimEvent(storefront, webhookEvent.EventId))
-        {
-            return Results.Ok(new { status = "duplicate" });
-        }
-
         ShopOrder? order = orders.FindByExternalReference(
             storefront,
             webhookEvent.Payment.ExternalReference);
         if (order is null)
         {
             // Accepted, not rejected: a delivery this shop cannot place is not a delivery
-            // Payaffe should keep retrying.
+            // Payaffe should keep retrying. The event is deliberately not recorded as handled,
+            // so a redelivery still counts if the order turns up in between.
             logger.LogWarning(
                 "No order for external reference {ExternalReference} in {Storefront}.",
                 webhookEvent.Payment.ExternalReference,
                 storefront);
             return Results.Ok(new { status = "ignored" });
+        }
+
+        // At-least-once means the same event will arrive again. Claiming it before acting is
+        // what makes fulfilment happen once; in a product the claim and the fulfilment share one
+        // database transaction.
+        if (!orders.TryClaimEvent(storefront, webhookEvent.EventId))
+        {
+            return Results.Ok(new { status = "duplicate" });
         }
 
         order.Apply(webhookEvent.Payment, $"webhook {webhookEvent.EventType}");
