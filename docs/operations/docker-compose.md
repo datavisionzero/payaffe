@@ -429,10 +429,25 @@ PAYAFFE_BTC_WATCH_ONLY_NETWORK=mainnet
 PAYAFFE_BTC_WATCH_ONLY_ADDRESS_TYPE=segwit
 
 PAYAFFE_LTC_WATCH_ONLY_ENABLED=true
-PAYAFFE_LTC_WATCH_ONLY_EXTENDED_PUBLIC_KEY=Ltub...
+PAYAFFE_LTC_WATCH_ONLY_EXTENDED_PUBLIC_KEY=xpub...
 PAYAFFE_LTC_WATCH_ONLY_NETWORK=mainnet
 PAYAFFE_LTC_WATCH_ONLY_ADDRESS_TYPE=segwit
 ```
+
+Both currencies take the account key as `xpub` on mainnet and `tpub` on
+testnet; LTC additionally takes `Ltub` and `ttub`. A native segwit wallet
+exports the same node as `zpub` and a p2sh-segwit one as `ypub`, and neither is
+taken — the prefix is four version bytes that hold no key material, so
+converting is re-encoding the same key, and the `ADDRESS_TYPE` above is what
+decides whether a segwit or a legacy address is derived from it. A rejected key
+is reported with the prefix it carries and the prefix the currency takes.
+
+Which chain a key came from is not part of the value. A Bitcoin and a Litecoin
+account key are the same string, so an LTC key configured as the BTC source is
+accepted, and every BTC address derived from it then belongs to a wallet that
+never watches the Bitcoin chain. Nothing can check this for the operator:
+confirm against the wallet that the address at receive index 0 matches before
+the first payment is taken.
 
 `mainnet` and `testnet`, plus `segwit` and `legacy`, are supported. The
 database persists only the next non-hardened child index and a SHA-256 source
