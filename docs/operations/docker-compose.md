@@ -38,6 +38,42 @@ pay.example.com {
 nginx uses the same one upstream, with `proxy_set_header Host $host` and
 `X-Forwarded-Proto $scheme` so that the API sees the public scheme.
 
+### Telling the API who the caller is
+
+A proxy in front means every request arrives from the proxy, and the API
+believes the connection until it is told which hops to believe instead
+([ADR 0032](../adr/0032-the-client-address-is-the-connection-until-a-proxy-is-named.md)).
+Left unset, the admin login limit, the browser error limit, and the source
+address in the Audit Log are the proxy's address and the proxy's single bucket
+for every caller in the world.
+
+`PAYAFFE_TRUSTED_PROXIES` is that list: addresses or CIDR ranges, comma
+separated. The value is the address the proxy *connects from*, not the one it
+listens on. A proxy running in the same Compose project reaches the API over
+the bridge network:
+
+```console
+$ docker network inspect payaffe_default -f '{{(index .IPAM.Config 0).Subnet}}'
+172.30.0.0/24
+```
+
+```dotenv
+PAYAFFE_TRUSTED_PROXIES=172.30.0.0/24
+```
+
+A proxy on the host, reaching the published loopback port, connects from the
+bridge gateway instead — the same command's `.Gateway`, typically a single
+address. A CDN in front of the proxy is another hop and belongs in the same
+list; the forwarded chain is read from the connection outwards and ends at the
+first address that was not named. Do not list a range wide enough to contain
+real callers: an address in the list may name itself.
+
+Caddy and nginx both send `X-Forwarded-For` with no extra configuration. The
+host says which of the two modes it is in with one line at startup, so
+`docker compose logs api | grep "Client addresses"` answers whether the setting
+took. An entry that is not an address or a CIDR range stops the host with that
+entry quoted, rather than starting with nothing trusted.
+
 The browser bundle always calls relative `/api` paths, so the published API
 image works at any installation address without a compiled-in URL. `/api` and
 `/health` never receive the SPA fallback; eligible Admin and Payer document
@@ -133,6 +169,7 @@ them:
 - `PAYAFFE_BLOCKCHAIN_OBSERVATION_BLOCKCHAIR_API_KEY_REFERENCE`
 - `PAYAFFE_BLOCKCHAIN_OBSERVATION_BLOCKCHAIR_MAX_TRANSACTIONS_PER_ADDRESS_POLL`
 - `PAYAFFE_BLOCKCHAIN_OBSERVATION_NOWNODES_API_KEY_REFERENCE`
+- `PAYAFFE_TRUSTED_PROXIES`
 - `PAYAFFE_ADMIN_AUTH_RATE_LIMIT_PERMIT_LIMIT`
 - `PAYAFFE_ADMIN_AUTH_RATE_LIMIT_WINDOW`
 - `PAYAFFE_INTEGRATION_API_RATE_LIMIT_PERMIT_LIMIT`
@@ -217,7 +254,9 @@ Admin authentication mutations use
 rate limit. The public Integration API uses
 `PAYAFFE_INTEGRATION_API_RATE_LIMIT_PERMIT_LIMIT` and
 `PAYAFFE_INTEGRATION_API_RATE_LIMIT_WINDOW` for the route, source IP, and
-bearer-token-fingerprint fixed-window rate limit.
+bearer-token-fingerprint fixed-window rate limit. Both partition by the source
+address the host believes in, which behind a proxy is the proxy's until
+`PAYAFFE_TRUSTED_PROXIES` names it.
 Webhook Delivery retries use
 `PAYAFFE_WEBHOOK_DELIVERY_MAX_ATTEMPTS`,
 `PAYAFFE_WEBHOOK_DELIVERY_RETRY_DELAY`,

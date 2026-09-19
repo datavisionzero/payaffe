@@ -62,3 +62,4 @@ material value to understanding the decision.
 - [0029 – One operator can isolate payment Projects](./0029-one-operator-can-isolate-payment-projects.md)
 - [0030 – The web application is a Vite SPA served by the API](./0030-the-web-application-is-a-vite-spa-served-by-the-api.md)
 - [0031 – Embedded payments use the Integration API](./0031-embedded-payments-use-the-integration-api.md)
+- [0032 – The client address is the connection, until a proxy is named](./0032-the-client-address-is-the-connection-until-a-proxy-is-named.md)

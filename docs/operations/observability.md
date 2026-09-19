@@ -53,6 +53,7 @@ stays visible even when the lease holder is the unhealthy instance.
 
 | Environment variable | Configuration key | Effect |
 | --- | --- | --- |
+| `PAYAFFE_TRUSTED_PROXIES` | `Network:TrustedProxies` | The hops allowed to name the caller, as addresses or CIDR ranges. Empty ignores `X-Forwarded-For` and every per-address limit counts the proxy as one caller (ADR 0032). |
 | `PAYAFFE_CLIENT_ERRORS_ENABLED` | `Diagnostics:ClientErrors:Enabled` | Whether `POST /api/client-errors` is mapped. Default `true`. |
 | `PAYAFFE_CLIENT_ERROR_RATE_LIMIT_PERMIT_LIMIT` | `Diagnostics:ClientErrors:RateLimitPermitLimit` | Reports accepted per source address per window. Default `10`. |
 | `PAYAFFE_CLIENT_ERROR_RATE_LIMIT_WINDOW` | `Diagnostics:ClientErrors:RateLimitWindow` | The window. Default one minute. |

@@ -215,6 +215,14 @@ Recovery Code generation or rotation. Operators can override the default
 through `Admin:Authentication:RateLimitPermitLimit` and
 `Admin:Authentication:RateLimitWindow`.
 
+The source IP of a partition is the connection's, and behind a reverse proxy
+that is the proxy's for every caller until the proxy is named in
+`Network:TrustedProxies`
+([ADR 0032](../adr/0032-the-client-address-is-the-connection-until-a-proxy-is-named.md)).
+A forwarded address is evidence only when the hop that sent it is one of those;
+otherwise `X-Forwarded-For` is ignored, because a limit a caller can evade by
+writing a header is not a limit.
+
 Local password login requires account lockout or an equivalent local protection
 mechanism. Lockout and rate-limit decisions that indicate abuse or account
 protection are security-relevant.
@@ -240,6 +248,11 @@ Security-relevant Audit Log entries use the shared core schema:
 - `subject_type`,
 - `subject_id`,
 - `project_id` when the subject or action belongs to a Project.
+
+`source_ip` is the address the host believes the request came from, under the
+same rule as the rate-limit partitions above: the connection, or the forwarded
+address when a named proxy sent it. It is optional: an entry recorded outside
+an HTTP request has none.
 
 `occurred_at` is a UTC instant. Audit Log entries are append-only during normal
 product operation. Corrections are recorded as new Audit Log entries.
