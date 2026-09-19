@@ -66,6 +66,27 @@ Optional rolling file logs are allowed for self-hosted installations when they a
 
 Normal end users do not receive raw technical logs in the product UI. They receive appropriate status, error, or support information. Technical logs remain an operator, support, and development tool.
 
+### What The Shipped Level Says
+
+`Information` is what an installation sees without configuring anything, and
+retention costs are per entry. An entry belongs there when it records something
+the installation did that an operator would want to find later: a host starting
+with the configuration it resolved, a schema migration, a Payment reaching a
+state, something a browser reported.
+
+It does not belong there when it repeats on a timer and says the same thing
+every time. A worker that succeeded is carried by its lease row, which already
+holds last success, last failure and consecutive failures; a periodic success
+line adds an entry per interval and no information. Such a line is `Debug`. The
+framework categories that behave this way, `System.Net.Http.HttpClient` above
+all, are set to `Warning` in the shipped configuration rather than left to the
+default.
+
+Failure paths are unaffected: a provider that failed, a refresh that covered
+only part of what it was asked for, and a worker that threw all stay at
+`Warning` or `Error`, where they are what an operator is looking for rather
+than what they are scrolling past.
+
 ## Production Operations Baseline
 
 This operations baseline is a recommendation for production setups. Product
