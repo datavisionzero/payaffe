@@ -17,6 +17,10 @@
   <Folder Name="/apps/worker/">
     <Project Path="apps/worker/Payaffe.Worker.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/EmbeddedShop/EmbeddedShop.csproj" />
+    <Project Path="samples/EmbeddedShop.Tests/EmbeddedShop.Tests.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Payaffe.Application/Payaffe.Application.csproj" />
     <Project Path="src/Payaffe.Domain/Payaffe.Domain.csproj" />
