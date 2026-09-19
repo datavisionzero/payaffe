@@ -72,7 +72,12 @@ Integration API requests use a fixed-window default rate limit of 120 requests
 per minute for each route, source IP, and bearer-token fingerprint partition.
 Requests without bearer-token evidence are partitioned by route and source IP.
 The bearer token itself must not be stored in the rate-limit key, logs, Audit
-Log entries, traces, metrics, or error responses.
+Log entries, traces, metrics, or error responses. The source IP is the one the
+host believes in, which behind a reverse proxy means the proxy's until the
+proxy is named
+([ADR 0032](../adr/0032-the-client-address-is-the-connection-until-a-proxy-is-named.md));
+the token fingerprint is what keeps an authenticated caller's partition its own
+either way.
 
 ## Payment Creation
 

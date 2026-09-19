@@ -136,6 +136,11 @@ services:
       # requests only. Running both would poll every provider twice; the leases
       # make it safe, not useful.
       Workers__RunInApiHost: ${PAYAFFE_RUN_WORKERS_IN_API_HOST:-false}
+      # The address a request came from, which is the proxy's for every caller
+      # until the proxy is named (ADR 0032). One or more addresses or CIDR
+      # ranges, comma separated; empty means nothing is trusted and the
+      # connection is the only truth.
+      Network__TrustedProxies: ${PAYAFFE_TRUSTED_PROXIES:-}
       Admin__Authentication__RateLimitPermitLimit: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_PERMIT_LIMIT:-30}
       Admin__Authentication__RateLimitWindow: ${PAYAFFE_ADMIN_AUTH_RATE_LIMIT_WINDOW:-00:05:00}
       IntegrationApi__RateLimit__PermitLimit: ${PAYAFFE_INTEGRATION_API_RATE_LIMIT_PERMIT_LIMIT:-120}

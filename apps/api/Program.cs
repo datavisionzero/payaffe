@@ -129,6 +129,16 @@ builder.Services.AddOptions<ReorgMonitoringWorkerOptions>()
 builder.Services.Configure<AdminAuthenticationOptions>(builder.Configuration.GetSection("Admin:Authentication"));
 builder.Services.Configure<IntegrationApiRateLimitOptions>(builder.Configuration.GetSection("IntegrationApi:RateLimit"));
 builder.Services.Configure<ClientErrorReportOptions>(builder.Configuration.GetSection("Diagnostics:ClientErrors"));
+// Every rate limit partitioned by source address, and every audit entry that
+// records one, is only as good as the address this host believes in. Behind a
+// reverse proxy that address is the proxy's until the proxy is named here
+// (ADR 0032). Parsed before the host is built, so a list that is wrong stops
+// the start rather than quietly trusting nothing.
+var trustedProxies = TrustedProxies.Parse(builder.Configuration[TrustedProxies.ConfigurationKey]);
+if (!trustedProxies.IsEmpty)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(trustedProxies.ApplyTo);
+}
 builder.Services.AddOptions<PaymentLifecycleWorkerOptions>()
     .Bind(builder.Configuration.GetSection("Payments:LifecycleWorker"))
     .ValidateOnStart();
@@ -262,6 +272,23 @@ builder.Services.AddPayaffeInfrastructure(
     applySchemaOnStartup: true);
 
 var app = builder.Build();
+
+// First in the pipeline, because everything after it -- the rate limiters, the
+// audit entries, the scheme a redirect is built from -- reads the address and
+// the scheme this replaces.
+if (trustedProxies.IsEmpty)
+{
+    app.Logger.LogInformation(
+        "Client addresses come from the connection. {ConfigurationKey} is empty, so X-Forwarded-For is ignored.",
+        TrustedProxies.ConfigurationKey);
+}
+else
+{
+    app.UseForwardedHeaders();
+    app.Logger.LogInformation(
+        "Client addresses come from X-Forwarded-For. {TrustedProxyCount} proxy entries are trusted.",
+        trustedProxies.Count);
+}
 
 if (webAllowedOrigins.Length > 0)
 {
