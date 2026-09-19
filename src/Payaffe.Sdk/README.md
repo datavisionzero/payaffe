@@ -74,6 +74,41 @@ Retry rules the SDK does not hide:
 - a losing concurrent selection receives `payment.currency_already_selected`
   and must display the winning instruction rather than replace it.
 
+## Showing the payment QR code
+
+`PayaffePaymentQrCode` encodes the instruction in your process. Nothing is
+fetched from Payaffe or from a QR service, so the code renders under your own
+origin and appears in your own markup:
+
+```csharp
+var qr = PayaffePaymentQrCode.Create(payment.PaymentInstruction!, new PayaffeQrCodeOptions
+{
+    DarkColor = "currentColor",
+    LightColor = null,
+    AccessibleLabel = $"Scan to pay order {order.Number}",
+});
+
+return Results.Content(qr.ToSvg(), "image/svg+xml");
+```
+
+The payload is `instruction.Uri`, byte for byte. The helper never assembles a
+URI from an address and an amount, because the amount belongs to a Rate Lock and
+its precision is the API's to decide: eight decimal places for BTC and LTC, wei
+for native ETH.
+
+`ToSvg()` returns a standalone SVG sized in modules through its `viewBox`, so
+CSS decides how large it is displayed. It references no font, image, script, or
+remote origin, and carries no Payaffe branding. Colours may be hexadecimal
+values or CSS colour keywords; anything else is refused rather than written into
+your page. For a different output, `ToModuleMatrix()` hands you the symbol and
+your own imaging stack renders it.
+
+The defaults are error correction level M and a four-module quiet zone, which is
+what wallets are tested against. Encoding uses
+[Net.Codecrete.QrCodeGenerator](https://github.com/manuelbl/QrCodeGenerator)
+(MIT), the SDK's only non-Microsoft dependency; it pulls in no imaging stack and
+no native component.
+
 ## Reconciling
 
 `PollPaymentAsync` reads Payment state with exponential backoff, bounded
@@ -123,6 +158,43 @@ arrived. It covers the timestamp and the body and nothing else, so branch on the
 verified event rather than on the event-type header, which is routing
 information only. The verifier does not host an endpoint, choose a web framework,
 persist deduplication state, or dispatch handlers.
+
+## Versions and upgrading
+
+The package and the installation are versioned separately on purpose. SDK `1.x`
+speaks Integration API `/api/v1`, and that is the only promise the two version
+lines make each other: upgrading a payaffe installation never obliges you to take
+a new package, and a fix in this client never claims a server release that did not
+happen.
+
+Within that, the package follows semantic versioning. A new Payment Status,
+Supported Currency, option status or error code is a compatible change on both
+sides, which is why the string-backed value types keep values they have never
+heard of instead of throwing. Pin the major version and take minors freely:
+
+```xml
+<PackageReference Include="Payaffe.Sdk" Version="[0.2.0,1.0.0)" />
+```
+
+Coming from a hand-written HTTP client, the migration is mechanical and needs no
+data change. Bearer tokens, Payment identifiers, External References, idempotency
+records and Payer Page URLs all survive it, and payer links handed out before the
+move keep working:
+
+- replace your create, read and Currency Selection calls with the client's
+  methods, keeping your existing idempotency keys — a replayed creation with the
+  original key returns the same Payment, so the switch does not create a second
+  one for an order in flight;
+- replace a polling loop with `PollPaymentAsync`, which will not busy-poll and
+  stops on a terminal status;
+- replace hand-rolled signature checking with `PayaffeWebhookVerifier`, and keep
+  your own deduplication store: the event identifiers you have already recorded
+  stay valid;
+- stop reading `payerPageUrl` if you were redirecting to it. It is still returned,
+  and existing links still load, but an embedded checkout has no use for it.
+
+A Payment that a payer already selected a currency for on the hosted page returns
+that same instruction here. Neither surface can replace the other's selection.
 
 ## Errors
 

@@ -131,13 +131,19 @@ backend, where it has to stay: a browser-to-payaffe integration is out of scope
 precisely because that token cannot be handed to a browser.
 
 The package README, in [src/Payaffe.Sdk/](src/Payaffe.Sdk/README.md), is the
-integration guide: the trust boundary, the flow, the retry rules, polling, and
-how to verify a webhook before believing it.
+integration guide: the trust boundary, the flow, the retry rules, polling, the
+local QR code, and how to verify a webhook before believing it.
+
+A working shop that does all of it is in
+[samples/EmbeddedShop/](samples/EmbeddedShop/README.md): two storefronts on two
+payaffe projects, a checkout page that loads nothing from payaffe, a QR code the
+shop renders itself, and fulfilment that happens once no matter how often the
+webhook is delivered.
 
 ## Development
 
 ```sh
-dotnet test Payaffe.slnx          # 400 tests; integration tests need Docker
+dotnet test Payaffe.slnx          # 435 tests; integration tests need Docker
 pnpm install
 pnpm web:check                   # generate, test, typecheck, e2e, build
 ```

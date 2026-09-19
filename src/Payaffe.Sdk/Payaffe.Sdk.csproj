@@ -21,7 +21,7 @@
       server release that never happened. The two version lines meet only in
       the contract the baseline states: SDK 1.x speaks Integration API /api/v1.
     -->
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <VersionSuffix></VersionSuffix>
   </PropertyGroup>
 
@@ -29,6 +29,12 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <!--
+      The QR encoder. It is the SDK's only non-Microsoft dependency, it is MIT
+      licensed, and it brings nothing with it: no imaging stack, no native
+      component, and no transitive package a consumer would have to audit.
+    -->
+    <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
   </ItemGroup>
 
   <ItemGroup>

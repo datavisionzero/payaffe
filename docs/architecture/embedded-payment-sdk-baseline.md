@@ -101,6 +101,16 @@ the raw request bytes, Payaffe headers, shared secret, current time, and allowed
 clock skew. It does not host an HTTP endpoint, choose a web framework, persist
 deduplication state, or dispatch business handlers.
 
+The SDK may include a payment QR helper. It encodes the Payment Instruction URI
+in the consuming process, so no request leaves the target product to produce a
+code and nothing is fetched from a Payaffe origin or a QR service. The payload
+is the returned `uri` unchanged: the helper must not assemble a URI from an
+address and an amount, recompute a Rate Lock, or round a cryptocurrency amount.
+Its default output is a standalone SVG with no font, image, script, remote
+reference, or Payaffe branding, and it also exposes the module matrix so a
+product can render the symbol with its own imaging stack. Presentation values a
+product supplies are validated before they reach markup it serves.
+
 SDK `1.x` targets Integration API `/api/v1`. SDK semantic-version changes do
 not create an API major version, and an API v2 does not silently change the
 base path used by an installed SDK major.
@@ -110,6 +120,13 @@ every host reports, and the package is released from its own `sdk-v<version>`
 tag. An installation release must not oblige an integrator to take a new
 package, and a client-only fix must not claim a server release that never
 happened.
+
+The package is validated as a package, not only as a project: continuous
+integration and the release both pack it, assert that it carries exactly one
+target framework and no planning or credential content, and build and run a
+consumer that has none of this repository's build files. Package documentation
+covers installation, the flow, errors, the QR helper, webhook verification, and
+the upgrade path for an integration that predates the package.
 
 A representative product-backend flow remains UI-independent:
 

@@ -58,6 +58,14 @@
       equivalent and uses an imported pool instead (ADR 0005, ADR 0006).
     -->
     <PackageVersion Include="NBitcoin.Altcoins" Version="6.0.3" />
+    <!--
+      QR encoding for the SDK's payment helper. MIT, no transitive dependencies
+      and no imaging stack: it returns the module matrix, and the SDK turns that
+      into markup the integrating product serves from its own origin. The
+      alternative was carrying a QR encoder in a payments SDK, which is the kind
+      of code nobody reviews again after the day it lands.
+    -->
+    <PackageVersion Include="Net.Codecrete.QrCodeGenerator" Version="3.2.1" />
   </ItemGroup>
 
   <ItemGroup Label="Agent surface">
@@ -98,6 +106,12 @@
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!--
+      A second, independent QR implementation, used only to decode what the SDK
+      encodes. A test that re-encoded with the same library would prove that the
+      library agrees with itself; this one proves a wallet can read the payload.
+    -->
+    <PackageVersion Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 
 </Project>

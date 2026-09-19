@@ -14,6 +14,7 @@ The repository follows a monorepo-capable structure. Deployable hosts, shared ba
 ├── src/
 ├── tests/
 ├── packages/
+├── samples/
 ├── docs/
 ├── deploy/
 ├── scripts/
@@ -34,6 +35,12 @@ logic; they use the public application or HTTP boundaries respectively.
 
 `packages/` is optional and reserved for shared frontend or TypeScript packages, such as UI building blocks, API clients, or shared validation logic. It is created only when more than one app or a clear reuse case exists.
 
+`samples/` is optional and holds runnable integration examples for consumers of a published
+artifact, such as a target product that embeds payments through `Payaffe.Sdk`. It is separate
+from `apps/` because nothing in it is deployed by this project and nothing in it is part of the
+product: a sample consumes public surfaces only, and an integrator copies it rather than
+depending on it.
+
 `docs/` contains durable product, architecture, operations, and process documentation. Standard subfolders are `docs/product/`, `docs/architecture/`, `docs/adr/`, `docs/contracts/`, and, when needed, `docs/operations/`.
 
 `deploy/` is optional and reserved for deployment artifacts that outgrow simple root files, such as production Compose files, reverse-proxy configuration, server bootstrap, migration-runner configuration, or observability provisioning such as dashboards and alert rules. A simple root-level `docker-compose.yml` remains allowed for local development.
@@ -51,5 +58,7 @@ Root configuration files stay in the repository root when tools expect them ther
   `tests/Payaffe.Sdk.Tests`; those folders are created only with the SDK
   implementation.
 - Frontend code belongs under `apps/web` or, for reusable building blocks, under `packages/`.
+- A sample under `samples/` uses the SDK's public surface and never references Domain,
+  Application, or Infrastructure. It is not packed, not published, and not deployed.
 - Documentation should respect existing document types and avoid duplicating decisions.
 - Deviations are allowed, but they should be justified in an ADR or in the architecture documentation.

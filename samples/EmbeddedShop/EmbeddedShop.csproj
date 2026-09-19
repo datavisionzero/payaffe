@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>EmbeddedShop</RootNamespace>
+    <AssemblyName>EmbeddedShop</AssemblyName>
+    <!--
+      A sample is not a payaffe artifact. It is never packed, never published,
+      and it carries no product version, because an integrator copies the code
+      rather than taking a dependency on this project.
+    -->
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>payaffe-embedded-shop-sample</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The sample consumes the SDK exactly as a published package would, through
+      its public surface only. The project reference is here so the sample is
+      built and tested against the SDK in this commit; an integrator replaces it
+      with `dotnet add package Payaffe.Sdk`, and the code does not change.
+    -->
+    <ProjectReference Include="..\..\src\Payaffe.Sdk\Payaffe.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Pages\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="EmbeddedShop.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Embedded checkout sample</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 id="shop-name">Shop</h1>
+        <p class="muted">
+          Every request on this page goes to this shop. Nothing is loaded from the payment
+          provider, and there is no redirect away from here.
+        </p>
+      </header>
+
+      <section id="catalog" aria-labelledby="catalog-heading">
+        <h2 id="catalog-heading">Catalogue</h2>
+        <ul id="items"></ul>
+      </section>
+
+      <section id="checkout" hidden aria-labelledby="checkout-heading">
+        <h2 id="checkout-heading">Checkout</h2>
+        <p id="order-line"></p>
+
+        <div id="currency-choice">
+          <h3>Pay with</h3>
+          <div id="currencies" class="row"></div>
+        </div>
+
+        <div id="instruction" hidden>
+          <h3>Send the exact amount</h3>
+          <div class="instruction">
+            <div class="qr"><img id="qr" alt="Payment code" /></div>
+            <dl>
+              <dt>Amount</dt>
+              <dd><code id="amount"></code></dd>
+              <dt>Address</dt>
+              <dd><code id="address"></code></dd>
+              <dt>Expires</dt>
+              <dd id="expires"></dd>
+            </dl>
+          </div>
+          <p class="row">
+            <button id="copy-address" type="button">Copy address</button>
+            <button id="copy-amount" type="button">Copy amount</button>
+            <a id="wallet-link" class="button" href="#">Open in wallet</a>
+          </p>
+        </div>
+
+        <p id="status" role="status" aria-live="polite"></p>
+        <p id="error" class="error" role="alert" hidden></p>
+      </section>
+    </main>
+
+    <script src="/assets/checkout.js"></script>
+  </body>
+</html>

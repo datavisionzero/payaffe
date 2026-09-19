@@ -1,0 +1,124 @@
+/* The shop's own styling. No web font, no icon set, no stylesheet from another origin. */
+
+:root {
+  color-scheme: light dark;
+  --ink: #16181d;
+  --paper: #fbfaf7;
+  --line: #d9d5cc;
+  --accent: #245f4a;
+  --alarm: #8c2f24;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eceae5;
+    --paper: #14161a;
+    --line: #333840;
+    --accent: #7fc7a9;
+    --alarm: #e08a7e;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.55 system-ui, sans-serif;
+}
+
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+h1 {
+  margin-bottom: 0.25rem;
+}
+
+.muted {
+  color: color-mix(in srgb, var(--ink) 65%, transparent);
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+button,
+.button {
+  font: inherit;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.instruction {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.qr img {
+  width: 12rem;
+  height: 12rem;
+  color: var(--ink);
+  background: var(--paper);
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+}
+
+dt {
+  color: color-mix(in srgb, var(--ink) 65%, transparent);
+}
+
+dd {
+  margin: 0;
+}
+
+code {
+  overflow-wrap: anywhere;
+}
+
+#status {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+}
+
+.error {
+  color: var(--alarm);
+}
