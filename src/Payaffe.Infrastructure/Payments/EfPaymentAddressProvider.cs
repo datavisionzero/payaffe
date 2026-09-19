@@ -13,6 +13,14 @@ public sealed class EfPaymentAddressProvider(
     IOptions<PaymentAddressOptions> options)
     : IPaymentAddressProvider
 {
+    /// <summary>
+    /// The external chain of a BIP44-style account: `account/0` holds the
+    /// addresses a payer is shown, `account/1` the change a wallet keeps to
+    /// itself. payaffe hands out receiving addresses and so only ever uses the
+    /// former.
+    /// </summary>
+    private const uint ExternalChainIndex = 0;
+
     private readonly PaymentAddressOptions _options = options.Value;
 
     public async Task<bool> IsAddressAvailableAsync(
@@ -131,7 +139,15 @@ public sealed class EfPaymentAddressProvider(
             supportedCurrency,
             source.Network);
         var extendedPublicKey = ExtPubKey.Parse(source.ExtendedPublicKey, network);
+        // The configured key is the account node, `m/purpose'/coin'/account'`,
+        // which is what every wallet exports and what the operations guide asks
+        // for. Addresses live one level below it on the external chain, so the
+        // index is derived from `account/0` and not from the account itself.
+        // Deriving it directly would place payments on `account/i` -- the level
+        // BIP44 reserves for the chain -- and no wallet restored from the seed
+        // scans there.
         var derivedPublicKey = extendedPublicKey
+            .Derive(ExternalChainIndex)
             .Derive((uint)cursor.NextDerivationIndex)
             .PubKey;
         var addressType = source.AddressType == "legacy"
