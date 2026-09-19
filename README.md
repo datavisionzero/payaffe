@@ -34,7 +34,9 @@ and partial payment handling, signed webhook delivery with retries, the Admin UI
 behind TOTP with step-up on sensitive writes, an admin MCP surface for an agent
 CLI, logs delivered to a [logaffe](https://github.com/datavisionzero/logaffe)
 installation, and OpenTelemetry metrics with shipped Grafana and Prometheus
-assets.
+assets. Payment creation, currency selection, payment instructions, and
+reconciliation are also drivable entirely through the Integration API and the
+published .NET SDK, for a product that embeds the flow in its own checkout.
 
 Known gaps are tracked as goals in the repository rather than as issues.
 
@@ -114,11 +116,23 @@ currency the payer picked, and renders the returned amount, address, and URI in
 its own UI. payaffe never sees that browser
 ([ADR 0031](docs/adr/0031-embedded-payments-use-the-integration-api.md)).
 
-The supported client for that is [`Payaffe.Sdk`](src/Payaffe.Sdk/README.md), a
-UI-free `net10.0` package that speaks `/api/v1` and is versioned independently
-of an installation. It keeps the bearer token in the backend, where it has to
-stay: a browser-to-payaffe integration is out of scope precisely because that
-token cannot be handed to a browser.
+The supported client for that is
+[`Payaffe.Sdk`](https://www.nuget.org/packages/Payaffe.Sdk), a UI-free `net10.0`
+package on nuget.org:
+
+```sh
+dotnet add package Payaffe.Sdk
+```
+
+It speaks `/api/v1` and carries its own version, so upgrading an installation
+does not oblige an integrator to take a new package and a fix in the client does
+not claim a server release that never happened. It keeps the bearer token in the
+backend, where it has to stay: a browser-to-payaffe integration is out of scope
+precisely because that token cannot be handed to a browser.
+
+The package README, in [src/Payaffe.Sdk/](src/Payaffe.Sdk/README.md), is the
+integration guide: the trust boundary, the flow, the retry rules, polling, and
+how to verify a webhook before believing it.
 
 ## Development
 
