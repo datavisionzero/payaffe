@@ -70,6 +70,79 @@ public sealed class EfPaymentAddressProviderTests
     }
 
     [Fact]
+    public async Task Watch_only_source_assigns_the_receive_addresses_of_the_configured_account()
+    {
+        // The operator configures the account node their wallet exports. What
+        // payaffe hands a payer has to be the address that wallet shows at
+        // receive index 0, or the money lands somewhere its owner cannot see.
+        // A fixed seed rather than a random key, because the whole point of
+        // this test is the path, and a key at depth 0 has none.
+        var seed = new byte[64];
+        for (var i = 0; i < seed.Length; i++)
+        {
+            seed[i] = (byte)i;
+        }
+
+        var master = ExtKey.CreateFromSeed(seed);
+        var account = master.Derive(new KeyPath("84'/0'/0'"));
+        var expectedFirst = master
+            .Derive(new KeyPath("84'/0'/0'/0/0"))
+            .Neuter()
+            .PubKey
+            .GetAddress(ScriptPubKeyType.Segwit, Network.Main)
+            .ToString();
+        var expectedSecond = master
+            .Derive(new KeyPath("84'/0'/0'/0/1"))
+            .Neuter()
+            .PubKey
+            .GetAddress(ScriptPubKeyType.Segwit, Network.Main)
+            .ToString();
+
+        var firstPaymentId = Guid.NewGuid();
+        var secondPaymentId = Guid.NewGuid();
+        await using var dbContext = new PayaffeDbContext(CreateDbOptions());
+        SeedPayment(dbContext, firstPaymentId);
+        SeedPayment(dbContext, secondPaymentId);
+        await dbContext.SaveChangesAsync();
+        var provider = CreateProvider(
+            dbContext,
+            new PaymentAddressOptions
+            {
+                Btc = new WatchOnlyWalletSourceOptions
+                {
+                    Enabled = true,
+                    ExtendedPublicKey = account.Neuter().ToString(Network.Main),
+                    Network = "mainnet",
+                    AddressType = "segwit",
+                },
+            });
+
+        var first = await provider.AssignAsync(
+            ProjectDefaults.DefaultProjectId,
+            firstPaymentId,
+            "BTC",
+            CancellationToken.None);
+        var second = await provider.AssignAsync(
+            ProjectDefaults.DefaultProjectId,
+            secondPaymentId,
+            "BTC",
+            CancellationToken.None);
+
+        Assert.Equal(expectedFirst, first!.PaymentAddress);
+        Assert.Equal(expectedSecond, second!.PaymentAddress);
+
+        // The account node itself, derived directly, is what this used to hand
+        // out. Naming it here keeps the regression from coming back quietly.
+        var changeLevelAddress = account
+            .Neuter()
+            .Derive(0u)
+            .PubKey
+            .GetAddress(ScriptPubKeyType.Segwit, Network.Main)
+            .ToString();
+        Assert.NotEqual(changeLevelAddress, first.PaymentAddress);
+    }
+
+    [Fact]
     public async Task Native_eth_pool_assigns_each_address_only_once()
     {
         var options = CreateDbOptions();

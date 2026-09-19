@@ -415,6 +415,13 @@ BTC and LTC use account-level extended public keys. Configure only an extended
 public key; an extended private key, seed phrase, or private key is rejected
 and must never be placed in `.env`.
 
+Account-level means the node a wallet exports for one account,
+`m/purpose'/coin'/account'` — for example `m/84'/0'/0'` for the first native
+segwit Bitcoin account. payaffe derives the external chain itself, so the
+address it hands out at index `i` is the address that account shows at receive
+index `i`. Configure the account node, not the chain node below it and not the
+master key.
+
 ```text
 PAYAFFE_BTC_WATCH_ONLY_ENABLED=true
 PAYAFFE_BTC_WATCH_ONLY_EXTENDED_PUBLIC_KEY=xpub...
