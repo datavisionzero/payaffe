@@ -143,7 +143,7 @@ webhook is delivered.
 ## Development
 
 ```sh
-dotnet test Payaffe.slnx          # 434 tests; integration tests need Docker
+dotnet test Payaffe.slnx          # 435 tests; integration tests need Docker
 pnpm install
 pnpm web:check                   # generate, test, typecheck, e2e, build
 ```

@@ -14,11 +14,13 @@ public sealed class PayaffePaymentQrCode
 {
     private readonly QrCode _qrCode;
 
-    private PayaffePaymentQrCode(QrCode qrCode, string payload, PayaffeQrCodeOptions options)
+    private readonly RenderingOptions _options;
+
+    private PayaffePaymentQrCode(QrCode qrCode, string payload, RenderingOptions options)
     {
         _qrCode = qrCode;
         Payload = payload;
-        Options = options;
+        _options = options;
     }
 
     /// <summary>
@@ -40,9 +42,10 @@ public sealed class PayaffePaymentQrCode
     public int Version => _qrCode.Version;
 
     /// <summary>
-    /// The options this code was built with, including the quiet zone every renderer must keep.
+    /// The light border this code is rendered with, in modules. A caller rendering the module
+    /// matrix itself has to keep the same border, or a scanner may not find the symbol.
     /// </summary>
-    public PayaffeQrCodeOptions Options { get; }
+    public int QuietZoneModules => _options.QuietZoneModules;
 
     /// <summary>
     /// Encodes the Payment Instruction of a Payment whose Currency Selection has been made.
@@ -70,8 +73,10 @@ public sealed class PayaffePaymentQrCode
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(paymentUri);
 
-        PayaffeQrCodeOptions effectiveOptions = options ?? new PayaffeQrCodeOptions();
-        effectiveOptions.Validate();
+        // Validated and then copied, in that order. Holding on to the caller's instance would
+        // mean a colour that passed validation could be swapped for one that never did, after
+        // the check and before the markup is written.
+        RenderingOptions effectiveOptions = (options ?? new PayaffeQrCodeOptions()).Validate();
 
         QrCode qrCode = QrCode.EncodeText(paymentUri, ToEcc(effectiveOptions.ErrorCorrection));
         return new PayaffePaymentQrCode(qrCode, paymentUri, effectiveOptions);
@@ -110,24 +115,24 @@ public sealed class PayaffePaymentQrCode
     /// </summary>
     public string ToSvg()
     {
-        int quietZone = Options.QuietZoneModules;
+        int quietZone = _options.QuietZoneModules;
         int extent = ModuleCount + (quietZone * 2);
         StringBuilder svg = new();
 
         svg.Append(CultureInfo.InvariantCulture, $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {extent} {extent}\" shape-rendering=\"crispEdges\"");
-        svg.Append(Options.AccessibleLabel is null ? " aria-hidden=\"true\">" : " role=\"img\">");
+        svg.Append(_options.AccessibleLabel is null ? " aria-hidden=\"true\">" : " role=\"img\">");
 
-        if (Options.AccessibleLabel is not null)
+        if (_options.AccessibleLabel is not null)
         {
-            svg.Append("<title>").Append(EscapeXmlText(Options.AccessibleLabel)).Append("</title>");
+            svg.Append("<title>").Append(EscapeXmlText(_options.AccessibleLabel)).Append("</title>");
         }
 
-        if (Options.LightColor is not null)
+        if (_options.LightColor is not null)
         {
-            svg.Append(CultureInfo.InvariantCulture, $"<rect width=\"{extent}\" height=\"{extent}\" fill=\"{Options.LightColor}\"/>");
+            svg.Append(CultureInfo.InvariantCulture, $"<rect width=\"{extent}\" height=\"{extent}\" fill=\"{_options.LightColor}\"/>");
         }
 
-        svg.Append("<path fill=\"").Append(Options.DarkColor).Append("\" d=\"");
+        svg.Append("<path fill=\"").Append(_options.DarkColor).Append("\" d=\"");
         for (int y = 0; y < ModuleCount; y++)
         {
             // Consecutive dark modules become one horizontal run, which keeps the path short

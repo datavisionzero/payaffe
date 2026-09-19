@@ -85,7 +85,7 @@ public sealed class PayaffePaymentQrCodeTests
         bool[,] modules = code.ToModuleMatrix();
 
         string svg = code.ToSvg();
-        int extent = code.ModuleCount + (code.Options.QuietZoneModules * 2);
+        int extent = code.ModuleCount + (code.QuietZoneModules * 2);
 
         Assert.Equal(code.ModuleCount, modules.GetLength(0));
         Assert.Contains($"viewBox=\"0 0 {extent} {extent}\"", svg, StringComparison.Ordinal);
@@ -139,6 +139,26 @@ public sealed class PayaffePaymentQrCodeTests
     }
 
     [Fact]
+    public void Changing_the_options_after_the_code_exists_cannot_change_its_markup()
+    {
+        PayaffeQrCodeOptions options = new() { DarkColor = "#101010" };
+        var code = PayaffePaymentQrCode.CreateForUri(
+            "bitcoin:bc1qpayaffetestaddress0000000000000000000000000?amount=0.00039980",
+            options);
+
+        // The same instance the caller still holds, now carrying a value that would never have
+        // passed validation.
+        options.DarkColor = "\"><script>alert(1)</script>";
+        options.QuietZoneModules = 99;
+
+        string svg = code.ToSvg();
+
+        Assert.Contains("fill=\"#101010\"", svg, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script", svg, StringComparison.Ordinal);
+        Assert.Equal(4, code.QuietZoneModules);
+    }
+
+    [Fact]
     public void The_quiet_zone_is_four_modules_unless_the_product_says_otherwise()
     {
         const string PaymentUri = "bitcoin:bc1qpayaffetestaddress0000000000000000000000000?amount=0.00039980";
@@ -148,7 +168,7 @@ public sealed class PayaffePaymentQrCodeTests
             PaymentUri,
             new PayaffeQrCodeOptions { QuietZoneModules = 1 });
 
-        Assert.Equal(4, standard.Options.QuietZoneModules);
+        Assert.Equal(4, standard.QuietZoneModules);
         Assert.Contains(
             $"viewBox=\"0 0 {standard.ModuleCount + 8} {standard.ModuleCount + 8}\"",
             standard.ToSvg(),
@@ -172,7 +192,7 @@ public sealed class PayaffePaymentQrCodeTests
     private static string? Decode(PayaffePaymentQrCode code)
     {
         const int Scale = 4;
-        int quietZone = code.Options.QuietZoneModules;
+        int quietZone = code.QuietZoneModules;
         int extent = (code.ModuleCount + (quietZone * 2)) * Scale;
 
         byte[] luminance = new byte[extent * extent];
@@ -232,7 +252,7 @@ public sealed class PayaffePaymentQrCodeTests
     /// </summary>
     private static bool[,] ReadSvgModules(string svg, PayaffePaymentQrCode code)
     {
-        int quietZone = code.Options.QuietZoneModules;
+        int quietZone = code.QuietZoneModules;
         bool[,] modules = new bool[code.ModuleCount, code.ModuleCount];
 
         int pathStart = svg.IndexOf(" d=\"", StringComparison.Ordinal) + 4;

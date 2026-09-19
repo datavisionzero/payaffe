@@ -49,7 +49,7 @@ public sealed class PayaffeQrCodeOptions
     /// </summary>
     public string? AccessibleLabel { get; set; }
 
-    internal void Validate()
+    internal RenderingOptions Validate()
     {
         if (QuietZoneModules is < 0 or > 32)
         {
@@ -66,6 +66,13 @@ public sealed class PayaffeQrCodeOptions
         {
             EnsureColorIsSafe(LightColor, nameof(LightColor));
         }
+
+        return new RenderingOptions(
+            ErrorCorrection,
+            QuietZoneModules,
+            DarkColor,
+            LightColor,
+            AccessibleLabel);
     }
 
     private static void EnsureColorIsSafe(string color, string parameterName)
@@ -85,3 +92,14 @@ public sealed class PayaffeQrCodeOptions
         }
     }
 }
+
+/// <summary>
+/// A validated copy of the options, so nothing a rendered symbol depends on can change after it
+/// was checked.
+/// </summary>
+internal sealed record RenderingOptions(
+    PayaffeQrErrorCorrection ErrorCorrection,
+    int QuietZoneModules,
+    string DarkColor,
+    string? LightColor,
+    string? AccessibleLabel);
