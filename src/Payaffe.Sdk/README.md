@@ -74,6 +74,41 @@ Retry rules the SDK does not hide:
 - a losing concurrent selection receives `payment.currency_already_selected`
   and must display the winning instruction rather than replace it.
 
+## Showing the payment QR code
+
+`PayaffePaymentQrCode` encodes the instruction in your process. Nothing is
+fetched from Payaffe or from a QR service, so the code renders under your own
+origin and appears in your own markup:
+
+```csharp
+var qr = PayaffePaymentQrCode.Create(payment.PaymentInstruction!, new PayaffeQrCodeOptions
+{
+    DarkColor = "currentColor",
+    LightColor = null,
+    AccessibleLabel = $"Scan to pay order {order.Number}",
+});
+
+return Results.Content(qr.ToSvg(), "image/svg+xml");
+```
+
+The payload is `instruction.Uri`, byte for byte. The helper never assembles a
+URI from an address and an amount, because the amount belongs to a Rate Lock and
+its precision is the API's to decide: eight decimal places for BTC and LTC, wei
+for native ETH.
+
+`ToSvg()` returns a standalone SVG sized in modules through its `viewBox`, so
+CSS decides how large it is displayed. It references no font, image, script, or
+remote origin, and carries no Payaffe branding. Colours may be hexadecimal
+values or CSS colour keywords; anything else is refused rather than written into
+your page. For a different output, `ToModuleMatrix()` hands you the symbol and
+your own imaging stack renders it.
+
+The defaults are error correction level M and a four-module quiet zone, which is
+what wallets are tested against. Encoding uses
+[Net.Codecrete.QrCodeGenerator](https://github.com/manuelbl/QrCodeGenerator)
+(MIT), the SDK's only non-Microsoft dependency; it pulls in no imaging stack and
+no native component.
+
 ## Reconciling
 
 `PollPaymentAsync` reads Payment state with exponential backoff, bounded

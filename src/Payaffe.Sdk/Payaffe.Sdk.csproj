@@ -29,6 +29,12 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <!--
+      The QR encoder. It is the SDK's only non-Microsoft dependency, it is MIT
+      licensed, and it brings nothing with it: no imaging stack, no native
+      component, and no transitive package a consumer would have to audit.
+    -->
+    <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
   </ItemGroup>
 
   <ItemGroup>
