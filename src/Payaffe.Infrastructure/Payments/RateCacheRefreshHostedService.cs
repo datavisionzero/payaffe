@@ -56,7 +56,14 @@ public sealed class RateCacheRefreshHostedService(
             var result = await refresher.RefreshAsync(DateTimeOffset.UtcNow, cancellationToken);
             if (result.RefreshedPairCount == result.RequestedPairCount)
             {
-                logger.LogInformation(
+                // Debug rather than Information: this line fires only when the
+                // count equals what was asked for, so it can never say anything
+                // but that the refresh worked. A partial refresh is the Warning
+                // below and a failure the Error further down, and the lease row
+                // carries the last success for anyone asking whether the worker
+                // still runs. At Information it was a five-minutely heartbeat
+                // that an installation pays to store.
+                logger.LogDebug(
                     "Rate Cache refresh completed for {PairCount} currency pairs.",
                     result.RefreshedPairCount);
             }
