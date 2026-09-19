@@ -110,6 +110,14 @@ jobs:
       - run: dotnet build Payaffe.slnx -c Release --no-restore
       - run: dotnet test Payaffe.slnx -c Release --no-build
 
+      # The same check CI runs on every pull request, once more against the
+      # commit being released: pack, look inside the package, and consume it
+      # from a project that has none of this repository's build files. A package
+      # that only works next to its own source is found here rather than by the
+      # first integrator.
+      - name: The package is consumable from a clean project
+        run: scripts/sdk-package-smoke.sh
+
       # No version argument: the SDK csproj carries the version, and the job
       # above has already refused a tag that disagrees with it.
       - name: Pack

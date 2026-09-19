@@ -121,6 +121,13 @@ tag. An installation release must not oblige an integrator to take a new
 package, and a client-only fix must not claim a server release that never
 happened.
 
+The package is validated as a package, not only as a project: continuous
+integration and the release both pack it, assert that it carries exactly one
+target framework and no planning or credential content, and build and run a
+consumer that has none of this repository's build files. Package documentation
+covers installation, the flow, errors, the QR helper, webhook verification, and
+the upgrade path for an integration that predates the package.
+
 A representative product-backend flow remains UI-independent:
 
 ```csharp

@@ -159,6 +159,43 @@ verified event rather than on the event-type header, which is routing
 information only. The verifier does not host an endpoint, choose a web framework,
 persist deduplication state, or dispatch handlers.
 
+## Versions and upgrading
+
+The package and the installation are versioned separately on purpose. SDK `1.x`
+speaks Integration API `/api/v1`, and that is the only promise the two version
+lines make each other: upgrading a payaffe installation never obliges you to take
+a new package, and a fix in this client never claims a server release that did not
+happen.
+
+Within that, the package follows semantic versioning. A new Payment Status,
+Supported Currency, option status or error code is a compatible change on both
+sides, which is why the string-backed value types keep values they have never
+heard of instead of throwing. Pin the major version and take minors freely:
+
+```xml
+<PackageReference Include="Payaffe.Sdk" Version="[0.2.0,1.0.0)" />
+```
+
+Coming from a hand-written HTTP client, the migration is mechanical and needs no
+data change. Bearer tokens, Payment identifiers, External References, idempotency
+records and Payer Page URLs all survive it, and payer links handed out before the
+move keep working:
+
+- replace your create, read and Currency Selection calls with the client's
+  methods, keeping your existing idempotency keys — a replayed creation with the
+  original key returns the same Payment, so the switch does not create a second
+  one for an order in flight;
+- replace a polling loop with `PollPaymentAsync`, which will not busy-poll and
+  stops on a terminal status;
+- replace hand-rolled signature checking with `PayaffeWebhookVerifier`, and keep
+  your own deduplication store: the event identifiers you have already recorded
+  stay valid;
+- stop reading `payerPageUrl` if you were redirecting to it. It is still returned,
+  and existing links still load, but an embedded checkout has no use for it.
+
+A Payment that a payer already selected a currency for on the hosted page returns
+that same instruction here. Neither surface can replace the other's selection.
+
 ## Errors
 
 `PayaffeApiException` carries the HTTP status, the stable `Code`, the
