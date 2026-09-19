@@ -56,7 +56,7 @@ Or as a container, keeping stdin attached for the `stdio` transport:
 docker run -i --rm \
   -e ConnectionStrings__Payaffe="Host=...;Database=payaffe;Username=...;Password=..." \
   -e Mcp__Admin__AdminAccountId="<admin account uuid>" \
-  ghcr.io/datavisionzero/payaffe-mcp:0.2.1
+  ghcr.io/datavisionzero/payaffe-mcp:0.2.2
 ```
 
 An installation started from [deploy/compose.yaml](../../deploy/compose.yaml)
