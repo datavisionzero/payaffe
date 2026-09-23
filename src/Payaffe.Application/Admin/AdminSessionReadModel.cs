@@ -10,4 +10,5 @@ public sealed record AdminSessionReadModel(
     DateTimeOffset IdleExpiresAt,
     DateTimeOffset? MfaAuthenticatedAt,
     DateTimeOffset? StepUpAuthenticatedAt,
-    DateTimeOffset? RevokedAt);
+    DateTimeOffset? RevokedAt,
+    DateTimeOffset? SecondFactorLockedUntil);

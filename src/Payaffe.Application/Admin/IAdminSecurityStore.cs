@@ -64,12 +64,15 @@ public interface IAdminSecurityStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Consumes the challenge and issues the session. Returns false, writing
-    /// nothing, when the challenge was consumed or expired in the meantime.
+    /// Consumes the challenge, records <paramref name="acceptedTimeStep"/> as the
+    /// account's last accepted TOTP step and issues the session. Returns false,
+    /// writing nothing, when the challenge was consumed or expired in the
+    /// meantime or the step is not later than one already accepted.
     /// </summary>
     Task<bool> CompleteMfaVerificationAsync(
         Guid challengeId,
         DateTimeOffset consumedAt,
+        long acceptedTimeStep,
         AdminSessionDraft session,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken);
@@ -101,16 +104,34 @@ public interface IAdminSecurityStore
         DateTimeOffset idleExpiresAt,
         CancellationToken cancellationToken);
 
-    /// <param name="secondFactorVerified">
-    /// True when the step-up verified a code; the session then counts as having
-    /// cleared a second factor even if it began on the password alone.
+    /// <param name="acceptedTimeStep">
+    /// The TOTP step the step-up verified, or null for an account without a
+    /// second factor. With a step, the session counts as having cleared a
+    /// second factor even if it began on the password alone, and the call
+    /// returns false, writing nothing, when the step is not later than one the
+    /// account already accepted.
     /// </param>
-    Task RecordSuccessfulStepUpAsync(
+    Task<bool> RecordSuccessfulStepUpAsync(
         Guid sessionId,
         DateTimeOffset occurredAt,
         DateTimeOffset idleExpiresAt,
-        bool secondFactorVerified,
+        long? acceptedTimeStep,
         AdminAuditEntry auditEntry,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Counts one wrong second-factor code against the account, across every
+    /// challenge and step-up, and locks its second factor for
+    /// <paramref name="lockoutDuration"/> once <paramref name="maxFailedAttempts"/>
+    /// is reached. The audit entry the factory returns, if any, is recorded
+    /// with the change.
+    /// </summary>
+    Task<AdminFailedAttemptOutcome> RecordFailedSecondFactorAsync(
+        Guid adminAccountId,
+        DateTimeOffset occurredAt,
+        int maxFailedAttempts,
+        TimeSpan lockoutDuration,
+        Func<AdminFailedAttemptOutcome, AdminAuditEntry?> createAuditEntry,
         CancellationToken cancellationToken);
 
     /// <summary>

@@ -136,7 +136,8 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
                     account.Status,
                     challenge.ExpiresAt,
                     challenge.FailedAttemptCount,
-                    challenge.ConsumedAt))
+                    challenge.ConsumedAt,
+                    account.SecondFactorLockedUntil))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -174,6 +175,7 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
     public async Task<bool> CompleteMfaVerificationAsync(
         Guid challengeId,
         DateTimeOffset consumedAt,
+        long acceptedTimeStep,
         AdminSessionDraft session,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
@@ -181,8 +183,10 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         return await SaveWithRetryAsync(
             async () =>
             {
-                if (!await ConsumeChallengeAsync(challengeId, consumedAt, cancellationToken))
+                if (!await ConsumeChallengeAsync(challengeId, consumedAt, cancellationToken) ||
+                    !await AcceptSecondFactorAsync(session.AdminAccountId, consumedAt, acceptedTimeStep, cancellationToken))
                 {
+                    dbContext.ChangeTracker.Clear();
                     return false;
                 }
 
@@ -234,6 +238,7 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
                 recoveryCode.Status = "used";
                 recoveryCode.UsedAt = consumedAt;
                 recoveryCode.Version++;
+                await AcceptSecondFactorAsync(session.AdminAccountId, consumedAt, acceptedTimeStep: null, cancellationToken);
 
                 AddSession(session);
                 AddAuditEntry(mfaAuditEntry);
@@ -265,7 +270,8 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
                     session.IdleExpiresAt,
                     session.MfaAuthenticatedAt,
                     session.StepUpAuthenticatedAt,
-                    session.RevokedAt))
+                    session.RevokedAt,
+                    account.SecondFactorLockedUntil))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -284,28 +290,78 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task RecordSuccessfulStepUpAsync(
+    public async Task<bool> RecordSuccessfulStepUpAsync(
         Guid sessionId,
         DateTimeOffset occurredAt,
         DateTimeOffset idleExpiresAt,
-        bool secondFactorVerified,
+        long? acceptedTimeStep,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var session = await dbContext.AdminSessions.SingleAsync(
-            candidate => candidate.Id == sessionId,
+        return await SaveWithRetryAsync(
+            async () =>
+            {
+                var session = await dbContext.AdminSessions.SingleAsync(
+                    candidate => candidate.Id == sessionId,
+                    cancellationToken);
+                if (acceptedTimeStep is not null)
+                {
+                    if (!await AcceptSecondFactorAsync(session.AdminAccountId, occurredAt, acceptedTimeStep, cancellationToken))
+                    {
+                        dbContext.ChangeTracker.Clear();
+                        return false;
+                    }
+
+                    session.MfaAuthenticatedAt ??= occurredAt;
+                }
+
+                session.StepUpAuthenticatedAt = occurredAt;
+                session.LastSeenAt = occurredAt;
+                session.IdleExpiresAt = idleExpiresAt;
+
+                AddAuditEntry(auditEntry);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            },
             cancellationToken);
-        session.StepUpAuthenticatedAt = occurredAt;
-        if (secondFactorVerified)
-        {
-            session.MfaAuthenticatedAt ??= occurredAt;
-        }
+    }
 
-        session.LastSeenAt = occurredAt;
-        session.IdleExpiresAt = idleExpiresAt;
+    public async Task<AdminFailedAttemptOutcome> RecordFailedSecondFactorAsync(
+        Guid adminAccountId,
+        DateTimeOffset occurredAt,
+        int maxFailedAttempts,
+        TimeSpan lockoutDuration,
+        Func<AdminFailedAttemptOutcome, AdminAuditEntry?> createAuditEntry,
+        CancellationToken cancellationToken)
+    {
+        return await SaveWithRetryAsync(
+            async () =>
+            {
+                var adminAccount = await dbContext.AdminAccounts.SingleAsync(
+                    account => account.Id == adminAccountId,
+                    cancellationToken);
+                adminAccount.FailedSecondFactorAttemptCount++;
+                var outcome = new AdminFailedAttemptOutcome(
+                    adminAccount.FailedSecondFactorAttemptCount,
+                    adminAccount.FailedSecondFactorAttemptCount >= maxFailedAttempts);
+                if (outcome.LimitReached)
+                {
+                    adminAccount.SecondFactorLockedUntil = occurredAt.Add(lockoutDuration);
+                }
 
-        AddAuditEntry(auditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
+                adminAccount.UpdatedAt = occurredAt;
+                adminAccount.Version++;
+
+                var auditEntry = createAuditEntry(outcome);
+                if (auditEntry is not null)
+                {
+                    AddAuditEntry(auditEntry);
+                }
+
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return outcome;
+            },
+            cancellationToken);
     }
 
     public async Task RecordFailedStepUpAsync(
@@ -427,6 +483,39 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         adminAccount.LastPasswordVerifiedAt = occurredAt;
         adminAccount.UpdatedAt = occurredAt;
         adminAccount.Version++;
+    }
+
+    /// <summary>
+    /// Records a verified second factor on the account: the TOTP step it used,
+    /// if any, and a cleared failure count. Returns false when the step is not
+    /// later than the last one accepted, which is how a code observed once is
+    /// kept from working again within its validity window.
+    /// </summary>
+    private async Task<bool> AcceptSecondFactorAsync(
+        Guid adminAccountId,
+        DateTimeOffset occurredAt,
+        long? acceptedTimeStep,
+        CancellationToken cancellationToken)
+    {
+        var adminAccount = await dbContext.AdminAccounts.SingleAsync(
+            account => account.Id == adminAccountId,
+            cancellationToken);
+        if (acceptedTimeStep is not null)
+        {
+            if (adminAccount.LastTotpTimeStep is not null &&
+                acceptedTimeStep.Value <= adminAccount.LastTotpTimeStep.Value)
+            {
+                return false;
+            }
+
+            adminAccount.LastTotpTimeStep = acceptedTimeStep;
+        }
+
+        adminAccount.FailedSecondFactorAttemptCount = 0;
+        adminAccount.SecondFactorLockedUntil = null;
+        adminAccount.UpdatedAt = occurredAt;
+        adminAccount.Version++;
+        return true;
     }
 
     /// <summary>

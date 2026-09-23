@@ -235,6 +235,21 @@ Local password login requires account lockout or an equivalent local protection
 mechanism. Lockout and rate-limit decisions that indicate abuse or account
 protection are security-relevant.
 
+The second factor has its own account-level limit, because a fresh MFA
+challenge with a fresh attempt cap is one correct password away. Wrong TOTP or
+Recovery Codes at sign-in and wrong step-up codes count against the account
+together; at `Admin:Authentication:MaxFailedSecondFactorAttempts` (default 10)
+the second factor is locked for `Admin:Authentication:LockoutDuration`. A
+correct password does not reset that count; only a verified second factor
+does.
+
+A TOTP time step is accepted once per account. A code observed at sign-in or
+step-up does not work again while it is still inside the allowed clock skew.
+
+Login refuses unknown, disabled, and locked usernames only after the same
+password-hashing work a real check costs, so response time does not reveal
+whether an account exists or is locked.
+
 Integration API and remote MCP rate-limit defaults are separate implementation
 work.
 
