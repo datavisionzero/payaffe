@@ -41,6 +41,15 @@ public sealed class StorefrontOptions
     public string WebhookSecret { get; init; } = string.Empty;
 
     public string FiatCurrency { get; init; } = "EUR";
+
+    /// <summary>
+    /// Whether a Payment from a Test Mode installation may fulfil an order here. Off by default,
+    /// and it stays off in production: a test installation pointed at this storefront's webhook
+    /// URL with its secret signs its events validly, so the signature does not prove the money
+    /// was real, and <c>TestMode</c> is the field that does. Turn it on for the storefront a
+    /// developer runs against a test installation, which also enables simulating the payment.
+    /// </summary>
+    public bool AcceptTestPayments { get; init; }
 }
 
 /// <summary>

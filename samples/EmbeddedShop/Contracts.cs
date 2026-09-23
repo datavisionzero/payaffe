@@ -4,6 +4,8 @@ internal sealed record CreateOrderRequest(string? Sku);
 
 internal sealed record SelectCurrencyBody(string? Currency);
 
+internal sealed record SimulatePaymentBody(string? Amount);
+
 internal static class ShopCustomer
 {
     public const string CookieName = "embedded-shop-customer";
@@ -30,7 +32,9 @@ internal sealed record OrderView(
     IReadOnlyList<OrderCurrencyOption> Options,
     OrderInstructionView? Instruction,
     DateTimeOffset? ExpiresAt,
-    string? LastSignal)
+    string? LastSignal,
+    bool TestMode,
+    bool CanSimulatePayment)
 {
     public static OrderView Of(ShopOrder order)
     {
@@ -57,7 +61,12 @@ internal sealed record OrderView(
                     order.Instruction.ExpiresAt,
                     $"/{order.Storefront}/api/orders/{order.OrderId:D}/payment-code.svg"),
             order.ExpiresAt,
-            order.LastSignal);
+            order.LastSignal,
+            order.TestMode,
+            order.TestMode &&
+                order.AcceptsTestPayments &&
+                order.Instruction is not null &&
+                order.Fulfillment == FulfillmentState.AwaitingPayment);
     }
 }
 

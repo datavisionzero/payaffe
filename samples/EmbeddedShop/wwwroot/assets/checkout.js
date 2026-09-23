@@ -17,6 +17,8 @@ const elements = {
   address: document.getElementById('address'),
   expires: document.getElementById('expires'),
   walletLink: document.getElementById('wallet-link'),
+  testMode: document.getElementById('test-mode'),
+  simulate: document.getElementById('simulate-payment'),
   status: document.getElementById('status'),
   error: document.getElementById('error'),
 };
@@ -160,7 +162,26 @@ function startPolling() {
   }, 3000);
 }
 
+async function simulatePayment() {
+  clearError();
+  try {
+    order = await call(`/api/orders/${order.orderId}/simulated-payment`, {
+      method: 'POST',
+      body: JSON.stringify({ amount: null }),
+    });
+    elements.simulate.disabled = true;
+    elements.status.textContent = 'Simulated transfer sent. Waiting for it to be observed.';
+  } catch {
+    showError('The payment could not be simulated.');
+  }
+}
+
 function renderStatus() {
+  // A Test Mode installation says so on every Payment. The shop shows it rather than letting a
+  // simulated checkout look like a real one.
+  elements.testMode.hidden = !order.testMode;
+  elements.simulate.hidden = !order.canSimulatePayment;
+
   // The page never decides that an order is paid. It shows what the shop backend concluded from
   // a verified webhook or a reconciling read, and nothing else.
   if (order.fulfillment === 'Fulfilled') {
@@ -194,6 +215,7 @@ function copyOnClick(id, read) {
   });
 }
 
+elements.simulate.addEventListener('click', simulatePayment);
 copyOnClick('copy-address', () => order.instruction.address);
 copyOnClick('copy-amount', () => order.instruction.amount);
 

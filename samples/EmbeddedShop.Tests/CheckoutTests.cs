@@ -59,6 +59,65 @@ public sealed class CheckoutTests
         Assert.Contains(shop.Payaffe.Requests, request => request.Path == "/api/v1/payments");
     }
 
+    /// <summary>
+    /// A Test Mode installation signs its events like any other, so a production storefront that
+    /// a test installation was pointed at would verify them. What stops the goods going out is the
+    /// event saying it was simulated.
+    /// </summary>
+    [Fact]
+    public async Task A_simulated_payment_does_not_hand_the_goods_over_in_a_production_storefront()
+    {
+        using ShopApplication shop = new();
+        using HttpClient browser = shop.CreateBrowser();
+        Guid orderId = (await PlaceOrderAsync(browser, ShopApplication.Teahouse)).GetProperty("orderId").GetGuid();
+        await SelectAsync(browser, ShopApplication.Teahouse, orderId, "BTC");
+        FakePayaffe.StoredPayment payment = shop.Payaffe.PaymentFor(orderId.ToString("D"));
+
+        using HttpResponseMessage delivered = await browser.SendAsync(ShopApplication.Delivery(
+            ShopApplication.Teahouse,
+            ShopApplication.TeahouseWebhookSecret,
+            Guid.CreateVersion7(),
+            "payment.completed",
+            payment.PaymentId,
+            orderId,
+            "completed",
+            testMode: true));
+        using HttpResponseMessage simulate = await browser.PostAsJsonAsync(
+            $"/{ShopApplication.Teahouse}/api/orders/{orderId}/simulated-payment",
+            new { amount = (string?)null });
+
+        Assert.Equal(HttpStatusCode.OK, delivered.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, simulate.StatusCode);
+        JsonElement order = await ReadOrderAsync(browser, ShopApplication.Teahouse, orderId);
+        Assert.Equal("AwaitingPayment", order.GetProperty("fulfillment").GetString());
+        Assert.True(order.GetProperty("testMode").GetBoolean());
+        Assert.False(order.GetProperty("canSimulatePayment").GetBoolean());
+    }
+
+    [Fact]
+    public async Task A_storefront_under_test_is_fulfilled_by_a_simulated_payment()
+    {
+        using ShopApplication shop = new() { TeahouseAcceptsTestPayments = true };
+        using HttpClient browser = shop.CreateBrowser();
+        Guid orderId = (await PlaceOrderAsync(browser, ShopApplication.Teahouse)).GetProperty("orderId").GetGuid();
+        await SelectAsync(browser, ShopApplication.Teahouse, orderId, "BTC");
+        FakePayaffe.StoredPayment payment = shop.Payaffe.PaymentFor(orderId.ToString("D"));
+
+        using HttpResponseMessage delivered = await browser.SendAsync(ShopApplication.Delivery(
+            ShopApplication.Teahouse,
+            ShopApplication.TeahouseWebhookSecret,
+            Guid.CreateVersion7(),
+            "payment.completed",
+            payment.PaymentId,
+            orderId,
+            "completed",
+            testMode: true));
+
+        Assert.Equal(HttpStatusCode.OK, delivered.StatusCode);
+        JsonElement order = await ReadOrderAsync(browser, ShopApplication.Teahouse, orderId);
+        Assert.Equal("Fulfilled", order.GetProperty("fulfillment").GetString());
+    }
+
     [Fact]
     public async Task A_repeated_delivery_does_not_hand_the_goods_over_twice()
     {

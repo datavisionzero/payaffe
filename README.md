@@ -140,6 +140,17 @@ payaffe projects, a checkout page that loads nothing from payaffe, a QR code the
 shop renders itself, and fulfilment that happens once no matter how often the
 webhook is delivered.
 
+### Testing an integration without real money
+
+An installation started with `PAYAFFE_INSTALLATION_MODE=test` needs no wallet,
+no blockchain provider and no exchange-rate key. Its addresses cannot receive
+real funds, and a payment arrives when someone simulates it: an "I have paid"
+button on the payer page, or `SimulatePaymentAsync` in the SDK. Everything after
+that, webhooks included, behaves as it does in production, and every payment
+and webhook says it is a test one
+([ADR 0033](docs/adr/0033-a-test-installation-simulates-its-external-truth.md)).
+Setting one up is in [docs/operations/test-mode.md](docs/operations/test-mode.md).
+
 ## Development
 
 ```sh

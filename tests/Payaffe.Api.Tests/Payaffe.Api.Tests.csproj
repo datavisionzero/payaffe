@@ -20,6 +20,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\apps\api\Payaffe.Api.csproj" />
     <ProjectReference Include="..\..\src\Payaffe.Sdk\Payaffe.Sdk.csproj" />
+    <!-- Aliased: the sample has a public Program of its own, and this project's tests mean the
+         API's whenever they say Program. -->
+    <ProjectReference Include="..\..\samples\EmbeddedShop\EmbeddedShop.csproj" Aliases="shop" />
   </ItemGroup>
 
 </Project>

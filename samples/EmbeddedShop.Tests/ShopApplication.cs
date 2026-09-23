@@ -30,12 +30,20 @@ internal sealed class ShopApplication : WebApplicationFactory<Program>
     /// </summary>
     public bool ReconcileByPolling { get; init; }
 
+    /// <summary>
+    /// Sets the teahouse up the way a developer runs it against a Test Mode installation.
+    /// </summary>
+    public bool TeahouseAcceptsTestPayments { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("Shop:ReconcileByPolling", ReconcileByPolling ? "true" : "false");
         builder.UseSetting($"Shop:Storefronts:{Teahouse}:PayaffeBaseAddress", "http://payaffe.invalid");
         builder.UseSetting($"Shop:Storefronts:{Teahouse}:PayaffeApiToken", FakePayaffe.TeahouseToken);
         builder.UseSetting($"Shop:Storefronts:{Teahouse}:WebhookSecret", TeahouseWebhookSecret);
+        builder.UseSetting(
+            $"Shop:Storefronts:{Teahouse}:AcceptTestPayments",
+            TeahouseAcceptsTestPayments ? "true" : "false");
         builder.UseSetting($"Shop:Storefronts:{Roastery}:PayaffeBaseAddress", "http://payaffe-two.invalid");
         builder.UseSetting($"Shop:Storefronts:{Roastery}:PayaffeApiToken", FakePayaffe.RoasteryToken);
         builder.UseSetting($"Shop:Storefronts:{Roastery}:WebhookSecret", RoasteryWebhookSecret);
@@ -67,7 +75,8 @@ internal sealed class ShopApplication : WebApplicationFactory<Program>
         Guid paymentId,
         Guid externalReference,
         string status,
-        DateTimeOffset? signedAt = null)
+        DateTimeOffset? signedAt = null,
+        bool testMode = false)
     {
         DateTimeOffset at = signedAt ?? DateTimeOffset.UtcNow;
         string body = JsonSerializer.Serialize(new Dictionary<string, object?>
@@ -77,6 +86,7 @@ internal sealed class ShopApplication : WebApplicationFactory<Program>
             ["event_version"] = "2026-01-01",
             ["occurred_at"] = at,
             ["correlation_id"] = "test-correlation",
+            ["test_mode"] = testMode,
             ["resource"] = new Dictionary<string, object?>
             {
                 ["type"] = "payment",

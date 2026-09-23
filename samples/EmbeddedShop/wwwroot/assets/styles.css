@@ -122,3 +122,9 @@ code {
 .error {
   color: var(--alarm);
 }
+
+.notice {
+  border: 2px dashed currentColor;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+}

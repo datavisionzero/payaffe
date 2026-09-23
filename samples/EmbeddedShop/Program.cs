@@ -137,6 +137,21 @@ app.MapPost("/{storefront}/api/orders/{orderId:guid}/currency", async (
         body.Currency ?? string.Empty,
         cancellationToken));
 
+// Test Mode only: stands in for the customer's wallet. Answers not found unless the storefront
+// accepts test payments.
+app.MapPost("/{storefront}/api/orders/{orderId:guid}/simulated-payment", async (
+    string storefront,
+    Guid orderId,
+    SimulatePaymentBody body,
+    HttpContext context,
+    ShopPayments payments,
+    CancellationToken cancellationToken) => await payments.SimulatePaymentAsync(
+        storefront,
+        orderId,
+        ShopCustomer.Of(context),
+        body.Amount,
+        cancellationToken));
+
 // The QR code is rendered here, by this backend, and served from this origin. The browser asks
 // its own shop for it and never learns that Payaffe exists.
 app.MapGet("/{storefront}/api/orders/{orderId:guid}/payment-code.svg", (
