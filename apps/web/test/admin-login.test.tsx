@@ -80,6 +80,33 @@ describe("AdminLoginPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("signs in with a username that is not an email address", async () => {
+    // `bootstrap-admin --username admin` is accepted by the server; the browser
+    // must not block the submit for a missing "@".
+    let submittedUsername: string | undefined;
+    adminServer.use(
+      http.post("/api/admin/auth/login", async ({ request }) => {
+        submittedUsername = ((await request.json()) as { username?: string }).username;
+        state.authenticated = true;
+        return HttpResponse.json({ status: "authenticated", challengeId: null });
+      })
+    );
+
+    renderAdmin(<AdminLoginPage />);
+
+    expect(await screen.findByRole("heading", { name: "Admin sign-in" })).toBeInTheDocument();
+    const username = screen.getByLabelText("Username");
+    expect(username).toHaveAttribute("autocomplete", "username");
+    fireEvent.change(username, { target: { value: "admin" } });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct-password" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await vi.waitFor(() => expect(submittedUsername).toBe("admin"));
+    await vi.waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/admin"));
+  });
+
   it("can complete MFA with a recovery code", async () => {
     renderAdmin(<AdminLoginPage />);
 
