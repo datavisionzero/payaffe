@@ -129,6 +129,37 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
             paymentEvent => paymentEvent.EventType == "payment.reorg_alerted");
     }
 
+    /// <summary>
+    /// A transaction is routinely first seen in the mempool, short of its
+    /// Confirmation Requirement. The poll that later reports it deep enough is
+    /// what completes the Payment; it is the same transaction, so it is not
+    /// recorded twice.
+    /// </summary>
+    [Fact]
+    public async Task A_transaction_first_seen_without_confirmations_completes_the_payment_when_a_later_poll_confirms_it()
+    {
+        var observationAdapter = new QueuedBlockchainObservationAdapter(
+            new BlockchainObservation("tx-mempool", "0.00039980", WorkerNow.AddMinutes(1), Confirmations: 0, "test-provider", null),
+            new BlockchainObservation("tx-mempool", "0.00039980", WorkerNow.AddMinutes(1), Confirmations: 1, "test-provider", null));
+        await using var context = await BuildContextAsync(observationAdapter);
+        var payments = context.ServiceProvider.GetRequiredService<PaymentApplicationService>();
+
+        var first = await payments.PollBlockchainObservationsAsync(10, CancellationToken.None);
+        context.DbContext.ChangeTracker.Clear();
+        Assert.Equal("observed", Assert.Single(context.DbContext.Payments).Status);
+
+        var second = await payments.PollBlockchainObservationsAsync(10, CancellationToken.None);
+        context.DbContext.ChangeTracker.Clear();
+
+        Assert.Equal(0, first.CompletedCount);
+        Assert.Equal(1, second.AlreadyRecordedCount);
+        Assert.Equal(1, second.CompletedCount);
+        Assert.Equal(0, second.FailedCount);
+        Assert.Equal("completed", Assert.Single(context.DbContext.Payments).Status);
+        Assert.Equal(1, Assert.Single(context.DbContext.MatchingBlockchainTransactions).Confirmations);
+        Assert.Single(context.DbContext.WebhookOutboxEvents, webhookEvent => webhookEvent.EventType == "payment.completed");
+    }
+
     private async Task<WorkerContext> BuildContextAsync(QueuedBlockchainObservationAdapter observationAdapter)
     {
         var connectionString = await postgres.CreateDatabaseAsync();
@@ -348,10 +379,14 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
         }
     }
 
-    private sealed class QueuedBlockchainObservationAdapter(BlockchainObservation observation)
+    /// <summary>
+    /// Reports one queued observation per poll, in order, and nothing once
+    /// the queue is empty.
+    /// </summary>
+    private sealed class QueuedBlockchainObservationAdapter(params BlockchainObservation[] observations)
         : IBlockchainObservationAdapter
     {
-        private bool _returnedObservation;
+        private readonly Queue<BlockchainObservation> _observations = new(observations);
 
         public BlockchainObservationTarget? Target { get; private set; }
 
@@ -372,13 +407,8 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
             Target = target;
             PollCount++;
 
-            if (_returnedObservation)
-            {
-                return Task.FromResult<IReadOnlyList<BlockchainObservation>>([]);
-            }
-
-            _returnedObservation = true;
-            return Task.FromResult<IReadOnlyList<BlockchainObservation>>([observation]);
+            return Task.FromResult<IReadOnlyList<BlockchainObservation>>(
+                _observations.TryDequeue(out var observation) ? [observation] : []);
         }
     }
 }
