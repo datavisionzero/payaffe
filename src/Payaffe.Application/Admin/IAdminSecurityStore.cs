@@ -31,27 +31,43 @@ public interface IAdminSecurityStore
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken);
 
-    Task RecordFailedPasswordVerificationAsync(
-        Guid? adminAccountId,
+    /// <summary>
+    /// Counts one wrong password against the account and locks it for
+    /// <paramref name="lockoutDuration"/> once <paramref name="maxFailedAttempts"/>
+    /// is reached.
+    /// </summary>
+    /// <remarks>
+    /// The increment is made against the stored count, not one the caller
+    /// read earlier, so parallel failures each count.
+    /// </remarks>
+    Task<AdminFailedAttemptOutcome> RecordFailedPasswordVerificationAsync(
+        Guid adminAccountId,
         DateTimeOffset occurredAt,
-        int? failedPasswordAttemptCount,
-        DateTimeOffset? lockedUntil,
-        AdminAuditEntry auditEntry,
+        int maxFailedAttempts,
+        TimeSpan lockoutDuration,
+        Func<AdminFailedAttemptOutcome, AdminAuditEntry> createAuditEntry,
         CancellationToken cancellationToken);
 
     Task<AdminLoginChallengeReadModel?> FindLoginChallengeAsync(
         Guid challengeId,
         CancellationToken cancellationToken);
 
-    Task RecordFailedMfaVerificationAsync(
-        Guid? challengeId,
+    /// <summary>
+    /// Counts one wrong code against the login challenge and consumes it once
+    /// <paramref name="maxFailedAttempts"/> is reached.
+    /// </summary>
+    Task<AdminFailedAttemptOutcome> RecordFailedMfaVerificationAsync(
+        Guid challengeId,
         DateTimeOffset occurredAt,
-        int? failedAttemptCount,
-        DateTimeOffset? consumedAt,
-        AdminAuditEntry auditEntry,
+        int maxFailedAttempts,
+        Func<AdminFailedAttemptOutcome, AdminAuditEntry> createAuditEntry,
         CancellationToken cancellationToken);
 
-    Task CompleteMfaVerificationAsync(
+    /// <summary>
+    /// Consumes the challenge and issues the session. Returns false, writing
+    /// nothing, when the challenge was consumed or expired in the meantime.
+    /// </summary>
+    Task<bool> CompleteMfaVerificationAsync(
         Guid challengeId,
         DateTimeOffset consumedAt,
         AdminSessionDraft session,
@@ -62,7 +78,11 @@ public interface IAdminSecurityStore
         Guid adminAccountId,
         CancellationToken cancellationToken);
 
-    Task CompleteMfaVerificationWithRecoveryCodeAsync(
+    /// <summary>
+    /// Consumes the challenge and the Recovery Code and issues the session.
+    /// Returns false, writing nothing, when either was used in the meantime.
+    /// </summary>
+    Task<bool> CompleteMfaVerificationWithRecoveryCodeAsync(
         Guid challengeId,
         Guid recoveryCodeId,
         DateTimeOffset consumedAt,

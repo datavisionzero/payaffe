@@ -29,8 +29,6 @@ public sealed class AdminAuthenticationService(
                 occurredAt,
                 command,
                 "admin_login.invalid_credentials",
-                failedPasswordAttemptCount: null,
-                lockedUntil: null,
                 cancellationToken);
             return AdminLoginStartResult.InvalidCredentials();
         }
@@ -43,8 +41,6 @@ public sealed class AdminAuthenticationService(
                 occurredAt,
                 command,
                 "admin_login.invalid_credentials",
-                failedPasswordAttemptCount: null,
-                lockedUntil: null,
                 cancellationToken);
             return AdminLoginStartResult.InvalidCredentials();
         }
@@ -56,8 +52,6 @@ public sealed class AdminAuthenticationService(
                 occurredAt,
                 command,
                 "admin_login.account_disabled",
-                adminAccount.FailedPasswordAttemptCount,
-                adminAccount.LockedUntil,
                 cancellationToken);
             return AdminLoginStartResult.InvalidCredentials();
         }
@@ -69,25 +63,22 @@ public sealed class AdminAuthenticationService(
                 occurredAt,
                 command,
                 "admin_login.account_locked",
-                adminAccount.FailedPasswordAttemptCount,
-                adminAccount.LockedUntil,
                 cancellationToken);
             return AdminLoginStartResult.InvalidCredentials();
         }
 
         if (!passwordHasher.VerifyPassword(command.Password, adminAccount.PasswordHash))
         {
-            var failedCount = adminAccount.FailedPasswordAttemptCount + 1;
-            var lockedUntil = failedCount >= _options.MaxFailedPasswordAttempts
-                ? occurredAt.Add(_options.LockoutDuration)
-                : (DateTimeOffset?)null;
-            await RecordFailureAsync(
-                adminAccount,
+            await store.RecordFailedPasswordVerificationAsync(
+                adminAccount.Id,
                 occurredAt,
-                command,
-                lockedUntil is null ? "admin_login.invalid_credentials" : "admin_login.account_locked",
-                failedCount,
-                lockedUntil,
+                _options.MaxFailedPasswordAttempts,
+                _options.LockoutDuration,
+                outcome => CreateLoginFailureAuditEntry(
+                    adminAccount,
+                    occurredAt,
+                    command,
+                    outcome.LimitReached ? "admin_login.account_locked" : "admin_login.invalid_credentials"),
                 cancellationToken);
             return AdminLoginStartResult.InvalidCredentials();
         }
@@ -171,8 +162,6 @@ public sealed class AdminAuthenticationService(
                 occurredAt,
                 command,
                 "admin_mfa.invalid",
-                failedAttemptCount: null,
-                consumedAt: null,
                 cancellationToken);
             return AdminMfaCompleteResult.Invalid();
         }
@@ -185,8 +174,6 @@ public sealed class AdminAuthenticationService(
                 occurredAt,
                 command,
                 "admin_mfa.invalid",
-                failedAttemptCount: null,
-                consumedAt: null,
                 cancellationToken);
             return AdminMfaCompleteResult.Invalid();
         }
@@ -200,8 +187,6 @@ public sealed class AdminAuthenticationService(
                 occurredAt,
                 command,
                 challenge.ExpiresAt <= occurredAt ? "admin_mfa.challenge_expired" : "admin_mfa.invalid",
-                challenge.FailedAttemptCount,
-                challenge.ConsumedAt,
                 cancellationToken);
             return AdminMfaCompleteResult.Invalid();
         }
@@ -215,7 +200,7 @@ public sealed class AdminAuthenticationService(
                 var sessionToken = sessionTokenService.GenerateToken();
                 var session = CreateSessionDraft(challenge.AdminAccountId, sessionToken, occurredAt);
 
-                await store.CompleteMfaVerificationAsync(
+                var completed = await store.CompleteMfaVerificationAsync(
                     challenge.Id,
                     occurredAt,
                     session,
@@ -230,6 +215,13 @@ public sealed class AdminAuthenticationService(
                         subjectType: "admin_session",
                         subjectId: session.Id.ToString("D")),
                     cancellationToken);
+                if (!completed)
+                {
+                    // A parallel request used the challenge or the Recovery
+                    // Code first; single use means this one fails.
+                    await RecordMfaFailureAsync(challenge, occurredAt, command, "admin_mfa.invalid", cancellationToken);
+                    return AdminMfaCompleteResult.Invalid();
+                }
 
                 await RevokeSessionsWithoutSecondFactorAsync(
                     challenge.AdminAccountId,
@@ -254,7 +246,7 @@ public sealed class AdminAuthenticationService(
                 var sessionToken = sessionTokenService.GenerateToken();
                 var session = CreateSessionDraft(challenge.AdminAccountId, sessionToken, occurredAt);
 
-                await store.CompleteMfaVerificationWithRecoveryCodeAsync(
+                var completed = await store.CompleteMfaVerificationWithRecoveryCodeAsync(
                     challenge.Id,
                     matchingRecoveryCode.Id,
                     occurredAt,
@@ -280,6 +272,13 @@ public sealed class AdminAuthenticationService(
                         subjectType: "admin_account",
                         subjectId: challenge.AdminAccountId.ToString("D")),
                     cancellationToken);
+                if (!completed)
+                {
+                    // A parallel request used the challenge or the Recovery
+                    // Code first; single use means this one fails.
+                    await RecordMfaFailureAsync(challenge, occurredAt, command, "admin_mfa.invalid", cancellationToken);
+                    return AdminMfaCompleteResult.Invalid();
+                }
 
                 await RevokeSessionsWithoutSecondFactorAsync(
                     challenge.AdminAccountId,
@@ -293,17 +292,15 @@ public sealed class AdminAuthenticationService(
             }
         }
 
-        var failedAttemptCount = challenge.FailedAttemptCount + 1;
-        var consumedAt = failedAttemptCount >= _options.MaxFailedMfaAttempts
-            ? occurredAt
-            : (DateTimeOffset?)null;
-        await RecordMfaFailureAsync(
-            challenge,
+        await store.RecordFailedMfaVerificationAsync(
+            challenge.Id,
             occurredAt,
-            command,
-            consumedAt is null ? "admin_mfa.invalid" : "admin_mfa.challenge_locked",
-            failedAttemptCount,
-            consumedAt,
+            _options.MaxFailedMfaAttempts,
+            outcome => CreateMfaFailureAuditEntry(
+                challenge,
+                occurredAt,
+                command,
+                outcome.LimitReached ? "admin_mfa.challenge_locked" : "admin_mfa.invalid"),
             cancellationToken);
         return AdminMfaCompleteResult.Invalid();
     }
@@ -605,26 +602,27 @@ public sealed class AdminAuthenticationService(
         DateTimeOffset occurredAt,
         AdminLoginStartCommand command,
         string reasonCode,
-        int? failedPasswordAttemptCount,
-        DateTimeOffset? lockedUntil,
         CancellationToken cancellationToken)
     {
-        await store.RecordFailedPasswordVerificationAsync(
-            adminAccount?.Id,
-            occurredAt,
-            failedPasswordAttemptCount,
-                lockedUntil,
-                CreateAuditEntry(
-                "admin.login_start",
-                occurredAt,
-                command,
-                outcome: reasonCode == "admin_login.account_locked" ? "denied" : "failure",
-                actorType: adminAccount is null ? "system" : "product_user",
-                actorId: adminAccount?.Id.ToString("D") ?? "unknown",
-                reasonCode,
-                subjectId: adminAccount?.Id.ToString("D") ?? "unknown"),
+        await store.RecordSecurityAuditAsync(
+            CreateLoginFailureAuditEntry(adminAccount, occurredAt, command, reasonCode),
             cancellationToken);
     }
+
+    private static AdminAuditEntry CreateLoginFailureAuditEntry(
+        AdminAccountReadModel? adminAccount,
+        DateTimeOffset occurredAt,
+        AdminLoginStartCommand command,
+        string reasonCode) =>
+        CreateAuditEntry(
+            "admin.login_start",
+            occurredAt,
+            command,
+            outcome: reasonCode == "admin_login.account_locked" ? "denied" : "failure",
+            actorType: adminAccount is null ? "system" : "product_user",
+            actorId: adminAccount?.Id.ToString("D") ?? "unknown",
+            reasonCode,
+            subjectId: adminAccount?.Id.ToString("D") ?? "unknown");
 
     private async Task RecordStepUpFailureAsync(
         AdminSessionReadModel session,
@@ -651,27 +649,28 @@ public sealed class AdminAuthenticationService(
         DateTimeOffset occurredAt,
         AdminMfaCompleteCommand command,
         string reasonCode,
-        int? failedAttemptCount,
-        DateTimeOffset? consumedAt,
         CancellationToken cancellationToken)
     {
-        await store.RecordFailedMfaVerificationAsync(
-            challenge?.Id,
-            occurredAt,
-            failedAttemptCount,
-            consumedAt,
-            CreateAuditEntry(
-                "admin.mfa_complete",
-                occurredAt,
-                command,
-                outcome: reasonCode == "admin_mfa.challenge_locked" ? "denied" : "failure",
-                actorType: challenge is null ? "system" : "product_user",
-                actorId: challenge?.AdminAccountId.ToString("D") ?? "unknown",
-                reasonCode,
-                subjectType: challenge is null ? "admin_account" : "admin_login_challenge",
-                subjectId: challenge?.Id.ToString("D") ?? "unknown"),
+        await store.RecordSecurityAuditAsync(
+            CreateMfaFailureAuditEntry(challenge, occurredAt, command, reasonCode),
             cancellationToken);
     }
+
+    private static AdminAuditEntry CreateMfaFailureAuditEntry(
+        AdminLoginChallengeReadModel? challenge,
+        DateTimeOffset occurredAt,
+        AdminMfaCompleteCommand command,
+        string reasonCode) =>
+        CreateAuditEntry(
+            "admin.mfa_complete",
+            occurredAt,
+            command,
+            outcome: reasonCode == "admin_mfa.challenge_locked" ? "denied" : "failure",
+            actorType: challenge is null ? "system" : "product_user",
+            actorId: challenge?.AdminAccountId.ToString("D") ?? "unknown",
+            reasonCode,
+            subjectType: challenge is null ? "admin_account" : "admin_login_challenge",
+            subjectId: challenge?.Id.ToString("D") ?? "unknown");
 
     private static AdminAuditEntry CreateAuditEntry(
         string eventType,
