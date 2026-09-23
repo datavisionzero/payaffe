@@ -44,13 +44,16 @@ selection is only a convenience and is never authorization evidence:
 | --- | --- |
 | `/admin/login` | Sign-in and the second step, outside the shell |
 | `/admin` | Installation overview and redirect into a Selected Project when appropriate |
-| `/admin/projects` | Project list, creation, status, and archival |
+| `/admin/projects` | Project list, status, and archival |
+| `/admin/projects/new` | Project creation |
 | `/admin/projects/{projectId}` | Project overview: Reorg Alerts, Webhook Delivery backlog, Address Pool capacity, and recent Payments |
 | `/admin/projects/{projectId}/payments` | Payment list |
 | `/admin/projects/{projectId}/payments/{paymentId}` | Payment detail and manual Settlement |
 | `/admin/projects/{projectId}/monitoring` | Project payment health and Reorg Alerts, with installation-wide Observation Health labelled separately |
 | `/admin/projects/{projectId}/webhooks` | Webhook Endpoints, and Webhook Deliveries under `?view=deliveries` |
+| `/admin/projects/{projectId}/webhooks/new` | Webhook Endpoint creation |
 | `/admin/projects/{projectId}/integrations` | Integration API Credentials |
+| `/admin/projects/{projectId}/integrations/new` | Integration API Credential creation and its one-time bearer token |
 | `/admin/projects/{projectId}/addresses` | Project Watch-Only Wallet Sources and native ETH Address Pool |
 | `/admin/audit-log` | Audit Log list and export |
 | `/admin/audit-log/{eventId}` | Audit Log entry detail |
@@ -211,6 +214,8 @@ copied shadcn defaults is a failure.
 - Screen headers use a compact 3rem minimum row with a small semibold title,
   muted metadata, and actions aligned consistently. Body text defaults to the
   compact `text-sm` scale.
+- A list view lists and links to a separate create route from one primary
+  action in its header; it does not render the create form above the list.
 - Lists and tables favor scan density: one primary line per item, bounded
   secondary text, aligned numeric columns, and stable row actions. Dense never
   means unlabeled, clipped without disclosure, or keyboard-inaccessible.

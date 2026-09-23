@@ -163,6 +163,24 @@ describe("AdminShell", () => {
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
 
+  it("treats the Project create page as an installation view of Projects", async () => {
+    state.authenticated = true;
+    nav.pathname = "/admin/projects/new";
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    expect(await screen.findByText("Protected content")).toBeInTheDocument();
+    expect(screen.queryByText(/This Project is unavailable/)).not.toBeInTheDocument();
+    const navigation = screen.getByRole("navigation", { name: "Admin sections" });
+    expect(within(navigation).getByRole("link", { name: "Projects" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+  });
+
   it("makes an archived Project read-only", async () => {
     state.authenticated = true;
     state.projects[0] = { ...state.projects[0], status: "archived" };

@@ -2,9 +2,12 @@ export function adminProjectPath(projectId: string, suffix = ""): string {
   return `/admin/projects/${encodeURIComponent(projectId)}${suffix}`;
 }
 
+// Project IDs are UUIDs, so this segment never names a Project.
+export const adminProjectCreatePath = "/admin/projects/new";
+
 export function projectIdFromAdminPath(pathname: string): string | null {
   const match = /^\/admin\/projects\/([^/]+)(?:\/|$)/.exec(pathname);
-  if (!match) {
+  if (!match || match[1] === "new") {
     return null;
   }
 

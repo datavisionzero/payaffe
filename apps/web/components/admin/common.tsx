@@ -4,7 +4,9 @@ import { createText } from "../../lib/text";
 import type React from "react";
 import { useId } from "react";
 import type { useForm } from "react-hook-form";
-import { Button } from "../ui/button";
+import Link from "../../lib/link";
+import { cn } from "../../lib/utils";
+import { Button, buttonVariants } from "../ui/button";
 import { AdminApiError, type CredentialForm } from "../../lib/admin-api";
 
 const t = createText({
@@ -117,6 +119,27 @@ export function SubmitButton({ busy, children }: { busy: boolean; children: Reac
     <Button className="h-10 px-4" disabled={busy} type="submit">
       {children}
     </Button>
+  );
+}
+
+// Opens a separate view, such as a create page, with the look of a primary
+// button; it navigates rather than submits.
+export function LinkButton({ children, href }: { children: React.ReactNode; href: string }) {
+  return (
+    <Link className={cn(buttonVariants(), "h-10 px-4")} href={href}>
+      {children}
+    </Link>
+  );
+}
+
+export function CancelLink({ children, href }: { children: React.ReactNode; href: string }) {
+  return (
+    <Link
+      className="inline-flex h-10 items-center rounded-md border border-[var(--border)] px-4 text-sm font-medium hover:bg-[var(--muted)]"
+      href={href}
+    >
+      {children}
+    </Link>
   );
 }
 

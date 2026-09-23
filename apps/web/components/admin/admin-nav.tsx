@@ -16,7 +16,7 @@ import {
   WalletCardsIcon
 } from "lucide-react";
 import { type AdminAttention, useAdminAttention } from "./attention";
-import { adminProjectPath } from "./project-routes";
+import { adminProjectCreatePath, adminProjectPath } from "./project-routes";
 
 const t = createText({
   ariaLabel: "Admin sections",
@@ -175,10 +175,11 @@ function badgeFor(
 }
 
 // Project and overview entries are exact views; every other entry owns its
-// subtree, so a Payment detail keeps Payments marked.
+// subtree, so a Payment detail keeps Payments marked. Creating a Project is
+// part of the Projects entry although the Project routes sit beneath it.
 function isActive(pathname: string, href: string, exact = false): boolean {
   if (exact) {
-    return pathname === href;
+    return pathname === href || (href === "/admin/projects" && pathname === adminProjectCreatePath);
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

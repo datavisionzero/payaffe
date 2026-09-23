@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "../../lib/link";
-import { useSearchParams } from "../../lib/navigation";
+import { useRouter, useSearchParams } from "../../lib/navigation";
 import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -21,9 +21,12 @@ import { cn } from "../../lib/utils";
 import {
   ActionButton,
   AdminSection,
+  CancelLink,
   EmptyMessage,
   ErrorMessage,
+  LinkButton,
   PageHeader,
+  Panel,
   StateMessage,
   StatusPill,
   SubmitButton,
@@ -45,9 +48,12 @@ const WEBHOOK_EVENT_TYPES = [
 ];
 const t = createText({
   allEvents: "All supported Payment events",
+  cancel: "Cancel",
   confirmDisable: "Disable the Webhook Endpoint {url}? Payment events are no longer sent to it.",
   confirmRotate: "Rotate the secret reference of {url}? Deliveries are signed with the new secret from then on.",
   createWebhookEndpoint: "Create Webhook Endpoint",
+  createWebhookEndpointDescription:
+    "Payment events of the selected Integration API Credential are signed and sent to this URL.",
   credential: "Integration API Credential",
   disableWebhookEndpoint: "Disable Webhook Endpoint",
   eventTypes: "Payment event types",
@@ -70,6 +76,8 @@ const t = createText({
   webhookDeliveriesTitle: "Webhook deliveries",
   webhookDeliveryCount: "{count, plural, one {# delivery} other {# deliveries}}",
   webhookDeliveryResent: "Resend completed with status {status}.",
+  webhookEndpointsEmpty: "No Webhook Endpoints exist yet.",
+  createFirstWebhookEndpoint: "Create the first Webhook Endpoint",
   webhookEndpointsDescription: "Manage the external destinations configured for Payment events.",
   webhookEndpointsTab: "Endpoints",
   webhookEndpointsTitle: "Webhook Endpoints",
@@ -141,11 +149,40 @@ function ViewTab({
 
 function WebhookEndpointSection() {
   const project = useAdminProject();
+  const createPath = adminProjectPath(project.projectId, "/webhooks/new");
+  const query = useQuery(adminQueries.webhookEndpoints(project.projectId));
+
+  return (
+    <AdminSection
+      actions={<LinkButton href={createPath}>{t("createWebhookEndpoint")}</LinkButton>}
+      description={t("webhookEndpointsDescription")}
+      title={t("webhookEndpointsTitle")}
+    >
+      {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
+      {query.isError ? <ErrorMessage error={query.error} /> : null}
+      {query.data?.length === 0 ? (
+        <EmptyMessage>
+          {t("webhookEndpointsEmpty")}{" "}
+          <Link className="font-medium text-[var(--brand-ink)]" href={createPath}>
+            {t("createFirstWebhookEndpoint")}
+          </Link>
+        </EmptyMessage>
+      ) : null}
+      <div className="mt-5 grid gap-4">
+        {query.data?.map((endpoint) => <WebhookEndpointItem endpoint={endpoint} key={endpoint.id} />)}
+      </div>
+    </AdminSection>
+  );
+}
+
+export function AdminWebhookEndpointCreatePage() {
+  const project = useAdminProject();
   const projectId = project.projectId;
+  const listPath = adminProjectPath(projectId, "/webhooks");
+  const router = useRouter();
   const queryClient = useQueryClient();
   const withStepUp = useWithStepUp();
   const credentials = useQuery(adminQueries.credentials(projectId));
-  const query = useQuery(adminQueries.webhookEndpoints(projectId));
   const form = useForm<WebhookEndpointForm>({
     defaultValues: {
       integrationApiCredentialId: "",
@@ -158,8 +195,8 @@ function WebhookEndpointSection() {
     mutationFn: (command: WebhookEndpointForm) =>
       withStepUp(() => createAdminWebhookEndpoint(projectId, command)),
     onSuccess: async () => {
-      form.reset();
       await invalidateAdminConfiguration(queryClient, projectId);
+      router.push(listPath);
     }
   });
   const submit = form.handleSubmit((values) => {
@@ -172,49 +209,50 @@ function WebhookEndpointSection() {
   });
 
   return (
-    <AdminSection
-      description={t("webhookEndpointsDescription")}
-      title={t("webhookEndpointsTitle")}
-    >
-      <form className="mt-5 grid gap-4" onSubmit={submit}>
-        <label className="block text-sm font-medium">
-          <span>{t("credential")}</span>
-          <select
-            className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
-            {...form.register("integrationApiCredentialId")}
-          >
-            <option value="">{t("selectCredential")}</option>
-            {credentials.data
-              ?.filter((credential) => credential.status !== "disabled")
-              .map((credential) => (
-                <option key={credential.id} value={credential.id}>
-                  {credential.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <TextField
-          error={form.formState.errors.url?.message}
-          label={t("webhookUrl")}
-          {...form.register("url")}
-        />
-        <TextField
-          error={form.formState.errors.secretReference?.message}
-          label={t("secretReference")}
-          {...form.register("secretReference")}
-        />
-        <EventTypeFields register={form.register} />
-        <SubmitButton busy={mutation.isPending}>
-          {mutation.isPending ? t("submitting") : t("createWebhookEndpoint")}
-        </SubmitButton>
-      </form>
-      {mutation.isError ? <ErrorMessage error={mutation.error} /> : null}
-      {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
-      {query.isError ? <ErrorMessage error={query.error} /> : null}
-      <div className="mt-5 grid gap-4">
-        {query.data?.map((endpoint) => <WebhookEndpointItem endpoint={endpoint} key={endpoint.id} />)}
-      </div>
-    </AdminSection>
+    <div className="space-y-6">
+      <PageHeader
+        description={t("createWebhookEndpointDescription")}
+        title={t("createWebhookEndpoint")}
+      />
+      <Panel>
+        <form className="grid gap-4" onSubmit={submit}>
+          <label className="block text-sm font-medium">
+            <span>{t("credential")}</span>
+            <select
+              className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
+              {...form.register("integrationApiCredentialId")}
+            >
+              <option value="">{t("selectCredential")}</option>
+              {credentials.data
+                ?.filter((credential) => credential.status !== "disabled")
+                .map((credential) => (
+                  <option key={credential.id} value={credential.id}>
+                    {credential.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <TextField
+            error={form.formState.errors.url?.message}
+            label={t("webhookUrl")}
+            {...form.register("url")}
+          />
+          <TextField
+            error={form.formState.errors.secretReference?.message}
+            label={t("secretReference")}
+            {...form.register("secretReference")}
+          />
+          <EventTypeFields register={form.register} />
+          <div className="flex flex-wrap gap-3">
+            <SubmitButton busy={mutation.isPending}>
+              {mutation.isPending ? t("submitting") : t("createWebhookEndpoint")}
+            </SubmitButton>
+            <CancelLink href={listPath}>{t("cancel")}</CancelLink>
+          </div>
+        </form>
+        {mutation.isError ? <ErrorMessage error={mutation.error} /> : null}
+      </Panel>
+    </div>
   );
 }
 

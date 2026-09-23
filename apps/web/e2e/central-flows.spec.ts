@@ -318,6 +318,18 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
     "page"
   );
 
+  // The list only lists; creating happens on its own page.
+  await expect(page.getByLabel("Credential name")).toHaveCount(0);
+  await page.getByRole("link", { name: "Create credential" }).click();
+  await expect(page).toHaveURL(
+    /\/admin\/projects\/00000000-0000-0000-0000-000000000001\/integrations\/new$/
+  );
+  await expect(page.getByRole("heading", { level: 1, name: "Create credential" })).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Integrations" })).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+
   await page.getByLabel("Credential name").focus();
   await page.keyboard.type("Playwright integration");
   await page.keyboard.press("Tab");
@@ -341,7 +353,7 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
     "ebc46c0b-c785-47d5-a2b6-5d417374bd79"
   );
   await expect(page).toHaveURL(
-    /\/admin\/projects\/ebc46c0b-c785-47d5-a2b6-5d417374bd79\/integrations$/
+    /\/admin\/projects\/ebc46c0b-c785-47d5-a2b6-5d417374bd79\/integrations\/new$/
   );
   await expect(page.getByText("payaffe_playwright_one_time_token")).not.toBeVisible();
 
