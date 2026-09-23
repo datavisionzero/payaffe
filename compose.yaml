@@ -1,3 +1,11 @@
+# Webhook secrets of Projects other than the default one are named after the
+# Project, `Webhooks__Projects__<project-id>__EndpointSecrets__<name>`, so no
+# fixed line below can forward them. The api and worker read them straight from
+# `.env` instead; see docs/operations/docker-compose.md.
+x-backend-env-file: &backend-env-file
+  - path: .env
+    required: false
+
 # Configuration shared by every .NET host that talks to the product database.
 # The API and the worker host read the same settings; only the process topology
 # differs.
@@ -73,8 +81,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # The same settings as the hosts: applying the schema also records the
+    # Installation Mode and seeds the default Project from these values, so a
+    # run with less than the hosts' configuration records the wrong ones.
     environment:
-      ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
+      <<: *backend-environment
     profiles:
       - operations
 
@@ -85,6 +96,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file: *backend-env-file
     environment:
       <<: *backend-environment
       ASPNETCORE_URLS: http://+:8080
@@ -122,6 +134,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file: *backend-env-file
     environment:
       <<: *backend-environment
       Payments__LifecycleWorker__Enabled: ${PAYAFFE_LIFECYCLE_WORKER_ENABLED:-true}

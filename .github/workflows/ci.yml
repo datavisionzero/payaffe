@@ -119,7 +119,9 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
 
-      - run: docker compose build migrations api worker
+      # Named explicitly, because the Test Mode stack below runs these images
+      # under the names the deployment file pulls.
+      - run: docker compose --project-name payaffe build migrations api worker
       - run: docker build -f apps/mcp/Dockerfile -t payaffe-mcp:ci .
 
       # The deployment file names published images, so there is nothing here to
@@ -131,6 +133,40 @@ jobs:
           cd deploy
           sed 's/^PAYAFFE_DB_PASSWORD=$/PAYAFFE_DB_PASSWORD=ci-placeholder/' .env.example > .env
           docker compose config --quiet
+
+      # Rendering is not starting. This runs the deployment file the way an
+      # operator does, against the images of this commit: the migrations service
+      # first, on a fresh database, where a run with less configuration than the
+      # hosts used to record the wrong Installation Mode and stop them starting;
+      # then the stack, until every healthcheck passes.
+      - name: A Test Mode installation starts from the deployment Compose file
+        working-directory: deploy
+        env:
+          PAYAFFE_VERSION: ci
+          PROJECT_SECRET_KEY: Webhooks__Projects__0b9c3f5e-8d1a-4c2e-9f6b-2a7d4e1c8b30__EndpointSecrets__ci
+        run: |
+          for image in api worker migrations; do
+            docker tag "payaffe-$image" "ghcr.io/datavisionzero/payaffe-$image:ci"
+          done
+          sed 's/^PAYAFFE_DB_PASSWORD=$/PAYAFFE_DB_PASSWORD=ci-placeholder/' test-mode.env.example > .env
+          echo "$PROJECT_SECRET_KEY=ci-project-secret" >> .env
+
+          docker compose --profile operations run --rm migrations
+          docker compose up --detach --wait --wait-timeout 180 --pull never
+
+          test "$(docker compose exec -T db psql -U payaffe -d payaffe -tAc 'select mode from app.installation')" = test
+          # A Project's webhook secret reaches both hosts from .env alone.
+          test "$(docker compose exec -T api printenv "$PROJECT_SECRET_KEY")" = ci-project-secret
+          test "$(docker compose exec -T worker printenv "$PROJECT_SECRET_KEY")" = ci-project-secret
+          test "$(docker compose exec -T worker id -u)" != 0
+          test "$(docker compose exec -T api id -u)" != 0
+          # And again against the running installation, as a manual run would.
+          docker compose --profile operations run --rm migrations
+
+      - name: Logs of a stack that did not start
+        if: failure()
+        working-directory: deploy
+        run: docker compose --profile operations logs --no-color
 
   # What a staging installation follows. Every green trunk push moves `:main`;
   # only a release tag moves `:latest`, and that is release.yml's job. The two
