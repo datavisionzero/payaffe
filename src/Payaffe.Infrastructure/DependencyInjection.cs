@@ -78,11 +78,25 @@ public static class DependencyInjection
         services.AddScoped<IExchangeRateSecretResolver, ConfigurationExchangeRateSecretResolver>();
         services.AddSingleton<IValidateOptions<ExchangeRateOptions>, ExchangeRateOptionsValidator>();
         services.AddOptions<ExchangeRateOptions>();
-        services.AddHttpClient<CoinGeckoExchangeRateSource>(IdentifyProduct);
-        services.AddScoped<IExchangeRateSource>(
-            serviceProvider => serviceProvider.GetRequiredService<CoinGeckoExchangeRateSource>());
-        services.AddScoped<IRateCacheRefresher>(
-            serviceProvider => serviceProvider.GetRequiredService<CoinGeckoExchangeRateSource>());
+        if (installationMode.IsTest)
+        {
+            services.AddSingleton<IValidateOptions<SimulatedExchangeRateOptions>, SimulatedExchangeRateOptionsValidator>();
+            services.AddOptions<SimulatedExchangeRateOptions>();
+            services.AddScoped<SimulatedExchangeRateSource>();
+            services.AddScoped<IExchangeRateSource>(
+                serviceProvider => serviceProvider.GetRequiredService<SimulatedExchangeRateSource>());
+            services.AddScoped<IRateCacheRefresher>(
+                serviceProvider => serviceProvider.GetRequiredService<SimulatedExchangeRateSource>());
+        }
+        else
+        {
+            services.AddHttpClient<CoinGeckoExchangeRateSource>(IdentifyProduct);
+            services.AddScoped<IExchangeRateSource>(
+                serviceProvider => serviceProvider.GetRequiredService<CoinGeckoExchangeRateSource>());
+            services.AddScoped<IRateCacheRefresher>(
+                serviceProvider => serviceProvider.GetRequiredService<CoinGeckoExchangeRateSource>());
+        }
+
         services.AddSingleton<IValidateOptions<RateCacheRefreshWorkerOptions>, RateCacheRefreshWorkerOptionsValidator>();
         services.AddOptions<RateCacheRefreshWorkerOptions>();
         if (registerHostedWorkers)

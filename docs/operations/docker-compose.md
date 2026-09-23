@@ -222,6 +222,12 @@ configured for the other one; a database that already held Payments before the
 setting existed is recorded as `live`. Switching modes means starting against a
 new database, so real and simulated Payments never share one.
 
+In Test Mode the exchange rates are fixed rather than fetched: no CoinGecko
+request is made and no key is needed. The defaults are round numbers near real
+prices; `ExchangeRates__Simulated__BtcEur`, `…__BtcUsd`, `…__LtcEur`,
+`…__LtcUsd`, `…__EthEur` and `…__EthUsd` override them, in fiat per coin, and
+every Rate Lock names `simulated` as its source.
+
 Blockchain Observation mode configuration uses
 `PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE`. The accepted values are `none`,
 `blockchair`, and `nownodes`. The default `none` mode keeps provider polling
