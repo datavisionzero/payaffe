@@ -21,6 +21,7 @@ const t = createText({
   "errors.audit_log.not_found": "The Audit Log entry was not found.",
   "errors.webhook_delivery.not_found": "The Webhook Delivery was not found.",
   "errors.webhook_delivery.not_resendable": "The Webhook Delivery cannot be resent.",
+  "errors.webhook_delivery.in_progress": "The Webhook Delivery is being delivered right now. Refresh and retry.",
   "errors.project.slug_conflict": "That Project slug is already in use.",
   "errors.project.status_transition_invalid": "That Project status change is not allowed.",
   "errors.project.has_active_work": "The Project still has active payment or delivery work and cannot be archived.",
@@ -272,6 +273,8 @@ export function getAdminErrorMessage(
       return t("errors.webhook_delivery.not_found");
     case "webhook_delivery.not_resendable":
       return t("errors.webhook_delivery.not_resendable");
+    case "webhook_delivery.in_progress":
+      return t("errors.webhook_delivery.in_progress");
     case "project.slug_conflict":
       return t("errors.project.slug_conflict");
     case "project.status_transition_invalid":

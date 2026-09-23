@@ -18,6 +18,10 @@ x-backend-environment: &backend-environment
   Payments__ObservedConfirmationWait: ${PAYAFFE_OBSERVED_CONFIRMATION_WAIT:-3.00:00:00}
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}
   Webhooks__EndpointSecrets__partner-v2: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2:-}
+  # Webhook Delivery reaches public addresses only, unless the target is named
+  # here (ADR 0036): host names, addresses or CIDR ranges, comma separated. The
+  # API refuses such an Endpoint and resends from it, so both hosts read it.
+  Webhooks__Delivery__AllowedPrivateTargets: ${PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS:-}
   ExchangeRates__Enabled: ${PAYAFFE_EXCHANGE_RATES_ENABLED:-true}
   ExchangeRates__BaseUrl: ${PAYAFFE_EXCHANGE_RATES_BASE_URL:-https://api.coingecko.com}
   ExchangeRates__ApiKeyReference: ${PAYAFFE_EXCHANGE_RATES_API_KEY_REFERENCE:-}
@@ -162,6 +166,7 @@ services:
       Webhooks__Delivery__PollInterval: ${PAYAFFE_WEBHOOK_DELIVERY_POLL_INTERVAL:-00:00:10}
       Webhooks__Delivery__MaxEventsPerPoll: ${PAYAFFE_WEBHOOK_DELIVERY_MAX_EVENTS_PER_POLL:-25}
       Webhooks__Delivery__LeaseDuration: ${PAYAFFE_WEBHOOK_DELIVERY_LEASE_DURATION:-00:02:00}
+      Webhooks__Delivery__RequestTimeout: ${PAYAFFE_WEBHOOK_DELIVERY_REQUEST_TIMEOUT:-00:00:30}
       Workers__Health__ProbeInterval: ${PAYAFFE_WORKER_HEALTH_PROBE_INTERVAL:-00:00:15}
       Workers__Health__MaxAge: ${PAYAFFE_WORKER_HEALTH_MAX_AGE:-00:01:00}
     # The worker serves no HTTP endpoint, so the healthcheck runs the same

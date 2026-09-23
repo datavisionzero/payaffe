@@ -6,6 +6,7 @@ namespace Payaffe.Application.Admin;
 public sealed class AdminWebhookEndpointService(
     IAdminWebhookEndpointStore store,
     IWebhookSecretResolver secretResolver,
+    WebhookTargetPolicy targetPolicy,
     IClock clock)
 {
     private const int MaxUrlLength = 2048;
@@ -45,6 +46,11 @@ public sealed class AdminWebhookEndpointService(
             normalizedEventTypes.Invalid)
         {
             return AdminWebhookEndpointResult.InvalidInput();
+        }
+
+        if (RefusesTarget(normalizedUrl))
+        {
+            return AdminWebhookEndpointResult.TargetNotPublic();
         }
 
         if (await secretResolver.ResolveForProjectAsync(projectId, normalizedSecretReference, cancellationToken) is not { Length: > 0 })
@@ -90,6 +96,11 @@ public sealed class AdminWebhookEndpointService(
             normalizedEventTypes.Invalid)
         {
             return AdminWebhookEndpointResult.InvalidInput();
+        }
+
+        if (RefusesTarget(normalizedUrl))
+        {
+            return AdminWebhookEndpointResult.TargetNotPublic();
         }
 
         var occurredAt = clock.UtcNow;
@@ -190,6 +201,14 @@ public sealed class AdminWebhookEndpointService(
 
         return parsed.AbsoluteUri;
     }
+
+    /// <summary>
+    /// Delivery refuses a non-public target anyway (ADR 0036). A literal
+    /// address is refused here as well, so the Admin who typed it learns it
+    /// now rather than from a failed delivery later.
+    /// </summary>
+    private bool RefusesTarget(string normalizedUrl) =>
+        targetPolicy.RefusesLiteralTarget(new Uri(normalizedUrl, UriKind.Absolute));
 
     private static (bool Invalid, string? Serialized) NormalizeEventTypes(
         IReadOnlyList<string>? eventTypes)

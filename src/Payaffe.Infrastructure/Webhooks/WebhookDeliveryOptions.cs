@@ -19,4 +19,23 @@ public sealed class WebhookDeliveryOptions
     public int MaxEventsPerPoll { get; set; } = 25;
 
     public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// How long one delivery request may take. The event lease has to outlast
+    /// it by <see cref="LeaseMargin"/>, or a slow receiver lets a second worker
+    /// claim the event mid-request and deliver it again.
+    /// </summary>
+    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Time the lease keeps beyond the request for resolving the secret,
+    /// building the payload, and writing the outcome.
+    /// </summary>
+    public static readonly TimeSpan LeaseMargin = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Host names, addresses and CIDR networks that Webhook Delivery may reach
+    /// although they are not public (ADR 0036), comma separated.
+    /// </summary>
+    public string? AllowedPrivateTargets { get; set; }
 }

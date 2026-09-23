@@ -68,16 +68,18 @@ groups:
             app.background_worker_leases for the last safe error code.
           runbook: "docs/operations/incident-response.md"
 
+      # On the transition counter, not the gauge of terminal events: those stay
+      # terminal forever, so a gauge rule would fire from the first failure on.
       - alert: PayaffeTerminalWebhookDelivery
-        expr: payaffe_webhook_terminal_failures > 0
-        for: 15m
+        expr: sum(increase(payaffe_webhook_delivery_terminal_total[1h])) > 0
         labels:
           severity: warning
         annotations:
-          summary: "Terminal Webhook Delivery requires operator review"
+          summary: "A Webhook Delivery became terminal in the last hour"
           description: >-
             Resend from the Admin UI or the Admin MCP after the receiving
-            endpoint is healthy again.
+            endpoint is healthy again. The alert clears an hour after the last
+            terminal failure; the dashboard shows how many are still terminal.
           runbook: "docs/operations/incident-response.md"
 
   - name: payaffe-payments

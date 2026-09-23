@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.TryAddScoped<IPaymentAddressProvider, UnavailablePaymentAddressProvider>();
         services.TryAddScoped<IBlockchainObservationAdapter, NoOpBlockchainObservationAdapter>();
         services.TryAddScoped<IWebhookSecretResolver, UnavailableWebhookSecretResolver>();
+        services.TryAddSingleton(WebhookTargetPolicy.PublicOnly);
         services.TryAddScoped<IAdminTotpSecretResolver, UnavailableAdminTotpSecretResolver>();
         services.AddScoped<PaymentApplicationService>();
         services.AddScoped<AdminAuthenticationService>();

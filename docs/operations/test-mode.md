@@ -50,6 +50,12 @@ Integration API Credential for your integration, and a Webhook Endpoint that
 points at your integration's receiver. The Admin UI and every Payer Page carry a
 "Test mode" banner, and there is nothing to configure under Addresses.
 
+Webhook Delivery reaches only public addresses
+([ADR 0036](../adr/0036-webhook-delivery-reaches-only-public-addresses.md)). A
+receiver on your own machine or network — `host.docker.internal`, another
+container, a LAN address — is refused until `PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS`
+names it.
+
 ## Paying
 
 A Payment is paid by simulating the transfer once its currency has been

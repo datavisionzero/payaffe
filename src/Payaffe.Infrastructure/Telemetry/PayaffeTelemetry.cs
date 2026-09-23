@@ -34,6 +34,11 @@ public static class PayaffeTelemetry
         unit: "{attempt}",
         description: "Webhook Delivery attempts by result.");
 
+    private static readonly Counter<long> WebhookTerminalTransitions = Meter.CreateCounter<long>(
+        "payaffe.webhook.delivery.terminal",
+        unit: "{event}",
+        description: "Webhook Outbox events that became terminal failed.");
+
     private static readonly Gauge<long> WorkerConsecutiveFailures = Meter.CreateGauge<long>(
         "payaffe.worker.consecutive_failures",
         unit: "{failure}",
@@ -71,6 +76,14 @@ public static class PayaffeTelemetry
 
     public static void RecordWebhookAttempt(string result) =>
         WebhookAttempts.Add(1, new KeyValuePair<string, object?>("result", result));
+
+    /// <summary>
+    /// One event reached the terminal failed state. The gauge of terminal
+    /// events never goes down on its own, because terminal events stay, so an
+    /// alert has to ask whether this counter increased instead.
+    /// </summary>
+    public static void RecordWebhookTerminalTransition() =>
+        WebhookTerminalTransitions.Add(1);
 
     public static void RecordWorkerConsecutiveFailures(string worker, long count) =>
         WorkerConsecutiveFailures.Record(count, new KeyValuePair<string, object?>("worker.name", worker));

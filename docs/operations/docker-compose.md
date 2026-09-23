@@ -181,6 +181,8 @@ them:
 - `PAYAFFE_WEBHOOK_DELIVERY_MAX_RETRY_DELAY`
 - `PAYAFFE_WEBHOOK_DELIVERY_RETRY_JITTER_RATIO`
 - `PAYAFFE_WEBHOOK_DELIVERY_LEASE_DURATION`
+- `PAYAFFE_WEBHOOK_DELIVERY_REQUEST_TIMEOUT`
+- `PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS`
 - `PAYAFFE_OBSERVATION_WORKER_ENABLED`
 - `PAYAFFE_OBSERVATION_WORKER_POLL_INTERVAL`
 - `PAYAFFE_OBSERVATION_WORKER_MAX_PAYMENTS_PER_POLL`
@@ -349,6 +351,37 @@ older Compose, or when the configuration lives elsewhere than `.env` (for
 example `docker compose --env-file`), map the keys in a `compose.override.yaml`
 under the `environment` of both `api` and `worker`.
 
+### Webhook targets on an internal address
+
+Webhook Delivery connects only to public addresses and never follows a redirect
+([ADR 0036](../adr/0036-webhook-delivery-reaches-only-public-addresses.md)). A
+receiver on loopback, a private or link-local network, shared address space, or
+another container on the Compose network is refused: the attempt is terminal
+with `webhook_target.not_public` in Delivery history, and an Endpoint whose URL
+is such an address literally cannot be saved.
+
+`PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS` names the targets that may be reached
+anyway: host names, addresses or CIDR ranges, comma separated. It is part of
+the shared backend environment, because the `api` service checks it when an
+Endpoint is saved and delivers manual resends, and the `worker` delivers
+everything else.
+
+```dotenv
+PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS=shop.internal,10.0.4.17
+```
+
+Name the receiver and nothing wider. Every entry is a target any Admin can
+point a delivery at, so a range such as `10.0.0.0/8` hands them the whole
+network. An entry that is not a host name, an address or a CIDR range stops
+the hosts at startup.
+
+**Before upgrading from 0.3.0 or earlier:** list every Webhook Endpoint whose
+receiver is not on a public address and add it to
+`PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS` in `.env` before the `up`. Until it
+is listed, its deliveries fail terminally and have to be resent once the
+setting is in place. A receiver that answered with a redirect now fails too;
+point the Endpoint at the final URL.
+
 ## Running More Than One Instance
 
 Each scheduled worker claims a named lease in `app.background_worker_leases`
@@ -367,8 +400,19 @@ A crashed instance does not block the system: its lease is bounded by
 lease has to outlive one batch run, so raise it for deployments with large
 batches; startup validation rejects values below one second or above one hour.
 
+A Webhook Delivery lease covers one event rather than a batch. It has to outlast
+one delivery request, so `PAYAFFE_WEBHOOK_DELIVERY_REQUEST_TIMEOUT` (thirty
+seconds by default) bounds the request and startup validation requires the
+lease to exceed it by at least thirty seconds. Every write after the claim is
+conditional on still holding the lease, so an instance whose lease expired
+discards its outcome instead of overwriting the instance that took over. An
+event that fails for any reason other than the receiver's answer is counted as
+a failed attempt with `webhook_delivery.processing_failed` and retried with the
+usual backoff until its attempts run out, so it cannot hold up the others.
+
 `app.background_worker_leases` also records the last success, last failure,
-last safe error code, and consecutive failure count per worker, which is the
+last safe error code, and consecutive failure count per worker, including
+`webhook-delivery`, which reports every batch there without taking the lease, which is the
 first place to look when scheduled work appears stalled.
 
 ## Partner Credential And Webhook Rotation
@@ -574,6 +618,13 @@ downgrade, so that artifact is the rollback for a migration that fails on the
 way up. Which version a pull moves to is
 [the tag `PAYAFFE_VERSION` names](#published-image-tags).
 
+An installation upgrading from 0.3.0 or earlier whose shop receives webhooks on
+an internal address allowlists it first; see
+[Webhook targets on an internal address](#webhook-targets-on-an-internal-address).
+An installation that set `PAYAFFE_WEBHOOK_DELIVERY_LEASE_DURATION` below one
+minute raises it to at least thirty seconds above
+`PAYAFFE_WEBHOOK_DELIVERY_REQUEST_TIMEOUT`, or the hosts refuse to start.
+
 ## Ports
 
 The default local ports are:
@@ -603,8 +654,10 @@ string. It does not expose connection strings, credentials, payment data, or
 raw configuration.
 
 The worker host serves no HTTP endpoint. It writes a heartbeat file every
-`PAYAFFE_WORKER_HEALTH_PROBE_INTERVAL`, but only while it can still reach the
-database, and its container healthcheck runs the same executable again:
+`PAYAFFE_WORKER_HEALTH_PROBE_INTERVAL`, but only once its schema migration has
+completed, while it can still reach the database, and while none of its worker
+loops has stopped with a failure. Its container healthcheck runs the same
+executable again:
 
 ```sh
 docker compose exec worker dotnet Payaffe.Worker.dll health

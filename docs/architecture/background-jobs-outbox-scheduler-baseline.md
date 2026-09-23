@@ -138,6 +138,14 @@ Suitable PostgreSQL mechanisms include:
 Locks must expire or be recoverable. Abandoned work must become visible and
 eligible for retry or operator diagnosis.
 
+A worker whose lease expired must not write the item it claimed: every write
+after a claim is conditional on still owning the lease. A lease that can expire
+during a single unit of work, such as one outbound request, is a
+misconfiguration and is refused at startup.
+
+One item that fails unexpectedly must not stop the batch. It is recorded as a
+failed attempt with backoff and becomes terminal when its attempts run out.
+
 Parallel work must respect domain exclusivity. Two workers must not complete,
 expire, or settle the same Payment concurrently without optimistic concurrency
 or an equivalent state guard.

@@ -1109,7 +1109,13 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(webhookEvent => webhookEvent.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
             entity.Property(webhookEvent => webhookEvent.NextAttemptAt).HasColumnName("next_attempt_at").HasColumnType("timestamp with time zone");
             entity.Property(webhookEvent => webhookEvent.AttemptCount).HasColumnName("attempt_count").HasColumnType("integer");
-            entity.Property(webhookEvent => webhookEvent.LockedBy).HasColumnName("locked_by").HasColumnType("text");
+            // The event lease owner. Every write after a claim is conditional
+            // on it, so a worker whose lease expired cannot overwrite the event
+            // that another worker now holds.
+            entity.Property(webhookEvent => webhookEvent.LockedBy)
+                .HasColumnName("locked_by")
+                .HasColumnType("text")
+                .IsConcurrencyToken();
             entity.Property(webhookEvent => webhookEvent.LockedUntil).HasColumnName("locked_until").HasColumnType("timestamp with time zone");
             entity.Property(webhookEvent => webhookEvent.LastErrorCode).HasColumnName("last_error_code").HasColumnType("text");
             entity.Property(webhookEvent => webhookEvent.CorrelationId).HasColumnName("correlation_id").HasColumnType("text");
@@ -1130,6 +1136,11 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasName("ak_webhook_events_project_id_id");
             entity.HasIndex(webhookEvent => new { webhookEvent.ProjectId, webhookEvent.Status, webhookEvent.NextAttemptAt })
                 .HasDatabaseName("ix_webhook_events_project_status_next_attempt_at");
+            // The delivery claim runs across every Project, so the Project-led
+            // index above cannot serve it.
+            entity.HasIndex(webhookEvent => new { webhookEvent.NextAttemptAt, webhookEvent.CreatedAt })
+                .HasDatabaseName("ix_webhook_events_due")
+                .HasFilter("status in ('pending', 'retry_pending')");
             entity.HasIndex(webhookEvent => webhookEvent.PaymentId)
                 .HasDatabaseName("ix_webhook_events_payment_id");
             entity.HasIndex(webhookEvent => webhookEvent.IntegrationApiCredentialId)
