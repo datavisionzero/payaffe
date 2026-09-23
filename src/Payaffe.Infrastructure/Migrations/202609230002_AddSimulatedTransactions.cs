@@ -24,6 +24,7 @@ public partial class AddSimulatedTransactions : Migration
                 payment_address text NOT NULL,
                 transaction_hash text NOT NULL,
                 amount text NOT NULL,
+                idempotency_key text NULL,
                 observed_at timestamp with time zone NOT NULL,
                 first_reported_at timestamp with time zone NULL,
                 created_at timestamp with time zone NOT NULL,
@@ -38,6 +39,9 @@ public partial class AddSimulatedTransactions : Migration
                 ON app.simulated_transactions (project_id, payment_id);
             CREATE UNIQUE INDEX uq_simulated_transactions_transaction_hash
                 ON app.simulated_transactions (transaction_hash);
+            CREATE UNIQUE INDEX uq_simulated_transactions_payment_idempotency_key
+                ON app.simulated_transactions (project_id, payment_id, idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
             """);
     }
 

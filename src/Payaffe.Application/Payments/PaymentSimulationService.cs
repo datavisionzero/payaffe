@@ -29,10 +29,28 @@ public sealed class PaymentSimulationService(
             throw new DomainRuleException("Payment identifier is required.", "payment_id.required");
         }
 
+        var idempotencyKey = NormalizeIdempotencyKey(command.IdempotencyKey);
         var payment = await store.FindPaymentAsync(command.ProjectId, command.PaymentId, cancellationToken);
         if (payment is null)
         {
             return RecordSimulatedTransactionResult.PaymentNotFound();
+        }
+
+        if (idempotencyKey is not null)
+        {
+            var existing = await store.FindByIdempotencyKeyAsync(
+                command.ProjectId,
+                command.PaymentId,
+                idempotencyKey,
+                cancellationToken);
+            if (existing is not null)
+            {
+                // A retry of a request whose answer was lost. Recording again
+                // would turn it into an overpayment nobody asked for.
+                return command.Amount is null || StringComparer.Ordinal.Equals(existing.Amount, command.Amount.Trim())
+                    ? RecordSimulatedTransactionResult.AlreadyRecorded(existing)
+                    : RecordSimulatedTransactionResult.IdempotencyConflict();
+            }
         }
 
         if (payment.Status is not ("waiting_for_payment" or "observed") ||
@@ -53,7 +71,8 @@ public sealed class PaymentSimulationService(
             payment.PaymentAddress,
             Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)),
             amount,
-            recordedAt);
+            recordedAt,
+            idempotencyKey);
         await store.AddAsync(
             transaction,
             new PaymentEventDraft(
@@ -77,6 +96,21 @@ public sealed class PaymentSimulationService(
             transaction.RecordedAt));
     }
 
+    private static string? NormalizeIdempotencyKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length > 255
+            ? throw new DomainRuleException(
+                "Idempotency Key must be at most 255 characters.",
+                "idempotency_key.too_long")
+            : trimmed;
+    }
+
     private static string NormalizeAmount(string supportedCurrency, string amount)
     {
         var trimmed = amount.Trim();
@@ -98,7 +132,11 @@ public sealed class PaymentSimulationService(
     }
 }
 
-public sealed record RecordSimulatedTransactionCommand(Guid ProjectId, Guid PaymentId, string? Amount);
+public sealed record RecordSimulatedTransactionCommand(
+    Guid ProjectId,
+    Guid PaymentId,
+    string? Amount,
+    string? IdempotencyKey = null);
 
 public sealed record SimulatedTransactionResponse(
     Guid PaymentId,
@@ -106,7 +144,8 @@ public sealed record SimulatedTransactionResponse(
     string PaymentAddress,
     string TransactionHash,
     string Amount,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    string? IdempotencyKey = null);
 
 public sealed record RecordSimulatedTransactionResult(
     RecordSimulatedTransactionResultKind Kind,
@@ -114,6 +153,12 @@ public sealed record RecordSimulatedTransactionResult(
 {
     public static RecordSimulatedTransactionResult Recorded(SimulatedTransactionResponse transaction) =>
         new(RecordSimulatedTransactionResultKind.Recorded, transaction);
+
+    public static RecordSimulatedTransactionResult AlreadyRecorded(SimulatedTransactionResponse transaction) =>
+        new(RecordSimulatedTransactionResultKind.AlreadyRecorded, transaction);
+
+    public static RecordSimulatedTransactionResult IdempotencyConflict() =>
+        new(RecordSimulatedTransactionResultKind.IdempotencyConflict, Transaction: null);
 
     public static RecordSimulatedTransactionResult PaymentNotFound() =>
         new(RecordSimulatedTransactionResultKind.PaymentNotFound, Transaction: null);
@@ -125,6 +170,12 @@ public sealed record RecordSimulatedTransactionResult(
 public enum RecordSimulatedTransactionResultKind
 {
     Recorded,
+
+    /// <summary>The Idempotency Key was used before; nothing new was recorded.</summary>
+    AlreadyRecorded,
+
+    /// <summary>The Idempotency Key was used before for a different amount.</summary>
+    IdempotencyConflict,
     PaymentNotFound,
 
     /// <summary>
@@ -139,6 +190,12 @@ public interface ISimulatedTransactionStore
     Task<SimulationTargetPayment?> FindPaymentAsync(
         Guid projectId,
         Guid paymentId,
+        CancellationToken cancellationToken);
+
+    Task<SimulatedTransactionResponse?> FindByIdempotencyKeyAsync(
+        Guid projectId,
+        Guid paymentId,
+        string idempotencyKey,
         CancellationToken cancellationToken);
 
     Task AddAsync(
@@ -162,4 +219,5 @@ public sealed record SimulatedTransactionDraft(
     string PaymentAddress,
     string TransactionHash,
     string Amount,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    string? IdempotencyKey = null);

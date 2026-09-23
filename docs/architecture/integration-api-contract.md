@@ -280,6 +280,35 @@ conflict responses are not polling retries. Polling stops on `completed`,
 and deliberate reconciliation reads for late-payment and manual-resolution
 workflows.
 
+## Test Mode Simulation
+
+A Test Mode installation
+([ADR 0033](../adr/0033-a-test-installation-simulates-its-external-truth.md))
+adds one route, and only there:
+`POST /api/v1/payments/{paymentId}/simulated-transactions`. In a live
+installation the route is not mapped and answers like any unknown path.
+
+It records a Simulated Transaction for a Payment of the authenticated Project
+that is `waiting_for_payment` or `observed`. The optional JSON body carries
+`amount`, a decimal string in the selected currency; without it the simulated
+payer sends exactly the expected amount. A smaller or larger amount exercises
+Underpayment and Overpayment, a second call tops an underpayment up, and a call
+after `expiresAt` exercises the Late Acceptance Window. The response is `201`
+with the recorded transaction hash and amount. Nothing about the Payment changes
+in that response: the simulated Blockchain Observation reports the transaction
+on its next poll with no confirmations and on the poll after that fully
+confirmed, and the Payment, its webhooks and its polling then behave exactly as
+for a real transaction.
+
+An optional `Idempotency-Key` header makes a retry safe: the same key for the
+same Payment returns the first transaction with `200`, and the same key with a
+different amount is `409 idempotency.conflict`. Without a key every call records
+another transaction. An unknown Payment or one from another Project is
+`404 payment.not_found`; a Payment without a Payment Instruction or already
+finished is `409 payment.not_waiting_for_payment`; an amount that is not a
+positive decimal within the currency's precision is `400` with `amount.invalid`
+or `amount.not_positive` under `errors.amount`.
+
 ## Project And Upgrade Compatibility
 
 The introduction of Projects does not remove or reinterpret an existing
@@ -391,6 +420,11 @@ CI must:
 - compare the generated OpenAPI document against the last accepted contract
   snapshot;
 - require a visible major-version decision for breaking changes.
+
+The document a Test Mode installation serves is the live document plus the
+Test Mode route. It is kept as its own accepted snapshot,
+`openapi.v1.test-mode.json`, beside `openapi.v1.json`, so the live snapshot
+stays exactly what a production integration can call.
 
 The accepted snapshot under `docs/contracts/integration-api/` changes only when
 the implementation and its contract tests change. Architecture work does not

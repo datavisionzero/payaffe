@@ -1,0 +1,915 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "payaffe Integration API",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/"
+    }
+  ],
+  "paths": {
+    "/api/v1/payments": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "operationId": "CreatePayment",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreatePaymentHttpRequest"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/payments/{paymentId}": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "operationId": "GetPayment",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/payments/{paymentId}/currency-selection": {
+      "put": {
+        "tags": [
+          "Payments"
+        ],
+        "operationId": "SelectPaymentCurrency",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SelectPaymentCurrencyHttpRequest"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/payments/{paymentId}/simulated-transactions": {
+      "post": {
+        "tags": [
+          "Test Mode"
+        ],
+        "summary": "Simulate a payment (Test Mode only).",
+        "description": "Records a Simulated Transaction for a Payment that is waiting for its money. The simulated Blockchain Observation reports it on its next poll, unconfirmed, and fully confirmed on the poll after that; the Payment then follows the same lifecycle and webhooks as a real one. Leave amount out to pay exactly the expected amount. This route exists only in a Test Mode installation.",
+        "operationId": "RecordSimulatedTransaction",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Makes a retry return the transaction the first attempt recorded instead of recording another.",
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "description": "The amount the simulated payer sends, as a decimal in the selected currency. Absent means exactly the expected amount."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatedTransactionResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatedTransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreatePaymentHttpRequest": {
+        "required": [
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "externalReference"
+        ],
+        "type": "object",
+        "properties": {
+          "fiatCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fiatAmountMinor": {
+            "maximum": 9223372036854776000,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "externalReference": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PaymentContextHttpRequest"
+              }
+            ]
+          },
+          "returnUrl": {
+            "maxLength": 2048,
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uri"
+          }
+        }
+      },
+      "IntegrationApiProblemResponse": {
+        "required": [
+          "code",
+          "correlationId"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "correlationId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "PaymentContextHttpRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "customerNumber": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cartName": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "note": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PaymentInstructionResponse": {
+        "required": [
+          "supportedCurrency",
+          "network",
+          "chainId",
+          "amount",
+          "amountAtomic",
+          "paymentAddress",
+          "uri",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "chainId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "amountAtomic": {
+            "type": "string"
+          },
+          "paymentAddress": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaymentOptionResponse": {
+        "required": [
+          "supportedCurrency",
+          "status",
+          "unavailableReasonCode",
+          "checkedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "unavailableReasonCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaymentResponse": {
+        "required": [
+          "paymentId",
+          "status",
+          "payerPageUrl",
+          "expiresAt",
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "externalReference",
+          "selectedCurrency",
+          "expectedCryptoAmount",
+          "paymentAddress",
+          "observedTotal",
+          "completedAt",
+          "settledAt",
+          "returnUrl",
+          "paymentOptions",
+          "createdAt",
+          "updatedAt",
+          "lateAcceptanceEndsAt",
+          "confirmedEligibleTotal",
+          "observedAmountState",
+          "rateLock",
+          "paymentInstruction"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "payerPageUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fiatCurrency": {
+            "type": "string"
+          },
+          "fiatAmountMinor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "externalReference": {
+            "type": "string"
+          },
+          "selectedCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expectedCryptoAmount": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "observedTotal": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "settledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "returnUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentOptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentOptionResponse"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lateAcceptanceEndsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "confirmedEligibleTotal": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "observedAmountState": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rateLock": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RateLockResponse"
+              }
+            ]
+          },
+          "paymentInstruction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PaymentInstructionResponse"
+              }
+            ]
+          },
+          "testMode": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "RateLockResponse": {
+        "required": [
+          "fiatCurrency",
+          "fiatAmountMinor",
+          "supportedCurrency",
+          "expectedCryptoAmount",
+          "expectedCryptoAmountAtomic",
+          "fiatPerCryptoUnit",
+          "source",
+          "rateObservedAt",
+          "lockedAt",
+          "validUntil"
+        ],
+        "type": "object",
+        "properties": {
+          "fiatCurrency": {
+            "type": "string"
+          },
+          "fiatAmountMinor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "expectedCryptoAmount": {
+            "type": "string"
+          },
+          "expectedCryptoAmountAtomic": {
+            "type": "string"
+          },
+          "fiatPerCryptoUnit": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "rateObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lockedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SelectPaymentCurrencyHttpRequest": {
+        "required": [
+          "supportedCurrency"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedCurrency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SimulatedTransactionResponse": {
+        "required": [
+          "paymentId",
+          "supportedCurrency",
+          "paymentAddress",
+          "transactionHash",
+          "amount",
+          "recordedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "paymentAddress": {
+            "type": "string"
+          },
+          "transactionHash": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idempotencyKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Payments"
+    },
+    {
+      "name": "Test Mode"
+    }
+  ]
+}

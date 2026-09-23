@@ -21,6 +21,26 @@ public sealed class EfSimulatedTransactionStore(PayaffeDbContext dbContext) : IS
                 payment.ExpectedCryptoAmount))
             .SingleOrDefaultAsync(cancellationToken);
 
+    public Task<SimulatedTransactionResponse?> FindByIdempotencyKeyAsync(
+        Guid projectId,
+        Guid paymentId,
+        string idempotencyKey,
+        CancellationToken cancellationToken) =>
+        dbContext.SimulatedTransactions
+            .AsNoTracking()
+            .Where(transaction =>
+                transaction.ProjectId == projectId &&
+                transaction.PaymentId == paymentId &&
+                transaction.IdempotencyKey == idempotencyKey)
+            .Select(transaction => new SimulatedTransactionResponse(
+                transaction.PaymentId,
+                transaction.SupportedCurrency,
+                transaction.PaymentAddress,
+                transaction.TransactionHash,
+                transaction.Amount,
+                transaction.CreatedAt))
+            .SingleOrDefaultAsync(cancellationToken);
+
     public async Task AddAsync(
         SimulatedTransactionDraft transaction,
         PaymentEventDraft paymentEvent,
@@ -37,6 +57,7 @@ public sealed class EfSimulatedTransactionStore(PayaffeDbContext dbContext) : IS
             PaymentAddress = transaction.PaymentAddress,
             TransactionHash = transaction.TransactionHash,
             Amount = transaction.Amount,
+            IdempotencyKey = transaction.IdempotencyKey,
             ObservedAt = transaction.RecordedAt,
             CreatedAt = transaction.RecordedAt,
         });

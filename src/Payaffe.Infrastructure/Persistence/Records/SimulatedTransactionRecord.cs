@@ -16,6 +16,8 @@ public sealed class SimulatedTransactionRecord
 
     public string Amount { get; set; } = string.Empty;
 
+    public string? IdempotencyKey { get; set; }
+
     public DateTimeOffset ObservedAt { get; set; }
 
     /// <summary>

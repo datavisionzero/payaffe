@@ -661,6 +661,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(transaction => transaction.PaymentAddress).HasColumnName("payment_address").HasColumnType("text");
             entity.Property(transaction => transaction.TransactionHash).HasColumnName("transaction_hash").HasColumnType("text");
             entity.Property(transaction => transaction.Amount).HasColumnName("amount").HasColumnType("text");
+            entity.Property(transaction => transaction.IdempotencyKey).HasColumnName("idempotency_key").HasColumnType("text");
             entity.Property(transaction => transaction.ObservedAt).HasColumnName("observed_at").HasColumnType("timestamp with time zone");
             entity.Property(transaction => transaction.FirstReportedAt).HasColumnName("first_reported_at").HasColumnType("timestamp with time zone");
             entity.Property(transaction => transaction.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
@@ -676,6 +677,10 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(transaction => transaction.TransactionHash)
                 .IsUnique()
                 .HasDatabaseName("uq_simulated_transactions_transaction_hash");
+            entity.HasIndex(transaction => new { transaction.ProjectId, transaction.PaymentId, transaction.IdempotencyKey })
+                .IsUnique()
+                .HasFilter("idempotency_key IS NOT NULL")
+                .HasDatabaseName("uq_simulated_transactions_payment_idempotency_key");
         });
     }
 
