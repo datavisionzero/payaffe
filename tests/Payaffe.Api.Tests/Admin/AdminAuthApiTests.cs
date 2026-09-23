@@ -828,6 +828,69 @@ public sealed class AdminAuthApiTests
             auditEntry.ReasonCode == "admin_step_up.required");
     }
 
+    /// <summary>
+    /// A session begun on the password alone keeps no exemption once the
+    /// account enrolls a factor: the exemption follows the account, not the
+    /// state it was in at sign-in.
+    /// </summary>
+    [Fact]
+    public async Task Password_only_session_requires_step_up_once_the_account_enrolls_a_factor()
+    {
+        await using var factory = new PaymentApiFactory();
+        var adminAccountId = await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecretReference: null);
+        using var signInClient = factory.CreateClient();
+        var loginResponse = await signInClient.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new { username = "admin@example.test", password = "correct-password" });
+        loginResponse.EnsureSuccessStatusCode();
+        var passwordOnlyToken = ExtractCookieValue(Assert.Single(
+            loginResponse.Headers.GetValues("Set-Cookie"),
+            cookie => cookie.StartsWith("__Host-payaffe-admin=", StringComparison.Ordinal)));
+        var eventId = await SeedAuditEntryAsync(
+            factory,
+            DateTimeOffset.UtcNow,
+            "admin.logout",
+            "success",
+            adminAccountId,
+            "admin_logout.session_revoked");
+        using var passwordOnlyClient = factory.CreateClient();
+        passwordOnlyClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={passwordOnlyToken}");
+
+        // Before enrollment there is nothing to step up with.
+        var beforeEnrollment = await passwordOnlyClient.GetAsync($"/api/admin/audit-log/{eventId}");
+        Assert.Equal(HttpStatusCode.OK, beforeEnrollment.StatusCode);
+
+        await factory.EnrollTotpAsync(adminAccountId, "secret-ref:test-admin", TotpSecret);
+
+        var afterEnrollment = await passwordOnlyClient.GetAsync($"/api/admin/audit-log/{eventId}");
+        Assert.Equal(HttpStatusCode.Forbidden, afterEnrollment.StatusCode);
+        Assert.Contains(
+            "admin_step_up.required",
+            await afterEnrollment.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+
+        // The first sign-in that proves the factor ends the session left over
+        // from before it, and says so in the Audit Log.
+        using var mfaClient = factory.CreateClient();
+        await SignInAndGetSessionCookieAsync(mfaClient);
+
+        var revoked = await passwordOnlyClient.GetAsync("/api/admin/session");
+        Assert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Single(dbContext.AdminSessions, session => session.RevokedAt == null);
+        Assert.Contains(dbContext.AuditLogEntries, entry =>
+            entry.EventType == "admin.sessions.revoke" &&
+            entry.Outcome == "revoked" &&
+            entry.ActorId == adminAccountId.ToString("D") &&
+            entry.SubjectType == "admin_account" &&
+            entry.ReasonCode == "admin_session.second_factor_enrolled");
+    }
+
     [Fact]
     public async Task Get_admin_audit_log_detail_returns_detail_fields_and_audits_access()
     {

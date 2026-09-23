@@ -284,6 +284,7 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         Guid sessionId,
         DateTimeOffset occurredAt,
         DateTimeOffset idleExpiresAt,
+        bool secondFactorVerified,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
@@ -291,6 +292,11 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
             candidate => candidate.Id == sessionId,
             cancellationToken);
         session.StepUpAuthenticatedAt = occurredAt;
+        if (secondFactorVerified)
+        {
+            session.MfaAuthenticatedAt ??= occurredAt;
+        }
+
         session.LastSeenAt = occurredAt;
         session.IdleExpiresAt = idleExpiresAt;
 
@@ -365,6 +371,36 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
 
         AddAuditEntry(auditEntry);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<int> RevokeSessionsWithoutSecondFactorAsync(
+        Guid adminAccountId,
+        Guid currentSessionId,
+        DateTimeOffset revokedAt,
+        AdminAuditEntry auditEntry,
+        CancellationToken cancellationToken)
+    {
+        var sessions = await dbContext.AdminSessions
+            .Where(session =>
+                session.AdminAccountId == adminAccountId &&
+                session.Id != currentSessionId &&
+                session.MfaAuthenticatedAt == null &&
+                session.RevokedAt == null &&
+                session.ExpiresAt > revokedAt)
+            .ToListAsync(cancellationToken);
+        if (sessions.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var session in sessions)
+        {
+            session.RevokedAt = revokedAt;
+        }
+
+        AddAuditEntry(auditEntry);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return sessions.Count;
     }
 
     private void AddAuditEntry(AdminAuditEntry auditEntry)

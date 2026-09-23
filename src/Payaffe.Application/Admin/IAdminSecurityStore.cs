@@ -81,10 +81,27 @@ public interface IAdminSecurityStore
         DateTimeOffset idleExpiresAt,
         CancellationToken cancellationToken);
 
+    /// <param name="secondFactorVerified">
+    /// True when the step-up verified a code; the session then counts as having
+    /// cleared a second factor even if it began on the password alone.
+    /// </param>
     Task RecordSuccessfulStepUpAsync(
         Guid sessionId,
         DateTimeOffset occurredAt,
         DateTimeOffset idleExpiresAt,
+        bool secondFactorVerified,
+        AdminAuditEntry auditEntry,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Revokes the account's active sessions that never cleared a second
+    /// factor, except <paramref name="currentSessionId"/>, and records
+    /// <paramref name="auditEntry"/> when any was revoked.
+    /// </summary>
+    Task<int> RevokeSessionsWithoutSecondFactorAsync(
+        Guid adminAccountId,
+        Guid currentSessionId,
+        DateTimeOffset revokedAt,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken);
 

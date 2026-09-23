@@ -122,6 +122,14 @@ require a fresh step-up if the current MFA-backed authentication is older than
 with, and refusing would make these actions unreachable rather than protected.
 The list below is what step-up covers where it applies.
 
+Whether an account has a second factor is read from the account on every
+request, not from the session. A session begun on the password alone before a
+factor was enrolled must step up like any other, and a step-up counts only once
+the session has verified a factor. Because enrollment is an operator procedure
+outside the product, the first verified factor after it — an MFA sign-in or a
+step-up — revokes the account's other sessions that never cleared one, and the
+revocation is an Audit Log event.
+
 Step-up-required actions include:
 
 - creating or disabling Integration API Credentials,

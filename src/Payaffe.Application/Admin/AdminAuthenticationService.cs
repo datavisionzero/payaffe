@@ -231,6 +231,14 @@ public sealed class AdminAuthenticationService(
                         subjectId: session.Id.ToString("D")),
                     cancellationToken);
 
+                await RevokeSessionsWithoutSecondFactorAsync(
+                    challenge.AdminAccountId,
+                    session.Id,
+                    occurredAt,
+                    command.SourceIp,
+                    command.UserAgent,
+                    command.CorrelationId,
+                    cancellationToken);
                 return AdminMfaCompleteResult.Authenticated(sessionToken, session.ExpiresAt);
             }
         }
@@ -273,6 +281,14 @@ public sealed class AdminAuthenticationService(
                         subjectId: challenge.AdminAccountId.ToString("D")),
                     cancellationToken);
 
+                await RevokeSessionsWithoutSecondFactorAsync(
+                    challenge.AdminAccountId,
+                    session.Id,
+                    occurredAt,
+                    command.SourceIp,
+                    command.UserAgent,
+                    command.CorrelationId,
+                    cancellationToken);
                 return AdminMfaCompleteResult.Authenticated(sessionToken, session.ExpiresAt);
             }
         }
@@ -360,7 +376,8 @@ public sealed class AdminAuthenticationService(
                 session.MfaAuthenticatedAt,
                 session.StepUpAuthenticatedAt,
                 session.ExpiresAt,
-                refreshedIdleExpiresAt));
+                refreshedIdleExpiresAt,
+                HasEnrolledSecondFactor: !string.IsNullOrWhiteSpace(session.TotpSecretReference)));
     }
 
     public async Task<AdminStepUpResult> StepUpAsync(
@@ -413,6 +430,7 @@ public sealed class AdminAuthenticationService(
             session.Id,
             occurredAt,
             refreshedIdleExpiresAt,
+            secondFactorVerified: hasEnrolledSecondFactor,
             CreateAuditEntry(
                 "admin.step_up",
                 occurredAt,
@@ -423,6 +441,18 @@ public sealed class AdminAuthenticationService(
                 reasonCode: "admin_step_up.verified",
                 subjectId: session.Id.ToString("D")),
             cancellationToken);
+
+        if (hasEnrolledSecondFactor)
+        {
+            await RevokeSessionsWithoutSecondFactorAsync(
+                session.AdminAccountId,
+                session.Id,
+                occurredAt,
+                command.SourceIp,
+                command.UserAgent,
+                command.CorrelationId,
+                cancellationToken);
+        }
 
         return AdminStepUpResult.Authenticated(occurredAt, refreshedIdleExpiresAt);
     }
@@ -528,6 +558,46 @@ public sealed class AdminAuthenticationService(
             cancellationToken);
 
         return AdminLogoutResult.SessionRevoked();
+    }
+
+    /// <summary>
+    /// Ends the account's sessions that never cleared a second factor, once the
+    /// account has proven one.
+    /// </summary>
+    /// <remarks>
+    /// Enrollment happens outside the product (the account's TOTP reference is
+    /// set through the operator procedure), so the first verified factor is the
+    /// first moment the product can act on it. A password-only session begun
+    /// before enrollment is exactly the one a compromise would have left behind.
+    /// </remarks>
+    private async Task RevokeSessionsWithoutSecondFactorAsync(
+        Guid adminAccountId,
+        Guid currentSessionId,
+        DateTimeOffset occurredAt,
+        string? sourceIp,
+        string? userAgent,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        await store.RevokeSessionsWithoutSecondFactorAsync(
+            adminAccountId,
+            currentSessionId,
+            occurredAt,
+            new AdminAuditEntry(
+                Guid.NewGuid(),
+                occurredAt,
+                "admin.sessions.revoke",
+                "revoked",
+                "product_user",
+                adminAccountId.ToString("D"),
+                "api",
+                sourceIp,
+                userAgent,
+                correlationId,
+                "admin_session.second_factor_enrolled",
+                "admin_account",
+                adminAccountId.ToString("D")),
+            cancellationToken);
     }
 
     private async Task RecordFailureAsync(
