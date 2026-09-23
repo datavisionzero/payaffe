@@ -363,7 +363,8 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
                 WorkerNow.AddMinutes(1),
                 Confirmations: 0,
                 "test-provider",
-                "provider-observation-setup"),
+                "provider-observation-setup",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
         var completionResult = await payments.UpdateBlockchainTransactionConfirmationsAsync(
             new UpdateBlockchainTransactionConfirmationsCommand(
@@ -372,7 +373,8 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
                 "tx-reorg-123",
                 Confirmations: 1,
                 BlockHash: "block-original",
-                BlockHeight: 840000),
+                BlockHeight: 840000,
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
         Assert.Equal(UpdateBlockchainTransactionConfirmationsResultKind.Completed, completionResult.Kind);
 

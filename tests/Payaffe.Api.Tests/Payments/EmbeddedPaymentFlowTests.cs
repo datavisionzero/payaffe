@@ -144,7 +144,8 @@ public sealed class EmbeddedPaymentFlowTests
                 DateTimeOffset.UtcNow,
                 Confirmations: 1,
                 "controlled-test-provider",
-                $"embedded-observation-{observedAmount}"),
+                $"embedded-observation-{observedAmount}",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
         Assert.Contains(
             result.Kind,

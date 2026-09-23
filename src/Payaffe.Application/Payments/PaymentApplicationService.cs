@@ -279,7 +279,8 @@ public sealed class PaymentApplicationService(
             currencyConfiguration.ConfirmationRequirement,
             projectConfiguration!.PaymentTolerancePercent,
             currencyConfiguration.ReorgMonitoringDepth,
-            selectedAt);
+            selectedAt,
+            payment.ProjectId);
         var storeResult = await paymentStore.SelectCurrencyAsync(
             selection,
             new PaymentEventDraft(
@@ -332,6 +333,8 @@ public sealed class PaymentApplicationService(
         {
             throw new DomainRuleException("Payment identifier is required.", "payment_id.required");
         }
+
+        RequireProjectId(command.ProjectId);
 
         var supportedCurrency = NormalizeSupportedCurrency(command.SupportedCurrency);
         var paymentAddress = NormalizeRequiredText(
@@ -732,6 +735,8 @@ public sealed class PaymentApplicationService(
             throw new DomainRuleException("Payment identifier is required.", "payment_id.required");
         }
 
+        RequireProjectId(command.ProjectId);
+
         var supportedCurrency = NormalizeSupportedCurrency(command.SupportedCurrency);
         var transactionHash = NormalizeRequiredText(
             command.TransactionHash,
@@ -793,6 +798,18 @@ public sealed class PaymentApplicationService(
                 UpdateBlockchainTransactionConfirmationsResult.TransactionNotFound(),
             _ => throw new InvalidOperationException($"Unsupported confirmation update result {storeResult.Kind}."),
         };
+    }
+
+    /// <summary>
+    /// Every lookup of a Payment is scoped to its Project; an empty Project
+    /// would otherwise have to mean "any Project".
+    /// </summary>
+    private static void RequireProjectId(Guid projectId)
+    {
+        if (projectId == Guid.Empty)
+        {
+            throw new DomainRuleException("Project identifier is required.", "project_id.required");
+        }
     }
 
     private static string NormalizeIdempotencyKey(string? value)

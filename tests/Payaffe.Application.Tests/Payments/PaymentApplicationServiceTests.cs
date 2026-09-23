@@ -8,6 +8,7 @@ public sealed class PaymentApplicationServiceTests
 {
     private static readonly Guid PaymentId = Guid.Parse("0ba93cf2-2404-4870-8d34-399147ef30fb");
     private static readonly Guid CredentialId = Guid.Parse("f1f9d60f-78a2-4a5c-b8f0-4fd3da6ca84b");
+    private static readonly Guid ProjectId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     [Fact]
     public async Task Create_hashes_payment_creation_request_without_server_timing_options()
@@ -220,6 +221,48 @@ public sealed class PaymentApplicationServiceTests
         Assert.Null(store.Selection);
     }
 
+    /// <summary>
+    /// A Payment is always looked up inside its Project. An empty Project must
+    /// be refused rather than read as "any Project".
+    /// </summary>
+    [Fact]
+    public async Task Observation_and_confirmation_updates_refuse_an_empty_project()
+    {
+        var observationStore = new CapturingObservationStore();
+        var confirmationStore = new CapturingConfirmationUpdateStore();
+
+        var observation = await Assert.ThrowsAsync<DomainRuleException>(() =>
+            CreateService(observationStore, TimeSpan.FromHours(1)).RecordBlockchainObservationAsync(
+                new RecordBlockchainObservationCommand(
+                    PaymentId,
+                    "btc",
+                    "btc-test-address",
+                    "tx-123",
+                    "0.00039980",
+                    DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
+                    Confirmations: 0,
+                    "test-provider",
+                    "provider-observation-123",
+                    ProjectId: Guid.Empty),
+                CancellationToken.None));
+        var confirmation = await Assert.ThrowsAsync<DomainRuleException>(() =>
+            CreateService(confirmationStore, TimeSpan.FromHours(1)).UpdateBlockchainTransactionConfirmationsAsync(
+                new UpdateBlockchainTransactionConfirmationsCommand(
+                    PaymentId,
+                    "btc",
+                    "tx-123",
+                    Confirmations: 1,
+                    BlockHash: null,
+                    BlockHeight: null,
+                    ProjectId: Guid.Empty),
+                CancellationToken.None));
+
+        Assert.Equal("project_id.required", observation.Code);
+        Assert.Equal("project_id.required", confirmation.Code);
+        Assert.Null(observationStore.Observation);
+        Assert.Null(confirmationStore.ConfirmationUpdate);
+    }
+
     [Fact]
     public async Task Record_blockchain_observation_records_matching_transaction_event_and_webhook()
     {
@@ -236,7 +279,8 @@ public sealed class PaymentApplicationServiceTests
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
                 Confirmations: 0,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectId),
             CancellationToken.None);
 
         Assert.Equal(RecordBlockchainObservationResultKind.Observed, result.Kind);
@@ -276,7 +320,8 @@ public sealed class PaymentApplicationServiceTests
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
                 Confirmations: 1,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectId),
             CancellationToken.None);
 
         Assert.Equal(RecordBlockchainObservationResultKind.Completed, result.Kind);
@@ -292,7 +337,8 @@ public sealed class PaymentApplicationServiceTests
             PaymentId,
             "BTC",
             "btc-test-address",
-            "0.00039980"));
+            "0.00039980",
+            ProjectId));
         var observation = new CapturingBlockchainObservationAdapter();
         observation.AddObservation(new BlockchainObservation(
             "tx-123",
@@ -372,7 +418,7 @@ public sealed class PaymentApplicationServiceTests
             "btc-test-address",
             "0.00039980",
             "tx-123",
-            CurrentConfirmations: 1));
+            CurrentConfirmations: 1, ProjectId));
         var observation = new CapturingBlockchainObservationAdapter();
         observation.AddObservation(new BlockchainObservation(
             "tx-123",
@@ -413,9 +459,9 @@ public sealed class PaymentApplicationServiceTests
         var failingPaymentId = Guid.NewGuid();
         var store = new CapturingReorgMonitoringStore { FailingPaymentId = failingPaymentId };
         store.AddTarget(new BlockchainReorgMonitoringTarget(
-            failingPaymentId, "BTC", "btc-test-address", "0.00039980", "tx-123", CurrentConfirmations: 1));
+            failingPaymentId, "BTC", "btc-test-address", "0.00039980", "tx-123", CurrentConfirmations: 1, ProjectId));
         store.AddTarget(new BlockchainReorgMonitoringTarget(
-            PaymentId, "BTC", "btc-test-address", "0.00039980", "tx-123", CurrentConfirmations: 1));
+            PaymentId, "BTC", "btc-test-address", "0.00039980", "tx-123", CurrentConfirmations: 1, ProjectId));
         var observation = new CapturingBlockchainObservationAdapter();
         observation.AddObservation(new BlockchainObservation(
             "tx-123",
@@ -476,7 +522,8 @@ public sealed class PaymentApplicationServiceTests
                 "tx-123",
                 Confirmations: 1,
                 BlockHash: "block-123",
-                BlockHeight: 840000),
+                BlockHeight: 840000,
+                ProjectId: ProjectId),
             CancellationToken.None);
 
         Assert.Equal(UpdateBlockchainTransactionConfirmationsResultKind.Completed, result.Kind);

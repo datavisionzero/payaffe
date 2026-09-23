@@ -229,7 +229,8 @@ public sealed record PaymentSelectionDraft(
     int ConfirmationRequirement,
     decimal PaymentTolerancePercent,
     int ReorgMonitoringDepth,
-    DateTimeOffset SelectedAt);
+    DateTimeOffset SelectedAt,
+    Guid ProjectId);
 
 public sealed record BlockchainObservationDraft(
     Guid Id,
@@ -245,7 +246,7 @@ public sealed record BlockchainObservationDraft(
     string? ProviderObservationId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    Guid ProjectId = default);
+    Guid ProjectId);
 
 public sealed record PaymentCompletionPolicyDraft(
     int RequiredConfirmations,
@@ -259,7 +260,7 @@ public sealed record BlockchainTransactionConfirmationUpdateDraft(
     string? BlockHash,
     long? BlockHeight,
     DateTimeOffset CheckedAt,
-    Guid ProjectId = default);
+    Guid ProjectId);
 
 public sealed record PaymentOptionDraft(
     Guid PaymentId,

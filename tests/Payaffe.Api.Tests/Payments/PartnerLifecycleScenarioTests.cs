@@ -104,7 +104,8 @@ public sealed class PartnerLifecycleScenarioTests
                     DateTimeOffset.UtcNow,
                     Confirmations: 1,
                     "controlled-test-provider",
-                    "partner-observation-1"),
+                    "partner-observation-1",
+                    ProjectId: ProjectDefaults.DefaultProjectId),
                 CancellationToken.None);
             Assert.Equal(RecordBlockchainObservationResultKind.Completed, observation.Kind);
         }
@@ -200,7 +201,8 @@ public sealed class PartnerLifecycleScenarioTests
         string expectedReference,
         string secret) : IWebhookSecretResolver
     {
-        public Task<string?> ResolveAsync(
+        public Task<string?> ResolveForProjectAsync(
+            Guid projectId,
             string secretReference,
             CancellationToken cancellationToken) =>
             Task.FromResult<string?>(

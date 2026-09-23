@@ -10,20 +10,6 @@ public sealed class ConfigurationWebhookSecretResolver(IConfiguration configurat
     private const string AllowedConfigurationPrefix = "Webhooks:EndpointSecrets:";
     private const string AllowedProjectsPrefix = "Webhooks:Projects:";
 
-    public Task<string?> ResolveAsync(
-        string secretReference,
-        CancellationToken cancellationToken)
-    {
-        var configurationKey = GetConfigurationKey(secretReference);
-        if (configurationKey is null)
-        {
-            return Task.FromResult<string?>(null);
-        }
-
-        var secret = configuration[configurationKey];
-        return Task.FromResult(string.IsNullOrWhiteSpace(secret) ? null : secret);
-    }
-
     public Task<string?> ResolveForProjectAsync(
         Guid projectId,
         string secretReference,

@@ -183,7 +183,8 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
                 ObservationTime,
                 Confirmations: 0,
                 "test-provider",
-                "provider-observation-456"),
+                "provider-observation-456",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
         Assert.Equal(RecordBlockchainObservationResultKind.Observed, observed.Kind);
         await DrainAsync(serviceProvider, handler, payloads);
@@ -200,7 +201,8 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
                 ObservationTime,
                 Confirmations: 1,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
         Assert.Equal(RecordBlockchainObservationResultKind.Completed, completed.Kind);
         await DrainAsync(serviceProvider, handler, payloads);
@@ -422,7 +424,7 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
 
     private sealed class FixedWebhookSecretResolver : IWebhookSecretResolver
     {
-        public Task<string?> ResolveAsync(string secretReference, CancellationToken cancellationToken) =>
+        public Task<string?> ResolveForProjectAsync(Guid projectId, string secretReference, CancellationToken cancellationToken) =>
             Task.FromResult<string?>("top-secret");
     }
 

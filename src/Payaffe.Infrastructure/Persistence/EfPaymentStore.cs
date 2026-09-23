@@ -255,7 +255,9 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         await using var transaction = await BeginTransactionIfRelationalAsync(cancellationToken);
 
         var payment = await dbContext.Payments
-            .SingleOrDefaultAsync(candidate => candidate.Id == selection.PaymentId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == selection.PaymentId && candidate.ProjectId == selection.ProjectId,
+                cancellationToken);
         if (payment is null)
         {
             return SelectCurrencyStoreResult.NotFound();
@@ -374,7 +376,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         var payment = await dbContext.Payments
             .SingleOrDefaultAsync(
                 candidate => candidate.Id == observation.PaymentId &&
-                             (observation.ProjectId == Guid.Empty || candidate.ProjectId == observation.ProjectId),
+                             candidate.ProjectId == observation.ProjectId,
                 cancellationToken);
         if (payment is null)
         {
@@ -544,7 +546,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         var payment = await dbContext.Payments
             .SingleOrDefaultAsync(
                 candidate => candidate.Id == confirmationUpdate.PaymentId &&
-                             (confirmationUpdate.ProjectId == Guid.Empty || candidate.ProjectId == confirmationUpdate.ProjectId),
+                             candidate.ProjectId == confirmationUpdate.ProjectId,
                 cancellationToken);
         if (payment is null)
         {

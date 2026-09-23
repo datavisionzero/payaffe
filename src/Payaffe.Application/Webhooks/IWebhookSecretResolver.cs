@@ -2,12 +2,13 @@ namespace Payaffe.Application.Webhooks;
 
 public interface IWebhookSecretResolver
 {
-    Task<string?> ResolveAsync(
-        string secretReference,
-        CancellationToken cancellationToken);
-
+    /// <summary>
+    /// Resolves a Webhook Endpoint secret reference for the Project that owns
+    /// the endpoint. A reference into another Project's namespace resolves to
+    /// nothing.
+    /// </summary>
     Task<string?> ResolveForProjectAsync(
         Guid projectId,
         string secretReference,
-        CancellationToken cancellationToken) => ResolveAsync(secretReference, cancellationToken);
+        CancellationToken cancellationToken);
 }
