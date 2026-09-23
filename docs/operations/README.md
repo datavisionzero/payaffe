@@ -7,6 +7,7 @@ General deployment and operations rules are recorded in
 
 ## Guides
 
+- [Setting up an installation with an agent](agent-setup.md)
 - [Docker Compose deployment](docker-compose.md)
 - [Test Mode: an installation for testing integrations](test-mode.md)
 - [Observability](observability.md)

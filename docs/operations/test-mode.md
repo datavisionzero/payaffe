@@ -37,6 +37,9 @@ docker compose --profile operations run --rm migrations \
   bootstrap-admin --username dev@example.test
 ```
 
+An agent setting it up follows [agent-setup.md](agent-setup.md), which creates
+the first Admin without a terminal.
+
 `PAYAFFE_INSTALLATION_MODE=test` is the whole switch. The first host to start
 records the mode in the database, and from then on every host, including the
 Admin MCP host, refuses to start when it is configured for the other mode. A

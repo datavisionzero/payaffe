@@ -50,7 +50,7 @@ material value to understanding the decision.
 - [0017 – One installation serves one shop](./0017-one-installation-serves-one-shop.md) — superseded by 0029
 - [0018 – Every admin is fully privileged](./0018-every-admin-is-fully-privileged.md) — clarified by 0029
 - [0019 – The second factor is TOTP, and sensitive writes need a fresh one](./0019-the-second-factor-is-totp-and-sensitive-writes-need-a-fresh-one.md) — amended by 0028
-- [0020 – The first admin is created by a local command](./0020-the-first-admin-is-created-by-a-local-command.md)
+- [0020 – The first admin is created by a local command](./0020-the-first-admin-is-created-by-a-local-command.md) — amended by 0028 and 0037
 - [0021 – Secrets live in the environment, never in the repository](./0021-secrets-live-in-the-environment-never-in-the-repository.md)
 - [0022 – The backend owns every protected mutation](./0022-the-backend-owns-every-protected-mutation.md) — frontend topology amended by 0030
 - [0023 – MCP is narrower than the Admin UI, and stays local](./0023-mcp-is-narrower-than-the-admin-ui-and-stays-local.md)
@@ -67,3 +67,4 @@ material value to understanding the decision.
 - [0034 – An Observed Payment waits for the confirmations of a transaction it saw in time](./0034-an-observed-payment-waits-for-the-confirmations-of-a-transaction-it-saw-in-time.md)
 - [0035 – Transactions observed before currency selection do not count](./0035-transactions-observed-before-currency-selection-do-not-count.md)
 - [0036 – Webhook Delivery reaches only public addresses](./0036-webhook-delivery-reaches-only-public-addresses.md)
+- [0037 – The first admin can be written to a file, for an unattended setup](./0037-the-first-admin-can-be-written-to-a-file-for-an-unattended-setup.md)

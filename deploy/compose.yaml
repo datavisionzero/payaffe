@@ -129,6 +129,8 @@ services:
   #
   # The same image carries `bootstrap-admin`, which creates the first admin
   # account (ADR 0020) and is the reason this service is still here at all.
+  # Without a terminal it writes the credentials to a file (ADR 0037); see
+  # docs/operations/agent-setup.md.
   migrations:
     image: ghcr.io/datavisionzero/payaffe-migrations:${PAYAFFE_VERSION:-latest}
     depends_on:

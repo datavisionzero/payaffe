@@ -28,13 +28,39 @@ if (args.Length == 0 || string.Equals(args[0], "migrate", StringComparison.Ordin
 if (!string.Equals(args[0], "bootstrap-admin", StringComparison.OrdinalIgnoreCase) ||
     !TryGetOption(args, "--username", out var username))
 {
-    Console.Error.WriteLine("Usage: Payaffe.Migrations bootstrap-admin --username <name>");
+    Console.Error.WriteLine(
+        "Usage: Payaffe.Migrations bootstrap-admin --username <name> [--credentials-file <path>]");
     return 2;
 }
 
-if (Console.IsInputRedirected || Console.IsOutputRedirected)
+// With a credentials file the command needs no terminal: it generates the
+// password and writes it, with the Recovery Codes, to that file and prints
+// nothing secret (ADR 0037). Without one, a person types the password.
+AdminCredentialsFile? credentialsFile = null;
+if (TryGetOption(args, "--credentials-file", out var credentialsPath))
 {
-    Console.Error.WriteLine("Admin bootstrap requires an interactive terminal.");
+    try
+    {
+        credentialsFile = AdminCredentialsFile.CreateNew(credentialsPath);
+    }
+    catch (IOException) when (File.Exists(credentialsPath))
+    {
+        Console.Error.WriteLine(
+            $"{credentialsPath} already exists and is not overwritten; it may hold an earlier run's credentials. Nothing was created.");
+        return 2;
+    }
+    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine(
+            $"{credentialsPath} cannot be created: {exception.Message} Mount a directory the container's user can write, " +
+            "for example with --user \"$(id -u):$(id -g)\". Nothing was created.");
+        return 2;
+    }
+}
+else if (Console.IsInputRedirected || Console.IsOutputRedirected)
+{
+    Console.Error.WriteLine(
+        "Admin bootstrap requires an interactive terminal, or --credentials-file <path> to run without one.");
     return 2;
 }
 
@@ -43,32 +69,84 @@ if (Console.IsInputRedirected || Console.IsOutputRedirected)
 // advisory lock.
 await MigrationRunner.ApplyAsync(host.Services, CancellationToken.None);
 
-var password = ReadSecret($"Password (at least {AdminBootstrapService.MinimumPasswordLength} characters): ");
-if (password.Length < AdminBootstrapService.MinimumPasswordLength)
+string password;
+if (credentialsFile is not null)
 {
-    Console.Error.WriteLine(
-        $"The password has to be at least {AdminBootstrapService.MinimumPasswordLength} characters.");
-    return 2;
+    password = AdminCredentialsFile.GeneratePassword();
 }
-
-var passwordConfirmation = ReadSecret("Confirm password: ");
-if (!string.Equals(password, passwordConfirmation, StringComparison.Ordinal))
+else
 {
-    Console.Error.WriteLine("Password confirmation did not match.");
-    return 2;
+    password = ReadSecret($"Password (at least {AdminBootstrapService.MinimumPasswordLength} characters): ");
+    if (password.Length < AdminBootstrapService.MinimumPasswordLength)
+    {
+        Console.Error.WriteLine(
+            $"The password has to be at least {AdminBootstrapService.MinimumPasswordLength} characters.");
+        return 2;
+    }
+
+    var passwordConfirmation = ReadSecret("Confirm password: ");
+    if (!string.Equals(password, passwordConfirmation, StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine("Password confirmation did not match.");
+        return 2;
+    }
 }
 
 using var scope = host.Services.CreateScope();
 var bootstrapService = scope.ServiceProvider.GetRequiredService<AdminBootstrapService>();
-var result = await bootstrapService.BootstrapAsync(
-    new AdminBootstrapRequest(
-        username,
-        password,
-        Guid.NewGuid().ToString("D")),
-    CancellationToken.None);
+AdminBootstrapResult result;
+try
+{
+    result = await bootstrapService.BootstrapAsync(
+        new AdminBootstrapRequest(
+            username,
+            password,
+            Guid.NewGuid().ToString("D")),
+        CancellationToken.None);
+}
+catch
+{
+    credentialsFile?.Discard();
+    throw;
+}
+
+if (result.Status != AdminBootstrapStatus.Created)
+{
+    credentialsFile?.Discard();
+}
 
 switch (result.Status)
 {
+    case AdminBootstrapStatus.Created when credentialsFile is not null:
+        try
+        {
+            using (credentialsFile)
+            {
+                credentialsFile.Write(
+                    result.AdminAccountId!.Value,
+                    username.Trim(),
+                    password,
+                    result.RecoveryCodes,
+                    DateTimeOffset.UtcNow);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The file was created and held open, so this is a full disk or a
+            // vanished mount, not a path problem. The account exists and its
+            // password went nowhere, and bootstrap will not run a second time.
+            Console.Error.WriteLine(
+                $"Admin Account {result.AdminAccountId:D} was created, but {credentialsFile.Path} could not be written: {exception.Message}");
+            Console.Error.WriteLine(
+                "Its password is lost. An installation with nothing else in it yet starts again from an empty database.");
+            return 4;
+        }
+
+        Console.WriteLine($"Admin Account created: {result.AdminAccountId:D}");
+        Console.WriteLine($"Its password and Recovery Codes are in {credentialsFile.Path}, readable by its owner only.");
+        Console.WriteLine("Nothing secret was printed. Whoever signs in reads that file, moves both into a");
+        Console.WriteLine("password manager, and deletes it.");
+        return 0;
     case AdminBootstrapStatus.Created:
         Console.WriteLine($"Admin Account created: {result.AdminAccountId:D}");
         Console.WriteLine();
@@ -89,7 +167,8 @@ switch (result.Status)
         Console.Error.WriteLine("Admin bootstrap is no longer available for this installation.");
         return 3;
     default:
-        Console.Error.WriteLine("The bootstrap input was invalid.");
+        Console.Error.WriteLine(
+            $"The bootstrap input was invalid: a username is required, and a password of at least {AdminBootstrapService.MinimumPasswordLength} characters.");
         return 2;
 }
 

@@ -68,6 +68,10 @@ rather than running full nodes. That trade is deliberate and is written up in
 An installation is two files and a volume. Neither file needs a checkout of
 this repository — the images come from `ghcr.io/datavisionzero`:
 
+Decide first whether this is a live installation or a Test Mode one for
+developing an integration ([below](#testing-an-integration-without-real-money)).
+The first start records the choice, and changing it later means a new database.
+
 ```sh
 mkdir payaffe && cd payaffe
 base=https://raw.githubusercontent.com/datavisionzero/payaffe/main/deploy
@@ -97,6 +101,12 @@ one command, which prompts for a password of at least sixteen characters:
 docker compose --profile operations run --rm migrations \
   bootstrap-admin --username admin@example.test
 ```
+
+An agent setting payaffe up has no terminal to type into; it adds
+`--credentials-file`, and the password and recovery codes land in a file on the
+host for you to read. The whole unattended procedure, starting with the choice
+between a live and a Test Mode installation, is
+[docs/operations/agent-setup.md](docs/operations/agent-setup.md).
 
 The account signs in with that password. Adding a second factor is the admin's
 own, later ([ADR 0028](docs/adr/0028-the-second-factor-is-optional-and-enrolled-later.md)).
