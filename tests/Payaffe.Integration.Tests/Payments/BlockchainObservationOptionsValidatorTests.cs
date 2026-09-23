@@ -1,3 +1,4 @@
+using Payaffe.Application.Installation;
 using Payaffe.Infrastructure.Payments;
 using Microsoft.Extensions.Configuration;
 
@@ -136,12 +137,52 @@ public sealed class BlockchainObservationOptionsValidatorTests
         Assert.Contains("missing or blank provider secret", result.FailureMessage, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Validate_refuses_simulated_mode_in_a_live_installation()
+    {
+        var validator = CreateValidator(new Dictionary<string, string?>());
+
+        var result = validator.Validate(null, new BlockchainObservationOptions { Mode = "simulated" });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("only available in Test Mode", result.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("simulated", true)]
+    [InlineData("blockchair", false)]
+    [InlineData("nownodes", false)]
+    [InlineData("none", false)]
+    public void Validate_accepts_only_simulated_mode_in_a_test_installation(string mode, bool accepted)
+    {
+        var validator = CreateValidator(
+            new Dictionary<string, string?>
+            {
+                ["BlockchainObservation:ProviderSecrets:blockchair"] = "provider-key",
+            },
+            new ConfiguredInstallationMode(InstallationMode.Test));
+
+        var result = validator.Validate(null, new BlockchainObservationOptions
+        {
+            Mode = mode,
+            Blockchair = new BlockchainObservationProviderOptions
+            {
+                ApiKeyReference = "configuration:BlockchainObservation:ProviderSecrets:blockchair",
+            },
+        });
+
+        Assert.Equal(accepted, result.Succeeded);
+    }
+
     private static BlockchainObservationOptionsValidator CreateValidator(
-        IReadOnlyDictionary<string, string?> values)
+        IReadOnlyDictionary<string, string?> values,
+        ConfiguredInstallationMode? installationMode = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(values)
             .Build();
-        return new BlockchainObservationOptionsValidator(configuration);
+        return new BlockchainObservationOptionsValidator(
+            configuration,
+            installationMode ?? ConfiguredInstallationMode.Live);
     }
 }

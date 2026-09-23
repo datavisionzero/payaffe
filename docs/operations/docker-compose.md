@@ -228,6 +228,15 @@ prices; `ExchangeRates__Simulated__BtcEur`, `…__BtcUsd`, `…__LtcEur`,
 `…__LtcUsd`, `…__EthEur` and `…__EthUsd` override them, in fiat per coin, and
 every Rate Lock names `simulated` as its source.
 
+Blockchain Observation in Test Mode is the `simulated` mode, and
+`PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE` must be unset, `none` or `simulated`
+there; a provider is refused at startup. It reports the Simulated Transactions
+recorded for a Payment: unconfirmed on the first worker poll that finds one and
+fully confirmed on the next, so a simulated payment reaches `observed` and then
+`completed` one poll interval apart. Lowering
+`PAYAFFE_OBSERVATION_WORKER_POLL_INTERVAL` to a few seconds keeps an
+integration test short. `simulated` is refused in a live installation.
+
 Blockchain Observation mode configuration uses
 `PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE`. The accepted values are `none`,
 `blockchair`, and `nownodes`. The default `none` mode keeps provider polling

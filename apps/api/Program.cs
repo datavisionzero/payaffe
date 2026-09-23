@@ -1820,7 +1820,7 @@ static async Task<IResult> GetAdminObservationHealthAsync(
         StringComparer.Ordinal);
     var providerName = BlockchainObservationOptions.NormalizeMode(
         observationOptions.Value.Mode);
-    var configuredAvailable = providerName is "blockchair" or "nownodes";
+    var configuredAvailable = BlockchainObservationOptions.IsObserving(providerName);
     var health = new[] { "BTC", "LTC", "ETH" }
         .Select(currency => byCurrency.GetValueOrDefault(currency) ??
             new ObservationHealthReadModel(

@@ -49,6 +49,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 "app.rate_cache",
                 "app.rate_locks",
                 "app.reorg_alerts",
+                "app.simulated_transactions",
                 "app.watch_only_wallet_cursors",
                 "app.webhook_endpoints",
                 "audit.audit_log_entries",

@@ -114,6 +114,23 @@ public static class DependencyInjection
         services.AddScoped<ConfiguredBlockchainObservationAdapter>();
         services.AddScoped<IBlockchainObservationAdapter, ObservationHealthTrackingAdapter>();
         services.AddSingleton<IValidateOptions<BlockchainObservationOptions>, BlockchainObservationOptionsValidator>();
+        if (installationMode.IsTest)
+        {
+            // Unset means simulated here, so a Test Mode installation needs no
+            // observation setting at all. Anything else is refused by the
+            // validator above.
+            services.PostConfigure<BlockchainObservationOptions>(options =>
+            {
+                if (BlockchainObservationOptions.NormalizeMode(options.Mode) == "none")
+                {
+                    options.Mode = BlockchainObservationOptions.SimulatedMode;
+                }
+            });
+            services.AddScoped<SimulatedBlockchainObservationAdapter>();
+            services.AddScoped<ISimulatedTransactionStore, EfSimulatedTransactionStore>();
+            services.AddScoped<PaymentSimulationService>();
+        }
+
         services.AddScoped<IWebhookSecretResolver, ConfigurationWebhookSecretResolver>();
         services.AddOptions<PaymentLifecycleWorkerOptions>();
         services.AddSingleton<IValidateOptions<PaymentLifecycleWorkerOptions>, PaymentLifecycleWorkerOptionsValidator>();

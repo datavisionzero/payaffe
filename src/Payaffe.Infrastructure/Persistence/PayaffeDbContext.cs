@@ -51,6 +51,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
     public DbSet<ReorgAlertRecord> ReorgAlerts => Set<ReorgAlertRecord>();
 
+    public DbSet<SimulatedTransactionRecord> SimulatedTransactions => Set<SimulatedTransactionRecord>();
+
     public DbSet<WebhookOutboxEventRecord> WebhookOutboxEvents => Set<WebhookOutboxEventRecord>();
 
     public DbSet<WebhookEndpointRecord> WebhookEndpoints => Set<WebhookEndpointRecord>();
@@ -74,6 +76,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
         ConfigureRateLocks(modelBuilder);
         ConfigureRateCache(modelBuilder);
         ConfigurePaymentAddressAssignments(modelBuilder);
+        ConfigureSimulatedTransactions(modelBuilder);
         ConfigureWatchOnlyWalletCursors(modelBuilder);
         ConfigureNativeEthAddressPool(modelBuilder);
         ConfigureObservationHealth(modelBuilder);
@@ -641,6 +644,38 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                     "ck_rate_cache_supported_currency",
                     "supported_currency in ('BTC', 'LTC', 'ETH')");
             });
+        });
+    }
+
+    private static void ConfigureSimulatedTransactions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SimulatedTransactionRecord>(entity =>
+        {
+            entity.ToTable("simulated_transactions", "app");
+            entity.HasKey(transaction => transaction.Id).HasName("pk_simulated_transactions");
+
+            entity.Property(transaction => transaction.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
+            entity.Property(transaction => transaction.Id).HasColumnName("id").HasColumnType("uuid");
+            entity.Property(transaction => transaction.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
+            entity.Property(transaction => transaction.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
+            entity.Property(transaction => transaction.PaymentAddress).HasColumnName("payment_address").HasColumnType("text");
+            entity.Property(transaction => transaction.TransactionHash).HasColumnName("transaction_hash").HasColumnType("text");
+            entity.Property(transaction => transaction.Amount).HasColumnName("amount").HasColumnType("text");
+            entity.Property(transaction => transaction.ObservedAt).HasColumnName("observed_at").HasColumnType("timestamp with time zone");
+            entity.Property(transaction => transaction.FirstReportedAt).HasColumnName("first_reported_at").HasColumnType("timestamp with time zone");
+            entity.Property(transaction => transaction.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+
+            entity.HasOne<PaymentRecord>()
+                .WithMany()
+                .HasForeignKey(transaction => new { transaction.ProjectId, transaction.PaymentId })
+                .HasPrincipalKey(payment => new { payment.ProjectId, payment.Id })
+                .HasConstraintName("fk_simulated_transactions_payments")
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(transaction => new { transaction.ProjectId, transaction.PaymentId })
+                .HasDatabaseName("ix_simulated_transactions_project_payment");
+            entity.HasIndex(transaction => transaction.TransactionHash)
+                .IsUnique()
+                .HasDatabaseName("uq_simulated_transactions_transaction_hash");
         });
     }
 

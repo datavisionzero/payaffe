@@ -25,8 +25,7 @@ public sealed class ConfiguredBlockchainObservationAdapter(
         string supportedCurrency,
         CancellationToken cancellationToken)
     {
-        var mode = BlockchainObservationOptions.NormalizeMode(options.Value.Mode);
-        return Task.FromResult(mode is "blockchair" or "nownodes");
+        return Task.FromResult(BlockchainObservationOptions.IsObserving(options.Value.Mode));
     }
 
     private IBlockchainObservationAdapter ResolveAdapter()
