@@ -447,15 +447,17 @@ artifacts.
 
 ## First Admin Account
 
-Apply migrations before bootstrapping the first Admin Account. Generate a
-one command:
+The first Admin Account is created by one command. It applies the schema itself
+before it creates anything, so it works on a fresh database before `up` as well
+as against a running installation:
 
 ```sh
 docker compose --profile operations run --rm migrations \
   bootstrap-admin --username admin@example.test
 ```
 
-It prompts without echo for the password and its confirmation, refuses
+It prompts without echo for the password and its confirmation, refuses a
+password shorter than sixteen characters, refuses
 redirected input and output, creates the first Admin Account only while no
 Admin Account exists, and prints Recovery Codes exactly once. Store those codes
 somewhere that is not this host before closing the terminal.
