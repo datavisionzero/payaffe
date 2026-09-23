@@ -62,7 +62,15 @@ public static class DependencyInjection
         services.AddScoped<IAdminNativeEthAddressPoolStore, EfAdminNativeEthAddressPoolStore>();
         services.AddScoped<IPaymentStore, EfPaymentStore>();
         services.AddScoped<IProjectPaymentConfigurationStore, EfProjectPaymentConfigurationStore>();
-        services.AddScoped<IPaymentAddressProvider, EfPaymentAddressProvider>();
+        if (installationMode.IsTest)
+        {
+            services.AddScoped<IPaymentAddressProvider, SimulatedPaymentAddressProvider>();
+        }
+        else
+        {
+            services.AddScoped<IPaymentAddressProvider, EfPaymentAddressProvider>();
+        }
+
         services.AddScoped<IRateCacheStore, EfRateCacheStore>();
         services.AddScoped<IObservationHealthStore, EfObservationHealthStore>();
         services.AddScoped<BackgroundWorkerLeaseManager>();
