@@ -180,6 +180,12 @@ masked interactive prompt, refuses a password shorter than sixteen characters,
 stores only protected password and Recovery Code hashes, and shows Recovery
 Codes once.
 
+Without a terminal it runs only with a credentials file
+([ADR 0037](../adr/0037-the-first-admin-can-be-written-to-a-file-for-an-unattended-setup.md)):
+it then generates the password, writes it and the Recovery Codes to a file it
+creates exclusively with owner-only permissions before the account exists, and
+prints neither.
+
 It asks for no second factor
 ([ADR 0028](../adr/0028-the-second-factor-is-optional-and-enrolled-later.md)).
 Requiring one here meant an operator had to agree a secret between a secret

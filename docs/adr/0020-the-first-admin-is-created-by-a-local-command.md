@@ -4,6 +4,10 @@
 The command no longer takes a TOTP secret reference or a code; it asks for a
 password. Everything else below stands.
 
+**Amended by [ADR 0037](./0037-the-first-admin-can-be-written-to-a-file-for-an-unattended-setup.md).**
+Without a terminal, the command generates the password and writes it with the
+Recovery Codes to a file on the host instead of prompting.
+
 The operator runs an operations command that creates the first Admin Account. No HTTP surface creates one, no MCP tool creates one, and no host
 creates one while starting.
 

@@ -488,6 +488,26 @@ in the command, shell history, Compose file, logs, or support artifacts.
 Running the bootstrap command again is not an Admin lockout-recovery path and
 is refused.
 
+### Without a terminal
+
+An agent, or any other run without a terminal, adds `--credentials-file`
+([ADR 0037](../adr/0037-the-first-admin-can-be-written-to-a-file-for-an-unattended-setup.md)).
+The command then generates the password and writes it with the Recovery Codes
+to that file, created with mode `0600` and never overwritten, and prints only
+the Admin Account id and the path:
+
+```sh
+mkdir -m 700 first-admin
+docker compose --profile operations run --rm -T \
+  --user "$(id -u):$(id -g)" --volume "$PWD/first-admin:/first-admin" \
+  migrations bootstrap-admin --username admin@example.test \
+  --credentials-file /first-admin/credentials.txt
+```
+
+Whoever signs in reads the file on the host, moves both secrets into a password
+manager, and deletes it. The whole unattended procedure is
+[agent-setup.md](agent-setup.md).
+
 ## CoinGecko Exchange Rates
 
 The API uses CoinGecko as the Exchange Rate Source and persists fetched

@@ -162,6 +162,28 @@ jobs:
           # And again against the running installation, as a manual run would.
           docker compose --profile operations run --rm migrations
 
+          # The first admin the way docs/operations/agent-setup.md creates it:
+          # no terminal, secrets in a host file readable by its owner only, and
+          # nothing secret on the output.
+          mkdir -m 700 first-admin
+          docker compose --profile operations run --rm -T \
+            --user "$(id -u):$(id -g)" --volume "$PWD/first-admin:/first-admin" \
+            migrations bootstrap-admin --username ci@example.test \
+            --credentials-file /first-admin/credentials.txt > bootstrap.out
+          test "$(stat -c '%a %u' first-admin/credentials.txt)" = "600 $(id -u)"
+          password="$(awk '/^Password:/ {print $2}' first-admin/credentials.txt)"
+          test "${#password}" -ge 16
+          if grep -qF "$password" bootstrap.out; then exit 1; fi
+          grep -q '^Admin Account created: ' bootstrap.out
+          # A second run is refused and leaves no file behind.
+          status=0
+          docker compose --profile operations run --rm -T \
+            --user "$(id -u):$(id -g)" --volume "$PWD/first-admin:/first-admin" \
+            migrations bootstrap-admin --username ci@example.test \
+            --credentials-file /first-admin/again.txt || status=$?
+          test "$status" = 3
+          test ! -e first-admin/again.txt
+
       - name: Logs of a stack that did not start
         if: failure()
         working-directory: deploy
