@@ -37,6 +37,18 @@ _Avoid_: Embedded Payer Page, direct browser integration
 A deployment administered by exactly one operator or shop and containing one or more Projects.
 _Avoid_: Tenant, merchant platform, marketplace
 
+**Installation Mode**:
+Whether an installation handles real payments (`live`) or simulated ones (`test`); fixed when the installation's database is first created.
+_Avoid_: Environment, sandbox flag
+
+**Test Mode**:
+The Installation Mode in which Blockchain Truth, Payment Addresses, and exchange rates are simulated so an integration can be exercised without real funds.
+_Avoid_: Sandbox, demo mode, dry run
+
+**Simulated Transaction**:
+A Blockchain Transaction recorded on request in Test Mode that the simulated Blockchain Observation Mode reports as if it had been observed on-chain.
+_Avoid_: Fake payment, test payment
+
 **Project**:
 An operator-defined boundary that owns payment data, Integration API Credentials, receiving-address allocation, Webhook Delivery, and payment-policy configuration inside one Single-Operator Installation.
 _Avoid_: Tenant, shop, workspace
