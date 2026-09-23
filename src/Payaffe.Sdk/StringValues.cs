@@ -82,6 +82,13 @@ public readonly record struct PayaffeErrorCode
 
     public static PayaffeErrorCode UnexpectedError { get; } = new("unexpected_error");
 
+    /// <summary>
+    /// The installation is not in Test Mode, so it has no route to simulate a
+    /// payment. Raised by the SDK, not sent by the server: a live installation
+    /// does not know the route exists.
+    /// </summary>
+    public static PayaffeErrorCode TestModeUnavailable { get; } = new("test_mode.unavailable");
+
     public override string ToString() => Value;
 }
 

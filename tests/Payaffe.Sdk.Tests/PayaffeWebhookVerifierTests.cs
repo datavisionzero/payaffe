@@ -70,6 +70,40 @@ public sealed class PayaffeWebhookVerifierTests
             result.DeliveryId);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_event_says_whether_it_comes_from_a_test_installation(bool testMode)
+    {
+        byte[] body = Encoding.UTF8.GetBytes(_completedPayload.Replace(
+            "\"resource\":",
+            $"\"test_mode\": {(testMode ? "true" : "false")},\n  \"resource\":",
+            StringComparison.Ordinal));
+
+        PayaffeWebhookVerificationResult result = PayaffeWebhookVerifier.Verify(
+            body,
+            CreateHeaders(body),
+            _secret,
+            _signedAt.AddSeconds(30));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(testMode, result.Event!.TestMode);
+    }
+
+    [Fact]
+    public void An_event_from_before_the_flag_existed_is_not_a_test_event()
+    {
+        byte[] body = Encoding.UTF8.GetBytes(_completedPayload);
+
+        PayaffeWebhookVerificationResult result = PayaffeWebhookVerifier.Verify(
+            body,
+            CreateHeaders(body),
+            _secret,
+            _signedAt.AddSeconds(30));
+
+        Assert.False(result.Event!.TestMode);
+    }
+
     [Fact]
     public void Tampered_body_is_rejected_and_exposes_no_event()
     {

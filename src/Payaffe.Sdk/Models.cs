@@ -38,6 +38,19 @@ public sealed record Payment(
     PaymentInstruction? PaymentInstruction,
     bool TestMode = false);
 
+/// <summary>
+/// A payment simulated in a Test Mode installation. The Payment itself changes
+/// once the installation's simulated observation reports it; poll the Payment
+/// or wait for its webhooks as you would for a real one.
+/// </summary>
+public sealed record SimulatedTransaction(
+    Guid PaymentId,
+    SupportedCurrency SupportedCurrency,
+    string PaymentAddress,
+    string TransactionHash,
+    string Amount,
+    DateTimeOffset RecordedAt);
+
 public sealed record PaymentOption(
     SupportedCurrency SupportedCurrency,
     PaymentOptionStatus Status,

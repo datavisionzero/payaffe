@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Payaffe.Sdk;
 
@@ -20,6 +21,7 @@ public sealed class PayaffeSdkOpenApiModelTests
         { "RateLockResponse", typeof(RateLock) },
         { "CreatePaymentHttpRequest", typeof(CreatePaymentRequest) },
         { "PaymentContextHttpRequest", typeof(PaymentContext) },
+        { "SimulatedTransactionResponse", typeof(SimulatedTransaction) },
     };
 
     [Theory]
@@ -62,7 +64,10 @@ public sealed class PayaffeSdkOpenApiModelTests
 
     private static async Task<JsonElement> ReadSchemasAsync()
     {
-        await using WebApplicationFactory<Program> factory = new();
+        // The Test Mode document is the live one plus the Test Mode route, so
+        // it covers every model the SDK carries.
+        await using WebApplicationFactory<Program> factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseSetting("Installation:Mode", "test"));
         using HttpClient client = factory.CreateClient();
         using HttpResponseMessage response = await client.GetAsync("/openapi/v1.json");
         response.EnsureSuccessStatusCode();
