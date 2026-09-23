@@ -717,6 +717,58 @@
         }
       }
     },
+    "/api/admin/address-history-alerts": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "ListAdminAddressHistoryAlerts",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAddressHistoryAlertsHttpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/observation-health": {
       "get": {
         "tags": [
@@ -2143,6 +2195,77 @@
   },
   "components": {
     "schemas": {
+      "AdminAddressHistoryAlertReadModel": {
+        "required": [
+          "projectId",
+          "id",
+          "paymentId",
+          "supportedCurrency",
+          "paymentAddress",
+          "transactionHash",
+          "observedAmount",
+          "observedAt",
+          "currencySelectedAt",
+          "status",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "paymentAddress": {
+            "type": "string"
+          },
+          "transactionHash": {
+            "type": "string"
+          },
+          "observedAmount": {
+            "type": "string"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "currencySelectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminAddressHistoryAlertsHttpResponse": {
+        "required": [
+          "alerts"
+        ],
+        "type": "object",
+        "properties": {
+          "alerts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminAddressHistoryAlertReadModel"
+            }
+          }
+        }
+      },
       "AdminAuditLogEntryDetailReadModel": {
         "required": [
           "projectId",

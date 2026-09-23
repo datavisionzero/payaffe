@@ -308,6 +308,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         payment.ConfirmationRequirement = selection.ConfirmationRequirement;
         payment.PaymentTolerancePercent = selection.PaymentTolerancePercent;
         payment.ReorgMonitoringDepth = selection.ReorgMonitoringDepth;
+        payment.CurrencySelectedAt = selection.SelectedAt;
         payment.UpdatedAt = selection.SelectedAt;
         payment.Version++;
 
@@ -425,6 +426,23 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             !StringComparer.Ordinal.Equals(payment.PaymentAddress, observation.PaymentAddress))
         {
             return RecordBlockchainObservationStoreResult.ObservationMismatch();
+        }
+
+        // An address can carry history: the derivation cursor restarts after a
+        // database restore, and an extended key or an imported address may be
+        // used elsewhere. A transaction observed well before currency
+        // selection is not a payment of this Payment (ADR 0035). The
+        // tolerance covers block timestamps that trail real time.
+        if (payment.CurrencySelectedAt is { } currencySelectedAt &&
+            observation.ObservedAt < currencySelectedAt - PreSelectionTolerance)
+        {
+            var ignored = await RecordAddressHistoryAsync(payment, observation, currencySelectedAt, cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            return ignored;
         }
 
         var existingTransaction = await dbContext.MatchingBlockchainTransactions
@@ -992,6 +1010,60 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             FormatCryptoAmount(eligibleTotal),
             existingEligibleTransactions.Select(transaction => transaction.Id).ToArray(),
             candidateTransactionContributed);
+    }
+
+    /// <summary>
+    /// How far before currency selection a transaction's Observed Payment
+    /// Time may lie and still count. Block timestamps may trail real time by
+    /// well over an hour.
+    /// </summary>
+    public static readonly TimeSpan PreSelectionTolerance = TimeSpan.FromHours(2);
+
+    /// <summary>
+    /// Records a transaction the Payment Address received before currency
+    /// selection as an Address History Alert, once, without touching the
+    /// Payment. It never counts toward the Payment.
+    /// </summary>
+    private async Task<RecordBlockchainObservationStoreResult> RecordAddressHistoryAsync(
+        PaymentRecord payment,
+        BlockchainObservationDraft observation,
+        DateTimeOffset currencySelectedAt,
+        CancellationToken cancellationToken)
+    {
+        var alreadyRecorded = await dbContext.AddressHistoryAlerts
+            .AsNoTracking()
+            .AnyAsync(
+                alert => alert.ProjectId == payment.ProjectId &&
+                         alert.PaymentId == payment.Id &&
+                         alert.SupportedCurrency == observation.SupportedCurrency &&
+                         alert.TransactionHash == observation.TransactionHash,
+                cancellationToken);
+        if (!alreadyRecorded)
+        {
+            dbContext.AddressHistoryAlerts.Add(new AddressHistoryAlertRecord
+            {
+                ProjectId = payment.ProjectId,
+                Id = Guid.NewGuid(),
+                PaymentId = payment.Id,
+                SupportedCurrency = observation.SupportedCurrency,
+                PaymentAddress = observation.PaymentAddress,
+                TransactionHash = observation.TransactionHash,
+                ObservedAmount = observation.ObservedAmount,
+                ObservedAt = observation.ObservedAt,
+                CurrencySelectedAt = currencySelectedAt,
+                Status = "open",
+                CreatedAt = observation.CreatedAt,
+                UpdatedAt = observation.CreatedAt,
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var readModel = ToReadModel(
+            payment,
+            await CalculateObservedTotalAsync(payment.ProjectId, payment.Id, cancellationToken));
+        return alreadyRecorded
+            ? RecordBlockchainObservationStoreResult.AlreadyIgnoredBeforeSelection(readModel)
+            : RecordBlockchainObservationStoreResult.IgnoredBeforeSelection(readModel);
     }
 
     /// <summary>

@@ -180,6 +180,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/address-history-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListAdminAddressHistoryAlerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/observation-health": {
         parameters: {
             query?: never;
@@ -504,6 +520,28 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminAddressHistoryAlertReadModel: {
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            paymentId: string;
+            supportedCurrency: string;
+            paymentAddress: string;
+            transactionHash: string;
+            observedAmount: string;
+            /** Format: date-time */
+            observedAt: string;
+            /** Format: date-time */
+            currencySelectedAt: string;
+            status: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminAddressHistoryAlertsHttpResponse: {
+            alerts: components["schemas"]["AdminAddressHistoryAlertReadModel"][];
+        };
         AdminAuditLogEntryDetailReadModel: {
             /** Format: uuid */
             projectId: null | string;
@@ -1512,6 +1550,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminReorgAlertsHttpResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+        };
+    };
+    ListAdminAddressHistoryAlerts: {
+        parameters: {
+            query?: {
+                projectId?: string;
+                limit?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAddressHistoryAlertsHttpResponse"];
                 };
             };
             /** @description Unauthorized */

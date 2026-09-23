@@ -643,6 +643,12 @@ adminApi.MapGet("/reorg-alerts", ListAdminReorgAlertsAsync)
     .Produces<AdminReorgAlertsHttpResponse>(StatusCodes.Status200OK)
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json");
 
+adminApi.MapGet("/address-history-alerts", ListAdminAddressHistoryAlertsAsync)
+    .WithName("ListAdminAddressHistoryAlerts")
+    .WithTags("Admin")
+    .Produces<AdminAddressHistoryAlertsHttpResponse>(StatusCodes.Status200OK)
+    .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json");
+
 adminApi.MapGet("/observation-health", GetAdminObservationHealthAsync)
     .WithName("GetAdminObservationHealth")
     .WithTags("Admin")
@@ -2053,6 +2059,32 @@ static async Task<IResult> ListAdminReorgAlertsAsync(
         await adminPayments.ListReorgAlertsAsync(projectId ?? Guid.Empty, limit, cancellationToken)));
 }
 
+static async Task<IResult> ListAdminAddressHistoryAlertsAsync(
+    HttpContext httpContext,
+    Guid? projectId,
+    int? limit,
+    AdminAuthenticationService adminAuthentication,
+    AdminPaymentQueryService adminPayments,
+    CancellationToken cancellationToken)
+{
+    var admin = await AuthenticateAdminSessionAsync(
+        httpContext,
+        adminAuthentication,
+        cancellationToken);
+    if (admin.Result is not null)
+    {
+        return admin.Result;
+    }
+
+    if (ValidateProjectContext(httpContext, projectId) is { } projectProblem)
+    {
+        return projectProblem;
+    }
+
+    return Results.Ok(new AdminAddressHistoryAlertsHttpResponse(
+        await adminPayments.ListAddressHistoryAlertsAsync(projectId ?? Guid.Empty, limit, cancellationToken)));
+}
+
 static async Task<IResult> GetAdminObservationHealthAsync(
     HttpContext httpContext,
     AdminAuthenticationService adminAuthentication,
@@ -3451,6 +3483,8 @@ public sealed record AdminProjectsHttpResponse(IReadOnlyList<AdminProjectReadMod
 public sealed record AdminProjectHttpResponse(AdminProjectReadModel Project);
 
 public sealed record AdminReorgAlertsHttpResponse(IReadOnlyList<AdminReorgAlertReadModel> Alerts);
+
+public sealed record AdminAddressHistoryAlertsHttpResponse(IReadOnlyList<AdminAddressHistoryAlertReadModel> Alerts);
 
 public sealed record AdminObservationHealthHttpResponse(
     IReadOnlyList<ObservationHealthReadModel> Currencies);

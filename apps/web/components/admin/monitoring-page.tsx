@@ -2,7 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createText } from "../../lib/text";
-import type { AdminObservationHealth, AdminReorgAlert } from "../../lib/admin-api";
+import type {
+  AdminAddressHistoryAlert,
+  AdminObservationHealth,
+  AdminReorgAlert
+} from "../../lib/admin-api";
 import {
   AdminSection,
   EmptyMessage,
@@ -31,6 +35,13 @@ const t = createText({
   reorgAlertsDescription: "Warnings for completed Payments affected by a blockchain reorganization.",
   reorgAlertsEmpty: "No Reorg Alerts are available.",
   reorgAlertsTitle: "Reorg Alerts",
+  addressHistoryAlertsDescription:
+    "Transactions a Payment Address received before its Payment's currency was selected. They do not count toward the Payment.",
+  addressHistoryAlertsEmpty: "No Address History Alerts are available.",
+  addressHistoryAlertsTitle: "Address History Alerts",
+  observedAmount: "Observed amount",
+  observedAt: "Observed at",
+  currencySelectedAt: "Currency selected at",
   safeErrorCode: "Safe error code",
   transactionHash: "Transaction hash",
   updatedAt: "Updated"
@@ -47,6 +58,7 @@ export function AdminMonitoringPage() {
       />
       <ObservationSection />
       <ReorgAlertSection />
+      <AddressHistoryAlertSection />
     </div>
   );
 }
@@ -124,6 +136,43 @@ function ReorgAlertSection() {
             />
             <InfoItem label={t("newConfirmations")} value={String(alert.newConfirmations)} />
             <InfoItem label={t("updatedAt")} value={formatDateTime(alert.updatedAt)} />
+          </dl>
+        </article>
+      ))}
+    </AdminSection>
+  );
+}
+
+function AddressHistoryAlertSection() {
+  const project = useAdminProject();
+  const query = useQuery(adminQueries.addressHistoryAlerts(project.projectId));
+
+  return (
+    <AdminSection
+      description={t("addressHistoryAlertsDescription")}
+      title={t("addressHistoryAlertsTitle")}
+    >
+      {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
+      {query.isError ? <ErrorMessage error={query.error} /> : null}
+      {query.data?.length === 0 ? (
+        <EmptyMessage>{t("addressHistoryAlertsEmpty")}</EmptyMessage>
+      ) : null}
+      {query.data?.map((alert: AdminAddressHistoryAlert) => (
+        <article className="mt-4 rounded-md border border-[var(--border)] p-4" key={alert.id}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="font-semibold">
+              {alert.supportedCurrency} · {alert.paymentId}
+            </h3>
+            <StatusPill status={alert.status} />
+          </div>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <InfoItem label={t("transactionHash")} value={alert.transactionHash} />
+            <InfoItem label={t("observedAmount")} value={alert.observedAmount} />
+            <InfoItem label={t("observedAt")} value={formatDateTime(alert.observedAt)} />
+            <InfoItem
+              label={t("currencySelectedAt")}
+              value={formatDateTime(alert.currencySelectedAt)}
+            />
           </dl>
         </article>
       ))}

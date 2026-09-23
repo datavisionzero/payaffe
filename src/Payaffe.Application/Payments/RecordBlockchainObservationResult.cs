@@ -21,6 +21,12 @@ public sealed record RecordBlockchainObservationResult(
 
     public static RecordBlockchainObservationResult ObservationMismatch() =>
         new(RecordBlockchainObservationResultKind.ObservationMismatch, Payment: null);
+
+    public static RecordBlockchainObservationResult IgnoredBeforeSelection(PaymentResponse payment) =>
+        new(RecordBlockchainObservationResultKind.IgnoredBeforeSelection, payment);
+
+    public static RecordBlockchainObservationResult AlreadyIgnoredBeforeSelection(PaymentResponse payment) =>
+        new(RecordBlockchainObservationResultKind.AlreadyIgnoredBeforeSelection, payment);
 }
 
 public enum RecordBlockchainObservationResultKind
@@ -31,4 +37,13 @@ public enum RecordBlockchainObservationResultKind
     PaymentNotFound,
     PaymentNotReady,
     ObservationMismatch,
+
+    /// <summary>
+    /// Observed before currency selection (ADR 0035): it does not count, and
+    /// an Address History Alert was raised for it now.
+    /// </summary>
+    IgnoredBeforeSelection,
+
+    /// <summary>Observed before currency selection and already alerted.</summary>
+    AlreadyIgnoredBeforeSelection,
 }

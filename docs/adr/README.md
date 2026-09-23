@@ -65,4 +65,5 @@ material value to understanding the decision.
 - [0032 – The client address is the connection, until a proxy is named](./0032-the-client-address-is-the-connection-until-a-proxy-is-named.md)
 - [0033 – A test installation simulates its external truth](./0033-a-test-installation-simulates-its-external-truth.md)
 - [0034 – An Observed Payment waits for the confirmations of a transaction it saw in time](./0034-an-observed-payment-waits-for-the-confirmations-of-a-transaction-it-saw-in-time.md)
+- [0035 – Transactions observed before currency selection do not count](./0035-transactions-observed-before-currency-selection-do-not-count.md)
 - [0036 – Webhook Delivery reaches only public addresses](./0036-webhook-delivery-reaches-only-public-addresses.md)

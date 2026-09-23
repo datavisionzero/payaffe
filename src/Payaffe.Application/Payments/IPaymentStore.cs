@@ -143,6 +143,12 @@ public sealed record RecordBlockchainObservationStoreResult(
 
     public static RecordBlockchainObservationStoreResult ObservationMismatch() =>
         new(RecordBlockchainObservationStoreResultKind.ObservationMismatch, Payment: null);
+
+    public static RecordBlockchainObservationStoreResult IgnoredBeforeSelection(PaymentReadModel payment) =>
+        new(RecordBlockchainObservationStoreResultKind.IgnoredBeforeSelection, payment);
+
+    public static RecordBlockchainObservationStoreResult AlreadyIgnoredBeforeSelection(PaymentReadModel payment) =>
+        new(RecordBlockchainObservationStoreResultKind.AlreadyIgnoredBeforeSelection, payment);
 }
 
 public enum RecordBlockchainObservationStoreResultKind
@@ -153,6 +159,8 @@ public enum RecordBlockchainObservationStoreResultKind
     PaymentNotFound,
     PaymentNotReady,
     ObservationMismatch,
+    IgnoredBeforeSelection,
+    AlreadyIgnoredBeforeSelection,
 }
 
 public sealed record ExpireDuePaymentsStoreResult(int ExpiredCount);

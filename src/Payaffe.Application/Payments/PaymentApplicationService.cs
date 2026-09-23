@@ -420,6 +420,10 @@ public sealed class PaymentApplicationService(
                 RecordBlockchainObservationResult.PaymentNotReady(),
             RecordBlockchainObservationStoreResultKind.ObservationMismatch =>
                 RecordBlockchainObservationResult.ObservationMismatch(),
+            RecordBlockchainObservationStoreResultKind.IgnoredBeforeSelection =>
+                RecordBlockchainObservationResult.IgnoredBeforeSelection(ToResponse(storeResult.Payment!)),
+            RecordBlockchainObservationStoreResultKind.AlreadyIgnoredBeforeSelection =>
+                RecordBlockchainObservationResult.AlreadyIgnoredBeforeSelection(ToResponse(storeResult.Payment!)),
             _ => throw new InvalidOperationException($"Unsupported observation result {storeResult.Kind}."),
         };
     }
@@ -543,6 +547,16 @@ public sealed class PaymentApplicationService(
                         }
 
                         break;
+                    case RecordBlockchainObservationResultKind.IgnoredBeforeSelection:
+                        rejectedCount++;
+                        _logger.LogWarning(
+                            "Payment Address of Payment {PaymentId} in Project {ProjectId} ({SupportedCurrency}) received transaction {TransactionHash} before currency selection; it does not count and an Address History Alert was raised.",
+                            target.PaymentId,
+                            target.ProjectId,
+                            target.SupportedCurrency,
+                            observation.TransactionHash);
+                        break;
+                    case RecordBlockchainObservationResultKind.AlreadyIgnoredBeforeSelection:
                     case RecordBlockchainObservationResultKind.PaymentNotFound:
                     case RecordBlockchainObservationResultKind.PaymentNotReady:
                     case RecordBlockchainObservationResultKind.ObservationMismatch:

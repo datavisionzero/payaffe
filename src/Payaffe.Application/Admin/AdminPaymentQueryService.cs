@@ -87,4 +87,17 @@ public sealed class AdminPaymentQueryService(IAdminPaymentStore store, IClock cl
             ? Task.FromResult<IReadOnlyList<AdminReorgAlertReadModel>>([])
             : store.ListReorgAlertsAsync(projectId, limit, cancellationToken);
     }
+
+    public Task<IReadOnlyList<AdminAddressHistoryAlertReadModel>> ListAddressHistoryAlertsAsync(
+        Guid projectId,
+        int? requestedLimit,
+        CancellationToken cancellationToken)
+    {
+        var limit = requestedLimit is null or <= 0
+            ? DefaultLimit
+            : Math.Min(requestedLimit.Value, MaxLimit);
+        return projectId == Guid.Empty
+            ? Task.FromResult<IReadOnlyList<AdminAddressHistoryAlertReadModel>>([])
+            : store.ListAddressHistoryAlertsAsync(projectId, limit, cancellationToken);
+    }
 }

@@ -219,6 +219,7 @@ Payment completion is based on the sum of confirmed Matching Blockchain Transact
 - Multiple Matching Blockchain Transactions may complete one Payment together.
 - Matching Blockchain Transactions must belong to the selected Supported Currency and payment address.
 - Matching Blockchain Transactions must fall within the Payment Expiration or Late Acceptance Window rules.
+- A Blockchain Transaction with an Observed Payment Time more than two hours before currency selection does not count toward the Payment. `payaffe` records it once as an Address History Alert, visible to Admins and written to the log.
 - A later matching transaction may complete a Payment after an earlier underpaid transaction.
 
 Underpayments are handled with a configurable Payment Tolerance per Project.

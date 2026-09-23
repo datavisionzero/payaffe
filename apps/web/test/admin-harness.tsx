@@ -155,7 +155,8 @@ export const state = {
       lastSafeErrorCode: null as string | null
     }
   ],
-  reorgAlerts: [] as JsonBodyType[]
+  reorgAlerts: [] as JsonBodyType[],
+  addressHistoryAlerts: [] as JsonBodyType[]
 };
 
 export function resetAdminState() {
@@ -187,6 +188,7 @@ export function resetAdminState() {
     }
   ];
   state.reorgAlerts = [];
+  state.addressHistoryAlerts = [];
 }
 
 const unauthorized = () =>
@@ -347,6 +349,9 @@ export const adminServer = setupServer(
   }),
   http.get("/api/admin/observation-health", () => guarded({ currencies: state.observationHealth })),
   http.get("/api/admin/reorg-alerts", () => guarded({ alerts: state.reorgAlerts })),
+  http.get("/api/admin/address-history-alerts", () =>
+    guarded({ alerts: state.addressHistoryAlerts })
+  ),
   http.get("/api/admin/integration-api-credentials", () =>
     guarded({
       credentials: [

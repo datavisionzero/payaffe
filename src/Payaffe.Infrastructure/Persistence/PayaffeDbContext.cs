@@ -52,6 +52,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
 
     public DbSet<ReorgAlertRecord> ReorgAlerts => Set<ReorgAlertRecord>();
 
+    public DbSet<AddressHistoryAlertRecord> AddressHistoryAlerts => Set<AddressHistoryAlertRecord>();
+
     public DbSet<SimulatedTransactionRecord> SimulatedTransactions => Set<SimulatedTransactionRecord>();
 
     public DbSet<WebhookOutboxEventRecord> WebhookOutboxEvents => Set<WebhookOutboxEventRecord>();
@@ -92,6 +94,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
         ConfigureBackgroundWorkerLeases(modelBuilder);
         ConfigureMatchingBlockchainTransactions(modelBuilder);
         ConfigureReorgAlerts(modelBuilder);
+        ConfigureAddressHistoryAlerts(modelBuilder);
         ConfigureWebhookEndpoints(modelBuilder);
         ConfigureWebhookOutboxEvents(modelBuilder);
         ConfigureWebhookDeliveryAttempts(modelBuilder);
@@ -470,6 +473,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(payment => payment.CompletedAt).HasColumnName("completed_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.SettledAt).HasColumnName("settled_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.LastPolledAt).HasColumnName("last_polled_at").HasColumnType("timestamp with time zone");
+            entity.Property(payment => payment.CurrencySelectedAt).HasColumnName("currency_selected_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.Version)
@@ -1087,6 +1091,48 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                     "ck_reorg_alerts_new_confirmations",
                     "new_confirmations >= 0");
             });
+        });
+    }
+
+    private static void ConfigureAddressHistoryAlerts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AddressHistoryAlertRecord>(entity =>
+        {
+            entity.ToTable("address_history_alerts", "app");
+            entity.HasKey(alert => alert.Id).HasName("pk_address_history_alerts");
+
+            entity.Property(alert => alert.ProjectId).HasColumnName("project_id").HasColumnType("uuid");
+            entity.Property(alert => alert.Id).HasColumnName("id").HasColumnType("uuid");
+            entity.Property(alert => alert.PaymentId).HasColumnName("payment_id").HasColumnType("uuid");
+            entity.Property(alert => alert.SupportedCurrency).HasColumnName("supported_currency").HasColumnType("text");
+            entity.Property(alert => alert.PaymentAddress).HasColumnName("payment_address").HasColumnType("text");
+            entity.Property(alert => alert.TransactionHash).HasColumnName("transaction_hash").HasColumnType("text");
+            entity.Property(alert => alert.ObservedAmount).HasColumnName("observed_amount").HasColumnType("text");
+            entity.Property(alert => alert.ObservedAt).HasColumnName("observed_at").HasColumnType("timestamp with time zone");
+            entity.Property(alert => alert.CurrencySelectedAt).HasColumnName("currency_selected_at").HasColumnType("timestamp with time zone");
+            entity.Property(alert => alert.Status).HasColumnName("status").HasColumnType("text");
+            entity.Property(alert => alert.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(alert => alert.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(alert => alert.Version)
+                .HasColumnName("version")
+                .HasColumnType("bigint")
+                .HasDefaultValue(1L)
+                .IsConcurrencyToken();
+
+            entity.HasOne<PaymentRecord>()
+                .WithMany()
+                .HasForeignKey(alert => new { alert.ProjectId, alert.PaymentId })
+                .HasPrincipalKey(payment => new { payment.ProjectId, payment.Id })
+                .HasConstraintName("fk_address_history_alerts_payments")
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(alert => new { alert.ProjectId, alert.PaymentId, alert.SupportedCurrency, alert.TransactionHash })
+                .IsUnique()
+                .HasDatabaseName("uq_address_history_alerts_payment_currency_hash");
+            entity.HasIndex(alert => new { alert.ProjectId, alert.CreatedAt })
+                .HasDatabaseName("ix_address_history_alerts_project_created_at");
+            entity.ToTable(table => table.HasCheckConstraint(
+                "ck_address_history_alerts_status",
+                "status in ('open', 'resolved')"));
         });
     }
 

@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "../components/admin/admin-shell";
+import { AdminMonitoringPage } from "../components/admin/monitoring-page";
 import { AdminOverviewPage } from "../components/admin/overview-page";
 import { adminServer, projectId, renderAdmin, resetAdminState, state } from "./admin-harness";
 
@@ -220,6 +221,33 @@ describe("AdminShell", () => {
     expect(
       within(navigation).getByRole("link", { name: "Addresses, low capacity" })
     ).toBeInTheDocument();
+  });
+
+  it("lists Address History Alerts on the monitoring page", async () => {
+    state.authenticated = true;
+    state.addressHistoryAlerts = [
+      {
+        projectId,
+        id: "h1",
+        paymentId: "0b8f3c7e-1111-4222-8333-944455556666",
+        supportedCurrency: "BTC",
+        paymentAddress: "bc1qhistory",
+        transactionHash: "tx-before-selection",
+        observedAmount: "0.0004",
+        observedAt: "2026-07-04T09:00:00Z",
+        currencySelectedAt: "2026-07-04T12:00:00Z",
+        status: "open",
+        createdAt: "2026-07-04T12:05:00Z"
+      }
+    ];
+    renderAdmin(
+      <AdminShell>
+        <AdminMonitoringPage />
+      </AdminShell>
+    );
+
+    await screen.findByRole("heading", { name: "Address History Alerts" });
+    expect(await screen.findByText("tx-before-selection")).toBeInTheDocument();
   });
 
   it("has no automated accessibility violations around the overview", async () => {

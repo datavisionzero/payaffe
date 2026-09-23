@@ -29,6 +29,7 @@ export type AdminNativeEthAddressPoolImport =
   Schema<"AdminNativeEthAddressPoolImportHttpResponse">;
 export type AdminObservationHealth = Schema<"ObservationHealthReadModel">;
 export type AdminReorgAlert = Schema<"AdminReorgAlertReadModel">;
+export type AdminAddressHistoryAlert = Schema<"AdminAddressHistoryAlertReadModel">;
 export { ApiError as AdminApiError };
 
 export const adminLoginFormSchema = z.object({
@@ -353,6 +354,15 @@ export async function getAdminObservationHealth(): Promise<AdminObservationHealt
 
 export async function listAdminReorgAlerts(projectId: string): Promise<AdminReorgAlert[]> {
   const { data, error, response } = await webApi.GET("/api/admin/reorg-alerts", {
+    params: { query: { projectId, limit: 25 } }
+  });
+  return requireData(data, error, response).alerts;
+}
+
+export async function listAdminAddressHistoryAlerts(
+  projectId: string
+): Promise<AdminAddressHistoryAlert[]> {
+  const { data, error, response } = await webApi.GET("/api/admin/address-history-alerts", {
     params: { query: { projectId, limit: 25 } }
   });
   return requireData(data, error, response).alerts;

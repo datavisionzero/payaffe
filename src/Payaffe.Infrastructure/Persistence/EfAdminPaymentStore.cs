@@ -178,6 +178,32 @@ public sealed class EfAdminPaymentStore(PayaffeDbContext dbContext) : IAdminPaym
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AdminAddressHistoryAlertReadModel>> ListAddressHistoryAlertsAsync(
+        Guid projectId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.AddressHistoryAlerts
+            .AsNoTracking()
+            .Where(alert => alert.ProjectId == projectId)
+            .OrderByDescending(alert => alert.CreatedAt)
+            .ThenBy(alert => alert.Id)
+            .Take(limit)
+            .Select(alert => new AdminAddressHistoryAlertReadModel(
+                alert.ProjectId,
+                alert.Id,
+                alert.PaymentId,
+                alert.SupportedCurrency,
+                alert.PaymentAddress,
+                alert.TransactionHash,
+                alert.ObservedAmount,
+                alert.ObservedAt,
+                alert.CurrencySelectedAt,
+                alert.Status,
+                alert.CreatedAt))
+            .ToListAsync(cancellationToken);
+    }
+
     private async Task<AdminPaymentDetailReadModel> ToDetailAsync(
         Records.PaymentRecord payment,
         CancellationToken cancellationToken)
