@@ -135,18 +135,28 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
 
     public async Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
         DateTimeOffset observedUntil,
+        TimeSpan observedConfirmationWait,
         int maxPayments,
         CancellationToken cancellationToken)
     {
-        return await dbContext.Payments
+        var confirmationWaitCutoff = observedUntil - observedConfirmationWait;
+        var observedInTime = PaymentsWithTransactionObservedInTime();
+
+        // Least recently polled first, never-polled before all others. A poll
+        // that finds nothing changes no Payment, so ordering by anything the
+        // poll does not write would pick the same Payments on every tick.
+        var targets = await dbContext.Payments
             .AsNoTracking()
             .Where(payment =>
-                (payment.Status == "waiting_for_payment" || payment.Status == "observed") &&
-                payment.LateAcceptanceEndsAt > observedUntil &&
+                ((payment.Status == "waiting_for_payment" && payment.LateAcceptanceEndsAt > observedUntil) ||
+                 (payment.Status == "observed" &&
+                  (payment.LateAcceptanceEndsAt > observedUntil ||
+                   (payment.LateAcceptanceEndsAt > confirmationWaitCutoff && observedInTime.Contains(payment.Id))))) &&
                 payment.SelectedCurrency != null &&
                 payment.PaymentAddress != null &&
                 payment.ExpectedCryptoAmount != null)
-            .OrderBy(payment => payment.UpdatedAt)
+            .OrderBy(payment => payment.LastPolledAt.HasValue)
+            .ThenBy(payment => payment.LastPolledAt)
             .ThenBy(payment => payment.Id)
             .Take(maxPayments)
             .Select(payment => new BlockchainObservationTarget(
@@ -156,6 +166,36 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                 payment.ExpectedCryptoAmount!,
                 payment.ProjectId))
             .ToListAsync(cancellationToken);
+
+        // Stamped before the poll, so a target whose poll fails moves to the
+        // back of the rotation as well.
+        var paymentIds = targets.Select(target => target.PaymentId).ToArray();
+        if (dbContext.Database.IsRelational())
+        {
+            // Not a Payment change: no version bump, so it never conflicts
+            // with a concurrent lifecycle write.
+            await dbContext.Payments
+                .Where(payment => paymentIds.Contains(payment.Id))
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(payment => payment.LastPolledAt, observedUntil),
+                    cancellationToken);
+        }
+        else
+        {
+            await DiscardChangesOnFailureAsync(async () =>
+            {
+                foreach (var payment in await dbContext.Payments
+                             .Where(payment => paymentIds.Contains(payment.Id))
+                             .ToListAsync(cancellationToken))
+                {
+                    payment.LastPolledAt = observedUntil;
+                }
+
+                return await dbContext.SaveChangesAsync(cancellationToken);
+            });
+        }
+
+        return targets;
     }
 
     public async Task<IReadOnlyList<BlockchainReorgMonitoringTarget>> ListBlockchainReorgMonitoringTargetsAsync(
@@ -198,7 +238,15 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<SelectCurrencyStoreResult> SelectCurrencyAsync(
+    public Task<SelectCurrencyStoreResult> SelectCurrencyAsync(
+        PaymentSelectionDraft selection,
+        PaymentEventDraft paymentEvent,
+        WebhookOutboxEventDraft webhookEvent,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => SelectCurrencyCoreAsync(
+            selection, paymentEvent, webhookEvent, cancellationToken));
+
+    private async Task<SelectCurrencyStoreResult> SelectCurrencyCoreAsync(
         PaymentSelectionDraft selection,
         PaymentEventDraft paymentEvent,
         WebhookOutboxEventDraft webhookEvent,
@@ -207,7 +255,9 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         await using var transaction = await BeginTransactionIfRelationalAsync(cancellationToken);
 
         var payment = await dbContext.Payments
-            .SingleOrDefaultAsync(candidate => candidate.Id == selection.PaymentId, cancellationToken);
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == selection.PaymentId && candidate.ProjectId == selection.ProjectId,
+                cancellationToken);
         if (payment is null)
         {
             return SelectCurrencyStoreResult.NotFound();
@@ -295,7 +345,24 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                 selection.PaymentAddress)));
     }
 
-    public async Task<RecordBlockchainObservationStoreResult> RecordBlockchainObservationAsync(
+    public Task<RecordBlockchainObservationStoreResult> RecordBlockchainObservationAsync(
+        BlockchainObservationDraft observation,
+        PaymentCompletionPolicyDraft completionPolicy,
+        PaymentEventDraft paymentEvent,
+        WebhookOutboxEventDraft webhookEvent,
+        PaymentEventDraft completedPaymentEvent,
+        WebhookOutboxEventDraft completedWebhookEvent,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => RecordBlockchainObservationCoreAsync(
+            observation,
+            completionPolicy,
+            paymentEvent,
+            webhookEvent,
+            completedPaymentEvent,
+            completedWebhookEvent,
+            cancellationToken));
+
+    private async Task<RecordBlockchainObservationStoreResult> RecordBlockchainObservationCoreAsync(
         BlockchainObservationDraft observation,
         PaymentCompletionPolicyDraft completionPolicy,
         PaymentEventDraft paymentEvent,
@@ -309,7 +376,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         var payment = await dbContext.Payments
             .SingleOrDefaultAsync(
                 candidate => candidate.Id == observation.PaymentId &&
-                             (observation.ProjectId == Guid.Empty || candidate.ProjectId == observation.ProjectId),
+                             candidate.ProjectId == observation.ProjectId,
                 cancellationToken);
         if (payment is null)
         {
@@ -385,19 +452,38 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             : RecordBlockchainObservationStoreResult.Observed(ToReadModel(payment, observedTotal));
     }
 
-    public async Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
+    public Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
         DateTimeOffset expiresBefore,
+        TimeSpan observedConfirmationWait,
+        int maxPayments,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => ExpireDuePaymentsCoreAsync(
+            expiresBefore, observedConfirmationWait, maxPayments, cancellationToken));
+
+    /// <summary>
+    /// Without a Payment Address nobody can pay, so a Payment still waiting for
+    /// currency selection expires at Payment Expiration. An unpaid Payment
+    /// expires when its Late Acceptance Window ends. An Observed Payment that
+    /// saw a Matching Blockchain Transaction in time waits for its
+    /// confirmations up to the confirmation wait after the window (ADR 0034).
+    /// </summary>
+    private async Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsCoreAsync(
+        DateTimeOffset expiresBefore,
+        TimeSpan observedConfirmationWait,
         int maxPayments,
         CancellationToken cancellationToken)
     {
         await using var transaction = await BeginTransactionIfRelationalAsync(cancellationToken);
 
+        var confirmationWaitCutoff = expiresBefore - observedConfirmationWait;
+        var observedInTime = PaymentsWithTransactionObservedInTime();
         var duePayments = await dbContext.Payments
             .Where(payment =>
-                (payment.Status == "pending_currency_selection" ||
-                 payment.Status == "waiting_for_payment" ||
-                 payment.Status == "observed") &&
-                payment.LateAcceptanceEndsAt <= expiresBefore)
+                (payment.Status == "pending_currency_selection" && payment.ExpiresAt <= expiresBefore) ||
+                (payment.Status == "waiting_for_payment" && payment.LateAcceptanceEndsAt <= expiresBefore) ||
+                (payment.Status == "observed" &&
+                 payment.LateAcceptanceEndsAt <= expiresBefore &&
+                 (payment.LateAcceptanceEndsAt <= confirmationWaitCutoff || !observedInTime.Contains(payment.Id))))
             .OrderBy(payment => payment.LateAcceptanceEndsAt)
             .Take(maxPayments)
             .ToListAsync(cancellationToken);
@@ -432,7 +518,22 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         return new ExpireDuePaymentsStoreResult(duePayments.Count);
     }
 
-    public async Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
+    public Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
+        BlockchainTransactionConfirmationUpdateDraft confirmationUpdate,
+        PaymentCompletionPolicyDraft completionPolicy,
+        PaymentEventDraft completedPaymentEvent,
+        WebhookOutboxEventDraft completedWebhookEvent,
+        PaymentEventDraft reorgPaymentEvent,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => UpdateBlockchainTransactionConfirmationsCoreAsync(
+            confirmationUpdate,
+            completionPolicy,
+            completedPaymentEvent,
+            completedWebhookEvent,
+            reorgPaymentEvent,
+            cancellationToken));
+
+    private async Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsCoreAsync(
         BlockchainTransactionConfirmationUpdateDraft confirmationUpdate,
         PaymentCompletionPolicyDraft completionPolicy,
         PaymentEventDraft completedPaymentEvent,
@@ -445,7 +546,7 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         var payment = await dbContext.Payments
             .SingleOrDefaultAsync(
                 candidate => candidate.Id == confirmationUpdate.PaymentId &&
-                             (confirmationUpdate.ProjectId == Guid.Empty || candidate.ProjectId == confirmationUpdate.ProjectId),
+                             candidate.ProjectId == confirmationUpdate.ProjectId,
                 cancellationToken);
         if (payment is null)
         {
@@ -542,6 +643,40 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         return StringComparer.Ordinal.Equals(payment.Status, "completed")
             ? UpdateBlockchainTransactionConfirmationsStoreResult.Completed(ToReadModel(payment, observedTotal))
             : UpdateBlockchainTransactionConfirmationsStoreResult.Updated(ToReadModel(payment, observedTotal));
+    }
+
+    /// <summary>
+    /// Payments with a Matching Blockchain Transaction whose Observed Payment
+    /// Time lies inside Payment Expiration or the Late Acceptance Window, which
+    /// is what lets them complete once it is confirmed.
+    /// </summary>
+    private IQueryable<Guid> PaymentsWithTransactionObservedInTime() =>
+        from transaction in dbContext.MatchingBlockchainTransactions
+        join payment in dbContext.Payments
+            on new { transaction.ProjectId, Id = transaction.PaymentId }
+            equals new { payment.ProjectId, payment.Id }
+        where transaction.SupportedCurrency == payment.SelectedCurrency &&
+              transaction.PaymentAddress == payment.PaymentAddress &&
+              transaction.ObservedAt <= payment.LateAcceptanceEndsAt
+        select payment.Id;
+
+    /// <summary>
+    /// A write that fails leaves its entities in the change tracker, and the
+    /// next save in the same scope would send them again. A worker run shares
+    /// one scope across many Payments, so without this one failed write would
+    /// fail every later write of the run, including the lease release.
+    /// </summary>
+    private async Task<T> DiscardChangesOnFailureAsync<T>(Func<Task<T>> write)
+    {
+        try
+        {
+            return await write();
+        }
+        catch
+        {
+            dbContext.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     private async Task<IDbContextTransaction?> BeginTransactionIfRelationalAsync(CancellationToken cancellationToken)

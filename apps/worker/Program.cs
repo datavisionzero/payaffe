@@ -32,7 +32,9 @@ if (string.IsNullOrWhiteSpace(connectionString))
     Environment.Exit(ConfigurationErrorExitCode);
 }
 
-builder.Services.Configure<PaymentApplicationOptions>(builder.Configuration.GetSection("Payments"));
+builder.Services.AddOptions<PaymentApplicationOptions>()
+    .Bind(builder.Configuration.GetSection("Payments"))
+    .ValidateOnStart();
 builder.Services.AddOptions<ExchangeRateOptions>()
     .Bind(builder.Configuration.GetSection("ExchangeRates"))
     .ValidateOnStart();

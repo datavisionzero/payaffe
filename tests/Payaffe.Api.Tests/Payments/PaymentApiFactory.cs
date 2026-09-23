@@ -411,7 +411,8 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
     private sealed class FixedWebhookSecretResolver(
         IReadOnlyDictionary<string, string> secrets) : IWebhookSecretResolver
     {
-        public Task<string?> ResolveAsync(
+        public Task<string?> ResolveForProjectAsync(
+            Guid projectId,
             string secretReference,
             CancellationToken cancellationToken)
         {

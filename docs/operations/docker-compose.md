@@ -185,6 +185,7 @@ them:
 - `PAYAFFE_OBSERVATION_WORKER_POLL_INTERVAL`
 - `PAYAFFE_OBSERVATION_WORKER_MAX_PAYMENTS_PER_POLL`
 - `PAYAFFE_OBSERVATION_WORKER_LEASE_DURATION`
+- `PAYAFFE_OBSERVED_CONFIRMATION_WAIT`
 - `PAYAFFE_REORG_MONITORING_WORKER_ENABLED`
 - `PAYAFFE_REORG_MONITORING_WORKER_POLL_INTERVAL`
 - `PAYAFFE_REORG_MONITORING_WORKER_MAX_TRANSACTIONS_PER_POLL`
@@ -297,6 +298,13 @@ by default there. It stays idle while `PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE` is
 `none`. `PAYAFFE_OBSERVATION_WORKER_POLL_INTERVAL` controls the scheduler
 interval, and `PAYAFFE_OBSERVATION_WORKER_MAX_PAYMENTS_PER_POLL` bounds the
 number of active Payments queried per poll.
+
+An Observed Payment whose transaction was seen inside Payment Expiration or the
+Late Acceptance Window is not expired when the window ends: it keeps being
+polled until the transaction confirms, for up to the Confirmation Wait
+`PAYAFFE_OBSERVED_CONFIRMATION_WAIT` after the window (default `3.00:00:00`,
+72 hours; zero restores expiry at the end of the window). Startup validation
+rejects negative values and values above 30 days (ADR 0034).
 
 Webhook Endpoint records must store a secret reference instead of a raw
 secret. For Compose-based installations, the default Project uses references in

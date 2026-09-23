@@ -483,7 +483,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
                 Confirmations: 1,
                 "test-provider",
-                "provider-policy-snapshot"),
+                "provider-policy-snapshot",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(RecordBlockchainObservationResultKind.Observed, observation.Kind);
@@ -606,7 +607,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 observedAt,
                 Confirmations: 0,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(RecordBlockchainObservationResultKind.Observed, observationResult.Kind);
@@ -671,7 +673,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
                 Confirmations: 1,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(RecordBlockchainObservationResultKind.Completed, observationResult.Kind);
@@ -740,7 +743,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
                 Confirmations: 1,
                 "test-provider",
-                $"provider-{expectedAmountState}"),
+                $"provider-{expectedAmountState}",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(expectedCompletion, result.Kind == RecordBlockchainObservationResultKind.Completed);
@@ -786,7 +790,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
                 Confirmations: 0,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         var updateResult = await payments.UpdateBlockchainTransactionConfirmationsAsync(
@@ -796,7 +801,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 "tx-later-confirmed-123",
                 Confirmations: 1,
                 BlockHash: "block-123",
-                BlockHeight: 840000),
+                BlockHeight: 840000,
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(UpdateBlockchainTransactionConfirmationsResultKind.Completed, updateResult.Kind);
@@ -855,7 +861,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
                 Confirmations: 0,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
         var completionResult = await payments.UpdateBlockchainTransactionConfirmationsAsync(
             new UpdateBlockchainTransactionConfirmationsCommand(
@@ -864,7 +871,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 "tx-reorg-123",
                 Confirmations: 1,
                 BlockHash: "block-original",
-                BlockHeight: 840000),
+                BlockHeight: 840000,
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
         Assert.Equal(UpdateBlockchainTransactionConfirmationsResultKind.Completed, completionResult.Kind);
 
@@ -875,7 +883,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 "tx-reorg-123",
                 Confirmations: 0,
                 BlockHash: "block-reorged",
-                BlockHeight: 840001),
+                BlockHeight: 840001,
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(UpdateBlockchainTransactionConfirmationsResultKind.ReorgAlerted, reorgResult.Kind);
@@ -959,7 +968,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T10:55:00Z"),
                 Confirmations: 0,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         var updateResult = await scopedPayments.UpdateBlockchainTransactionConfirmationsAsync(
@@ -969,7 +979,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 "tx-before-expiration-123",
                 Confirmations: 1,
                 BlockHash: "block-123",
-                BlockHeight: 840000),
+                BlockHeight: 840000,
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(UpdateBlockchainTransactionConfirmationsResultKind.Completed, updateResult.Kind);
@@ -1029,7 +1040,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
                 Confirmations: 1,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(RecordBlockchainObservationResultKind.Completed, observationResult.Kind);
@@ -1089,7 +1101,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T12:00:00Z"),
                 Confirmations: 1,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(RecordBlockchainObservationResultKind.Completed, observationResult.Kind);
@@ -1140,7 +1153,8 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 DateTimeOffset.Parse("2026-07-04T11:00:01Z"),
                 Confirmations: 1,
                 "test-provider",
-                "provider-observation-123"),
+                "provider-observation-123",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
 
         Assert.Equal(RecordBlockchainObservationResultKind.Observed, observationResult.Kind);
@@ -1184,6 +1198,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             var setupDbContext = setupScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
             var payment = await setupDbContext.Payments.FindAsync(createResult.Payment!.PaymentId);
             Assert.NotNull(payment);
+            payment.ExpiresAt = DateTimeOffset.Parse("2026-07-04T11:58:00Z");
             payment.LateAcceptanceEndsAt = DateTimeOffset.Parse("2026-07-04T11:59:00Z");
             await setupDbContext.SaveChangesAsync();
         }

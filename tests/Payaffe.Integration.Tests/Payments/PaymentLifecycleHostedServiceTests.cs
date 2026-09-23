@@ -88,6 +88,7 @@ public sealed class PaymentLifecycleHostedServiceTests(PostgreSqlFixture postgre
 
         var dbContext = serviceProvider.GetRequiredService<PayaffeDbContext>();
         var payment = Assert.Single(dbContext.Payments);
+        payment.ExpiresAt = WorkerNow.AddMinutes(-1);
         payment.LateAcceptanceEndsAt = WorkerNow.AddMinutes(-1);
         await dbContext.SaveChangesAsync();
 
