@@ -203,14 +203,16 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         int maxTransactions,
         CancellationToken cancellationToken)
     {
-        return await (
+        // A Reorg Alert does not end monitoring: a false alert must not hide a
+        // later real reorganisation. Checked transactions are stamped before
+        // the poll, so every monitored transaction takes its turn.
+        var targets = await (
                 from transaction in dbContext.MatchingBlockchainTransactions.AsNoTracking()
                 join payment in dbContext.Payments.AsNoTracking()
                     on new { transaction.ProjectId, Id = transaction.PaymentId }
                     equals new { payment.ProjectId, payment.Id }
                 where payment.Status == "completed" &&
                       transaction.ContributedToCompletion &&
-                      !transaction.ReorgAffected &&
                       payment.SelectedCurrency != null &&
                       payment.PaymentAddress != null &&
                       payment.ExpectedCryptoAmount != null &&
@@ -226,16 +228,47 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                         transaction.SupportedCurrency == "LTC" ? monitoringPolicy.LtcMonitoringDepth :
                         monitoringPolicy.EthMonitoringDepth))
                 orderby transaction.LastCheckedAt, transaction.Id
-                select new BlockchainReorgMonitoringTarget(
-                    payment.Id,
-                    transaction.SupportedCurrency,
-                    transaction.PaymentAddress,
-                    payment.ExpectedCryptoAmount!,
-                    transaction.TransactionHash,
-                    transaction.Confirmations,
-                    payment.ProjectId))
+                select new
+                {
+                    transaction.Id,
+                    Target = new BlockchainReorgMonitoringTarget(
+                        payment.Id,
+                        transaction.SupportedCurrency,
+                        transaction.PaymentAddress,
+                        payment.ExpectedCryptoAmount!,
+                        transaction.TransactionHash,
+                        transaction.Confirmations,
+                        payment.ProjectId),
+                })
             .Take(maxTransactions)
             .ToListAsync(cancellationToken);
+
+        var transactionIds = targets.Select(target => target.Id).ToArray();
+        var checkedAt = monitoringPolicy.CheckedAt;
+        if (dbContext.Database.IsRelational())
+        {
+            await dbContext.MatchingBlockchainTransactions
+                .Where(transaction => transactionIds.Contains(transaction.Id))
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(transaction => transaction.LastCheckedAt, checkedAt),
+                    cancellationToken);
+        }
+        else
+        {
+            await DiscardChangesOnFailureAsync(async () =>
+            {
+                foreach (var transaction in await dbContext.MatchingBlockchainTransactions
+                             .Where(transaction => transactionIds.Contains(transaction.Id))
+                             .ToListAsync(cancellationToken))
+                {
+                    transaction.LastCheckedAt = checkedAt;
+                }
+
+                return await dbContext.SaveChangesAsync(cancellationToken);
+            });
+        }
+
+        return targets.Select(target => target.Target).ToArray();
     }
 
     public Task<SelectCurrencyStoreResult> SelectCurrencyAsync(
@@ -575,44 +608,45 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         var previousBlockHash = matchingTransaction.BlockHash;
         var previousBlockHeight = matchingTransaction.BlockHeight;
         completionPolicy = ResolveCompletionPolicy(payment, completionPolicy);
-        var reorgDetected = IsReorgAffectedCompletedTransaction(
-            payment,
-            matchingTransaction,
-            completionPolicy,
-            confirmationUpdate,
-            previousConfirmations,
-            previousBlockHash,
-            previousBlockHeight);
+        var monitored = IsMonitoredAfterCompletion(payment, matchingTransaction);
+        var blockMoved = monitored &&
+                         (IsChanged(previousBlockHash, confirmationUpdate.BlockHash) ||
+                          IsChanged(previousBlockHeight, confirmationUpdate.BlockHeight));
+        var confirmationsDropped = monitored && confirmationUpdate.Confirmations < previousConfirmations;
+        matchingTransaction.ConsecutiveMissingCount = 0;
+        matchingTransaction.ConsecutiveConfirmationDropCount =
+            confirmationsDropped ? matchingTransaction.ConsecutiveConfirmationDropCount + 1 : 0;
+        var reorgSignal = blockMoved ||
+                          matchingTransaction.ConsecutiveConfirmationDropCount >= RequiredConsecutiveConfirmationDrops;
 
-        matchingTransaction.Confirmations = confirmationUpdate.Confirmations;
-        matchingTransaction.BlockHash = confirmationUpdate.BlockHash;
-        matchingTransaction.BlockHeight = confirmationUpdate.BlockHeight;
+        // A single dip is taken for a provider that lags a block: the stored
+        // depth stays until the drop is reported again.
+        if (!confirmationsDropped || reorgSignal)
+        {
+            matchingTransaction.Confirmations = confirmationUpdate.Confirmations;
+        }
+
+        matchingTransaction.BlockHash = confirmationUpdate.BlockHash ?? matchingTransaction.BlockHash;
+        matchingTransaction.BlockHeight = confirmationUpdate.BlockHeight ?? matchingTransaction.BlockHeight;
         matchingTransaction.LastCheckedAt = confirmationUpdate.CheckedAt;
         matchingTransaction.UpdatedAt = confirmationUpdate.CheckedAt;
         matchingTransaction.Version++;
 
-        if (reorgDetected)
+        var reorgDetected = reorgSignal && await RaiseReorgAlertAsync(
+            payment,
+            matchingTransaction,
+            previousConfirmations,
+            confirmationUpdate.Confirmations,
+            previousBlockHash,
+            confirmationUpdate.BlockHash,
+            previousBlockHeight,
+            confirmationUpdate.BlockHeight,
+            confirmationUpdate.CheckedAt,
+            reorgPaymentEvent,
+            cancellationToken);
+        if (reorgSignal)
         {
-            matchingTransaction.ReorgAffected = true;
-            dbContext.ReorgAlerts.Add(new ReorgAlertRecord
-            {
-                ProjectId = payment.ProjectId,
-                Id = Guid.NewGuid(),
-                PaymentId = payment.Id,
-                MatchingBlockchainTransactionId = matchingTransaction.Id,
-                SupportedCurrency = matchingTransaction.SupportedCurrency,
-                TransactionHash = matchingTransaction.TransactionHash,
-                PreviousConfirmations = previousConfirmations,
-                NewConfirmations = confirmationUpdate.Confirmations,
-                PreviousBlockHash = previousBlockHash,
-                NewBlockHash = confirmationUpdate.BlockHash,
-                PreviousBlockHeight = previousBlockHeight,
-                NewBlockHeight = confirmationUpdate.BlockHeight,
-                Status = "open",
-                CreatedAt = confirmationUpdate.CheckedAt,
-                UpdatedAt = confirmationUpdate.CheckedAt,
-            });
-            dbContext.PaymentEventHistory.Add(ToRecord(payment.ProjectId, reorgPaymentEvent));
+            matchingTransaction.ConsecutiveConfirmationDropCount = 0;
         }
 
         var completion = await CalculateCompletionAsync(payment, matchingTransaction, completionPolicy, cancellationToken);
@@ -643,6 +677,85 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
 
         return StringComparer.Ordinal.Equals(payment.Status, "completed")
             ? UpdateBlockchainTransactionConfirmationsStoreResult.Completed(ToReadModel(payment, observedTotal))
+            : UpdateBlockchainTransactionConfirmationsStoreResult.Updated(ToReadModel(payment, observedTotal));
+    }
+
+    public Task<UpdateBlockchainTransactionConfirmationsStoreResult> RecordMissingBlockchainTransactionAsync(
+        BlockchainTransactionMissingDraft missingTransaction,
+        PaymentEventDraft reorgPaymentEvent,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => RecordMissingBlockchainTransactionCoreAsync(
+            missingTransaction,
+            reorgPaymentEvent,
+            cancellationToken));
+
+    /// <summary>
+    /// The provider no longer reports a transaction that completed a Payment,
+    /// which is what a reorganisation or a double spend looks like once it has
+    /// happened. It raises a Reorg Alert after consecutive misses.
+    /// </summary>
+    private async Task<UpdateBlockchainTransactionConfirmationsStoreResult> RecordMissingBlockchainTransactionCoreAsync(
+        BlockchainTransactionMissingDraft missingTransaction,
+        PaymentEventDraft reorgPaymentEvent,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await BeginTransactionIfRelationalAsync(cancellationToken);
+
+        var payment = await dbContext.Payments
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == missingTransaction.PaymentId &&
+                             candidate.ProjectId == missingTransaction.ProjectId,
+                cancellationToken);
+        if (payment is null)
+        {
+            return UpdateBlockchainTransactionConfirmationsStoreResult.PaymentNotFound();
+        }
+
+        var matchingTransaction = await dbContext.MatchingBlockchainTransactions
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == payment.ProjectId &&
+                             candidate.PaymentId == payment.Id &&
+                             candidate.SupportedCurrency == missingTransaction.SupportedCurrency &&
+                             candidate.TransactionHash == missingTransaction.TransactionHash,
+                cancellationToken);
+        if (matchingTransaction is null)
+        {
+            return UpdateBlockchainTransactionConfirmationsStoreResult.TransactionNotFound();
+        }
+
+        if (!IsMonitoredAfterCompletion(payment, matchingTransaction))
+        {
+            return UpdateBlockchainTransactionConfirmationsStoreResult.PaymentNotReady();
+        }
+
+        matchingTransaction.ConsecutiveMissingCount++;
+        matchingTransaction.LastCheckedAt = missingTransaction.CheckedAt;
+        matchingTransaction.UpdatedAt = missingTransaction.CheckedAt;
+        matchingTransaction.Version++;
+        var reorgDetected = matchingTransaction.ConsecutiveMissingCount >= RequiredConsecutiveMisses &&
+                            await RaiseReorgAlertAsync(
+                                payment,
+                                matchingTransaction,
+                                matchingTransaction.Confirmations,
+                                newConfirmations: 0,
+                                matchingTransaction.BlockHash,
+                                newBlockHash: null,
+                                matchingTransaction.BlockHeight,
+                                newBlockHeight: null,
+                                missingTransaction.CheckedAt,
+                                reorgPaymentEvent,
+                                cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        var observedTotal = await CalculateObservedTotalAsync(payment.ProjectId, payment.Id, cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return reorgDetected
+            ? UpdateBlockchainTransactionConfirmationsStoreResult.ReorgAlerted(ToReadModel(payment, observedTotal))
             : UpdateBlockchainTransactionConfirmationsStoreResult.Updated(ToReadModel(payment, observedTotal));
     }
 
@@ -881,39 +994,85 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             candidateTransactionContributed);
     }
 
-    private static bool IsReorgAffectedCompletedTransaction(
+    /// <summary>
+    /// Consecutive checks a contributing transaction may be missing from the
+    /// provider before it is taken for reorganised out or double-spent. One
+    /// miss is more often a provider that lags or truncates an address.
+    /// </summary>
+    private const int RequiredConsecutiveMisses = 3;
+
+    /// <summary>
+    /// Consecutive checks that must report fewer confirmations than stored
+    /// before a drop is taken for a reorganisation rather than provider lag.
+    /// </summary>
+    private const int RequiredConsecutiveConfirmationDrops = 2;
+
+    private static bool IsMonitoredAfterCompletion(
+        PaymentRecord payment,
+        MatchingBlockchainTransactionRecord matchingTransaction) =>
+        StringComparer.Ordinal.Equals(payment.Status, "completed") &&
+        matchingTransaction.ContributedToCompletion;
+
+    /// <summary>
+    /// Only a value the provider reported both times can have changed; an
+    /// unknown block is not a different block.
+    /// </summary>
+    private static bool IsChanged(string? previous, string? current) =>
+        !string.IsNullOrWhiteSpace(previous) &&
+        !string.IsNullOrWhiteSpace(current) &&
+        !StringComparer.Ordinal.Equals(previous, current);
+
+    private static bool IsChanged(long? previous, long? current) =>
+        previous.HasValue && current.HasValue && previous.Value != current.Value;
+
+    /// <summary>
+    /// Raises a Reorg Alert unless one is already open for the transaction,
+    /// so a signal that keeps being reported produces one alert for the Admin
+    /// to review. Returns whether an alert was raised.
+    /// </summary>
+    private async Task<bool> RaiseReorgAlertAsync(
         PaymentRecord payment,
         MatchingBlockchainTransactionRecord matchingTransaction,
-        PaymentCompletionPolicyDraft completionPolicy,
-        BlockchainTransactionConfirmationUpdateDraft confirmationUpdate,
         int previousConfirmations,
+        int newConfirmations,
         string? previousBlockHash,
-        long? previousBlockHeight)
+        string? newBlockHash,
+        long? previousBlockHeight,
+        long? newBlockHeight,
+        DateTimeOffset checkedAt,
+        PaymentEventDraft reorgPaymentEvent,
+        CancellationToken cancellationToken)
     {
-        if (!StringComparer.Ordinal.Equals(payment.Status, "completed") ||
-            !matchingTransaction.ContributedToCompletion ||
-            matchingTransaction.ReorgAffected)
+        matchingTransaction.ReorgAffected = true;
+        if (await dbContext.ReorgAlerts.AnyAsync(
+                alert => alert.ProjectId == payment.ProjectId &&
+                         alert.MatchingBlockchainTransactionId == matchingTransaction.Id &&
+                         alert.Status == "open",
+                cancellationToken))
         {
             return false;
         }
 
-        var blockHashChanged =
-            !string.IsNullOrWhiteSpace(previousBlockHash) &&
-            !string.IsNullOrWhiteSpace(confirmationUpdate.BlockHash) &&
-            !StringComparer.Ordinal.Equals(previousBlockHash, confirmationUpdate.BlockHash);
-        var blockHeightChanged =
-            previousBlockHeight.HasValue &&
-            confirmationUpdate.BlockHeight.HasValue &&
-            previousBlockHeight.Value != confirmationUpdate.BlockHeight.Value;
-        var confirmationsDroppedBelowRequired =
-            previousConfirmations >= completionPolicy.RequiredConfirmations &&
-            confirmationUpdate.Confirmations < completionPolicy.RequiredConfirmations;
-        var confirmationsDecreased = confirmationUpdate.Confirmations < previousConfirmations;
-
-        return blockHashChanged ||
-               blockHeightChanged ||
-               confirmationsDroppedBelowRequired ||
-               confirmationsDecreased;
+        dbContext.ReorgAlerts.Add(new ReorgAlertRecord
+        {
+            ProjectId = payment.ProjectId,
+            Id = Guid.NewGuid(),
+            PaymentId = payment.Id,
+            MatchingBlockchainTransactionId = matchingTransaction.Id,
+            SupportedCurrency = matchingTransaction.SupportedCurrency,
+            TransactionHash = matchingTransaction.TransactionHash,
+            PreviousConfirmations = previousConfirmations,
+            NewConfirmations = newConfirmations,
+            PreviousBlockHash = previousBlockHash,
+            NewBlockHash = newBlockHash,
+            PreviousBlockHeight = previousBlockHeight,
+            NewBlockHeight = newBlockHeight,
+            Status = "open",
+            CreatedAt = checkedAt,
+            UpdatedAt = checkedAt,
+        });
+        dbContext.PaymentEventHistory.Add(ToRecord(payment.ProjectId, reorgPaymentEvent));
+        return true;
     }
 
     private async Task ApplyCompletionAsync(

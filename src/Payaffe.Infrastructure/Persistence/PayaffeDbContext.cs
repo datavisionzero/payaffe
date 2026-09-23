@@ -999,6 +999,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(transaction => transaction.LastCheckedAt).HasColumnName("last_checked_at").HasColumnType("timestamp with time zone");
             entity.Property(transaction => transaction.ContributedToCompletion).HasColumnName("contributed_to_completion").HasColumnType("boolean");
             entity.Property(transaction => transaction.ReorgAffected).HasColumnName("reorg_affected").HasColumnType("boolean");
+            entity.Property(transaction => transaction.ConsecutiveMissingCount).HasColumnName("consecutive_missing_count").HasColumnType("integer");
+            entity.Property(transaction => transaction.ConsecutiveConfirmationDropCount).HasColumnName("consecutive_confirmation_drop_count").HasColumnType("integer");
             entity.Property(transaction => transaction.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
             entity.Property(transaction => transaction.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
             entity.Property(transaction => transaction.Version)

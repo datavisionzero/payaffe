@@ -78,15 +78,17 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
     }
 
     [Fact]
-    public async Task ReorgMonitoringHostedService_creates_reorg_alert_for_completed_payment_confirmation_drop()
+    public async Task ReorgMonitoringHostedService_creates_reorg_alert_when_a_completed_payments_transaction_moves_to_another_block()
     {
         var observationAdapter = new QueuedBlockchainObservationAdapter(new BlockchainObservation(
             "tx-reorg-123",
             "0.00039980",
             WorkerNow.AddMinutes(1),
-            Confirmations: 0,
+            Confirmations: 1,
             "test-provider",
-            "provider-observation-123"));
+            "provider-observation-123",
+            BlockHash: "block-replacement",
+            BlockHeight: 840001));
         await using var context = await BuildReorgMonitoringContextAsync(observationAdapter);
         using var worker = new ReorgMonitoringHostedService(
             context.ServiceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -118,14 +120,17 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
 
         var matchingTransaction = Assert.Single(context.DbContext.MatchingBlockchainTransactions);
         Assert.True(matchingTransaction.ReorgAffected);
-        Assert.Equal(0, matchingTransaction.Confirmations);
+        Assert.Equal("block-replacement", matchingTransaction.BlockHash);
+        Assert.Equal(840001, matchingTransaction.BlockHeight);
 
         var reorgAlert = Assert.Single(context.DbContext.ReorgAlerts);
         Assert.Equal(payment.Id, reorgAlert.PaymentId);
         Assert.Equal(matchingTransaction.Id, reorgAlert.MatchingBlockchainTransactionId);
         Assert.Equal("tx-reorg-123", reorgAlert.TransactionHash);
-        Assert.Equal(1, reorgAlert.PreviousConfirmations);
-        Assert.Equal(0, reorgAlert.NewConfirmations);
+        Assert.Equal("block-original", reorgAlert.PreviousBlockHash);
+        Assert.Equal("block-replacement", reorgAlert.NewBlockHash);
+        Assert.Equal(840000, reorgAlert.PreviousBlockHeight);
+        Assert.Equal(840001, reorgAlert.NewBlockHeight);
         Assert.Equal("open", reorgAlert.Status);
         Assert.Contains(
             context.DbContext.PaymentEventHistory,
@@ -314,7 +319,87 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
         return new WorkerContext(serviceProvider, dbContext);
     }
 
-    private async Task<WorkerContext> BuildReorgMonitoringContextAsync(QueuedBlockchainObservationAdapter observationAdapter)
+    /// <summary>
+    /// A double-spent or reorganised-out transaction is not reported with
+    /// fewer confirmations; it is not reported at all. Once that has persisted
+    /// over consecutive checks, it raises a Reorg Alert.
+    /// </summary>
+    [Fact]
+    public async Task A_completed_payments_transaction_that_disappears_raises_a_reorg_alert_after_consecutive_misses()
+    {
+        var observationAdapter = new DelegatingBlockchainObservationAdapter(_ => []);
+        await using var context = await BuildReorgMonitoringContextAsync(observationAdapter);
+        var payments = context.ServiceProvider.GetRequiredService<PaymentApplicationService>();
+
+        var first = await payments.MonitorBlockchainReorgsAsync(10, CancellationToken.None);
+        var second = await payments.MonitorBlockchainReorgsAsync(10, CancellationToken.None);
+        context.DbContext.ChangeTracker.Clear();
+        Assert.Empty(context.DbContext.ReorgAlerts);
+
+        var third = await payments.MonitorBlockchainReorgsAsync(10, CancellationToken.None);
+
+        context.DbContext.ChangeTracker.Clear();
+        Assert.Equal(0, first.ReorgAlertCount + second.ReorgAlertCount);
+        Assert.Equal(1, third.ReorgAlertCount);
+        var reorgAlert = Assert.Single(context.DbContext.ReorgAlerts);
+        Assert.Equal("tx-reorg-123", reorgAlert.TransactionHash);
+        Assert.Equal(0, reorgAlert.NewConfirmations);
+        Assert.Equal(WorkerNow, Assert.Single(context.DbContext.MatchingBlockchainTransactions).LastCheckedAt);
+    }
+
+    /// <summary>
+    /// A provider backend that lags one block reports a transaction with one
+    /// confirmation less for a poll. That is not a reorganisation.
+    /// </summary>
+    [Fact]
+    public async Task A_one_poll_confirmation_dip_raises_no_reorg_alert()
+    {
+        var responses = new Queue<int>([0, 1]);
+        var observationAdapter = new DelegatingBlockchainObservationAdapter(_ =>
+            [new BlockchainObservation("tx-reorg-123", "0.00039980", WorkerNow.AddMinutes(1), responses.Dequeue(), "test-provider", null)]);
+        await using var context = await BuildReorgMonitoringContextAsync(observationAdapter);
+        var payments = context.ServiceProvider.GetRequiredService<PaymentApplicationService>();
+
+        await payments.MonitorBlockchainReorgsAsync(10, CancellationToken.None);
+        await payments.MonitorBlockchainReorgsAsync(10, CancellationToken.None);
+
+        context.DbContext.ChangeTracker.Clear();
+        Assert.Empty(context.DbContext.ReorgAlerts);
+        var matchingTransaction = Assert.Single(context.DbContext.MatchingBlockchainTransactions);
+        Assert.Equal(1, matchingTransaction.Confirmations);
+        Assert.False(matchingTransaction.ReorgAffected);
+        Assert.Equal("block-original", matchingTransaction.BlockHash);
+    }
+
+    /// <summary>
+    /// A drop that persists raises one Reorg Alert, and the transaction stays
+    /// monitored afterwards, so a false alert cannot hide a later real one.
+    /// </summary>
+    [Fact]
+    public async Task A_persistent_confirmation_drop_raises_one_alert_and_monitoring_continues()
+    {
+        var responses = new Queue<int>([0, 0, 0, 2]);
+        var observationAdapter = new DelegatingBlockchainObservationAdapter(_ =>
+            [new BlockchainObservation("tx-reorg-123", "0.00039980", WorkerNow.AddMinutes(1), responses.Dequeue(), "test-provider", null)]);
+        await using var context = await BuildReorgMonitoringContextAsync(observationAdapter);
+        var payments = context.ServiceProvider.GetRequiredService<PaymentApplicationService>();
+
+        var results = new List<MonitorBlockchainReorgsResult>();
+        for (var run = 0; run < 4; run++)
+        {
+            results.Add(await payments.MonitorBlockchainReorgsAsync(10, CancellationToken.None));
+        }
+
+        context.DbContext.ChangeTracker.Clear();
+        Assert.Equal([0, 1, 0, 0], results.Select(result => result.ReorgAlertCount));
+        Assert.All(results, result => Assert.Equal(1, result.CheckedCount));
+        var reorgAlert = Assert.Single(context.DbContext.ReorgAlerts);
+        Assert.Equal(1, reorgAlert.PreviousConfirmations);
+        Assert.Equal(0, reorgAlert.NewConfirmations);
+        Assert.Equal(2, Assert.Single(context.DbContext.MatchingBlockchainTransactions).Confirmations);
+    }
+
+    private async Task<WorkerContext> BuildReorgMonitoringContextAsync(IBlockchainObservationAdapter observationAdapter)
     {
         var connectionString = await postgres.CreateDatabaseAsync();
         var services = new ServiceCollection();
@@ -324,9 +409,7 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
         services.AddSingleton<IPayerPageIdGenerator, SequentialPayerPageIdGenerator>();
         services.AddScoped<IExchangeRateSource, FixedExchangeRateSource>();
         services.AddScoped<IPaymentAddressProvider, FixedPaymentAddressProvider>();
-        services.AddSingleton(observationAdapter);
-        services.AddScoped<IBlockchainObservationAdapter>(provider =>
-            provider.GetRequiredService<QueuedBlockchainObservationAdapter>());
+        services.AddScoped(_ => observationAdapter);
         services.Configure<PaymentApplicationOptions>(options =>
         {
             options.PayerPageBaseUrl = "https://pay.example.test/pay";

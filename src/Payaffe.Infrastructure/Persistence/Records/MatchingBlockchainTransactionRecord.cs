@@ -36,6 +36,10 @@ public sealed class MatchingBlockchainTransactionRecord
 
     public bool ReorgAffected { get; set; }
 
+    public int ConsecutiveMissingCount { get; set; }
+
+    public int ConsecutiveConfirmationDropCount { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

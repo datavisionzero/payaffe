@@ -274,6 +274,8 @@ Instead, `payaffe` creates a Reorg Alert and records the event in Payment Event 
 
 Admins review Reorg Alerts manually.
 
+A completed Payment's Matching Blockchain Transaction counts as affected by a reorganization when Blockchain Truth reports it in a different block, stops reporting it on three consecutive checks, or reports fewer confirmations on two consecutive checks. A single lower count is treated as provider lag. Monitoring continues after a Reorg Alert until Reorg Monitoring Depth is reached; while an alert for a transaction is open, no second alert is raised for it.
+
 Reorg Monitoring Depth is configurable per Project and Supported Currency.
 
 Default Reorg Monitoring Depth:

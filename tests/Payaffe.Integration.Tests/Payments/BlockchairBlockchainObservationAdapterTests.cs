@@ -53,6 +53,8 @@ public sealed class BlockchairBlockchainObservationAdapterTests
         Assert.Equal(DateTimeOffset.Parse("2026-07-04T12:05:00Z"), observation.ObservedAt);
         Assert.Equal(3, observation.Confirmations);
         Assert.Equal("blockchair", observation.ProviderName);
+        Assert.Null(observation.BlockHash);
+        Assert.Equal(840000, observation.BlockHeight);
         Assert.Equal("blockchair:tx-123", observation.ProviderObservationId);
         Assert.NotNull(handler.RequestUri);
         Assert.Equal(

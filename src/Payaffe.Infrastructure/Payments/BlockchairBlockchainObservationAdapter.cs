@@ -173,7 +173,9 @@ public sealed class BlockchairBlockchainObservationAdapter(
                 observedAt,
                 CalculateConfirmations(blockId, contextState),
                 ProviderName,
-                $"blockchair:{transactionHash}"));
+                $"blockchair:{transactionHash}",
+                BlockHash: null,
+                BlockHeight: blockId >= 0 ? blockId : null));
         }
 
         return observations;
@@ -212,7 +214,9 @@ public sealed class BlockchairBlockchainObservationAdapter(
                 observedAt,
                 CalculateConfirmations(blockId, contextState),
                 ProviderName,
-                $"blockchair:{transactionHash}"));
+                $"blockchair:{transactionHash}",
+                BlockHash: null,
+                BlockHeight: blockId >= 0 ? blockId : null));
         }
 
         return observations;

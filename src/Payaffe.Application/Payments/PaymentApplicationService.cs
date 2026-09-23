@@ -577,8 +577,8 @@ public sealed class PaymentApplicationService(
                     target.SupportedCurrency,
                     observation.TransactionHash,
                     observation.Confirmations,
-                    BlockHash: null,
-                    BlockHeight: null,
+                    observation.BlockHash,
+                    observation.BlockHeight,
                     target.ProjectId),
                 cancellationToken);
             return result.Kind;
@@ -630,7 +630,8 @@ public sealed class PaymentApplicationService(
                 GetRequiredConfirmations("LTC"),
                 Math.Max(0, _options.LtcReorgMonitoringDepth),
                 GetRequiredConfirmations("ETH"),
-                Math.Max(0, _options.EthReorgMonitoringDepth)),
+                Math.Max(0, _options.EthReorgMonitoringDepth),
+                clock.UtcNow),
             maxTransactions,
             cancellationToken);
 
@@ -670,6 +671,37 @@ public sealed class PaymentApplicationService(
             if (observation is null)
             {
                 missingObservationCount++;
+                try
+                {
+                    var missing = await paymentStore.RecordMissingBlockchainTransactionAsync(
+                        new BlockchainTransactionMissingDraft(
+                            target.PaymentId,
+                            target.SupportedCurrency,
+                            target.TransactionHash,
+                            clock.UtcNow,
+                            target.ProjectId),
+                        new PaymentEventDraft(
+                            Guid.NewGuid(),
+                            target.PaymentId,
+                            "payment.reorg_alerted",
+                            clock.UtcNow,
+                            Details: null),
+                        cancellationToken);
+                    if (missing.Kind == UpdateBlockchainTransactionConfirmationsStoreResultKind.ReorgAlerted)
+                    {
+                        reorgAlertCount++;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    failedCount++;
+                    LogTargetFailure(exception, "reorg miss", target.PaymentId, target.ProjectId, target.SupportedCurrency);
+                }
+
                 continue;
             }
 
@@ -682,8 +714,8 @@ public sealed class PaymentApplicationService(
                         target.SupportedCurrency,
                         target.TransactionHash,
                         observation.Confirmations,
-                        BlockHash: null,
-                        BlockHeight: null,
+                        observation.BlockHash,
+                        observation.BlockHeight,
                         target.ProjectId),
                     cancellationToken);
             }

@@ -65,6 +65,15 @@ public interface IPaymentStore
         WebhookOutboxEventDraft completedWebhookEvent,
         PaymentEventDraft reorgPaymentEvent,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that a poll no longer reported a transaction that completed a
+    /// Payment, raising a Reorg Alert once that has persisted.
+    /// </summary>
+    Task<UpdateBlockchainTransactionConfirmationsStoreResult> RecordMissingBlockchainTransactionAsync(
+        BlockchainTransactionMissingDraft missingTransaction,
+        PaymentEventDraft reorgPaymentEvent,
+        CancellationToken cancellationToken);
 }
 
 public sealed record CreatePaymentStoreResult(
@@ -196,7 +205,8 @@ public sealed record ReorgMonitoringPolicyDraft(
     int LtcRequiredConfirmations,
     int LtcMonitoringDepth,
     int EthRequiredConfirmations,
-    int EthMonitoringDepth);
+    int EthMonitoringDepth,
+    DateTimeOffset CheckedAt);
 
 public sealed record PaymentDraft(
     Guid Id,
@@ -259,6 +269,13 @@ public sealed record BlockchainTransactionConfirmationUpdateDraft(
     int Confirmations,
     string? BlockHash,
     long? BlockHeight,
+    DateTimeOffset CheckedAt,
+    Guid ProjectId);
+
+public sealed record BlockchainTransactionMissingDraft(
+    Guid PaymentId,
+    string SupportedCurrency,
+    string TransactionHash,
     DateTimeOffset CheckedAt,
     Guid ProjectId);
 
