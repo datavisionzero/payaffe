@@ -562,7 +562,8 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
             await WaitForAsync(() =>
             {
                 context.DbContext.ChangeTracker.Clear();
-                return context.DbContext.BackgroundWorkerLeases.Any(lease => lease.WorkerName == "webhook-delivery");
+                return context.DbContext.BackgroundWorkerLeases.Any(lease =>
+                    lease.WorkerName == "webhook-delivery" && lease.LastFailedAt != null);
             });
         }
         finally
