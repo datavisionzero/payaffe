@@ -694,6 +694,91 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
         Assert.True(condition());
     }
 
+    [Fact]
+    public async Task ResendAsync_is_refused_while_a_worker_holds_the_event_lease()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.ServiceUnavailable);
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+        await LeaseEventAsync(context, "other-worker", ProcessorNow.AddMinutes(1));
+        context.Handler.ResponseStatusCode = HttpStatusCode.Gone;
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+
+        var result = await context.Processor.ResendAsync(webhookEvent.ProjectId, webhookEvent.Id, CancellationToken.None);
+
+        Assert.Equal(WebhookManualResendResultKind.InProgress, result.Kind);
+        Assert.Equal(1, context.Handler.RequestCount);
+        context.DbContext.ChangeTracker.Clear();
+        var unchanged = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        Assert.Equal("retry_pending", unchanged.Status);
+        Assert.Equal(1, unchanged.AttemptCount);
+        Assert.Equal("other-worker", unchanged.LockedBy);
+        Assert.Single(context.DbContext.WebhookDeliveryAttempts);
+    }
+
+    [Fact]
+    public async Task ResendAsync_is_refused_while_a_worker_is_claiming_the_event()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.ServiceUnavailable);
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+
+        await using var claimScope = context.ServiceProvider.CreateAsyncScope();
+        var claimContext = claimScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        await using var claim = await claimContext.Database.BeginTransactionAsync();
+        await claimContext.WebhookOutboxEvents
+            .FromSqlInterpolated($"select * from outbox.webhook_events where id = {webhookEvent.Id} for update")
+            .ToListAsync();
+
+        var result = await context.Processor.ResendAsync(webhookEvent.ProjectId, webhookEvent.Id, CancellationToken.None);
+
+        Assert.Equal(WebhookManualResendResultKind.InProgress, result.Kind);
+        Assert.Equal(1, context.Handler.RequestCount);
+        await claim.RollbackAsync();
+    }
+
+    [Fact]
+    public async Task ResendAsync_takes_the_lease_so_a_worker_cannot_claim_the_event_meanwhile()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.ServiceUnavailable);
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        webhookEvent.NextAttemptAt = ProcessorNow;
+        await context.DbContext.SaveChangesAsync();
+        context.Handler.ResponseStatusCode = HttpStatusCode.NoContent;
+        bool? workerClaimed = null;
+        context.Handler.OnSend = async () =>
+        {
+            context.Handler.OnSend = null;
+            await using var workerScope = context.ServiceProvider.CreateAsyncScope();
+            var worker = workerScope.ServiceProvider.GetRequiredService<WebhookDeliveryProcessor>();
+            workerClaimed = await worker.ProcessNextAsync(CancellationToken.None);
+        };
+
+        var result = await context.Processor.ResendAsync(webhookEvent.ProjectId, webhookEvent.Id, CancellationToken.None);
+
+        Assert.Equal(WebhookManualResendResultKind.Resent, result.Kind);
+        Assert.Equal("delivered", result.Status);
+        Assert.False(workerClaimed);
+        Assert.Equal(2, context.Handler.RequestCount);
+        context.DbContext.ChangeTracker.Clear();
+        var attempts = context.DbContext.WebhookDeliveryAttempts.OrderBy(attempt => attempt.AttemptNumber).ToArray();
+        Assert.Equal([1, 2], attempts.Select(attempt => attempt.AttemptNumber));
+        Assert.Null(Assert.Single(context.DbContext.WebhookOutboxEvents).LockedBy);
+    }
+
+    [Fact]
+    public async Task The_delivery_id_header_is_the_stored_attempt_id()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.NoContent);
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        var attempt = Assert.Single(context.DbContext.WebhookDeliveryAttempts);
+        Assert.Equal(
+            attempt.Id.ToString("D"),
+            context.Handler.Request!.Headers.GetValues("Payaffe-Webhook-Id").Single());
+    }
+
     private static async Task LeaseEventAsync(
         ProcessorContext context,
         string owner,

@@ -133,6 +133,7 @@ Initial error codes include:
 - `payment.not_settleable`,
 - `webhook_delivery.not_found`,
 - `webhook_delivery.not_resendable`,
+- `webhook_delivery.in_progress`,
 - `address_pool.invalid_address`,
 - `address_pool.duplicate_address`,
 - `address_pool.import_empty`,

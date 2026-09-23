@@ -113,7 +113,8 @@ context.
 
 Outgoing Webhook Deliveries use these headers:
 
-- `Payaffe-Webhook-Id`: Delivery identifier,
+- `Payaffe-Webhook-Id`: Delivery identifier, the id of the delivery attempt
+  recorded in Webhook Delivery history, new for every attempt,
 - `Payaffe-Webhook-Timestamp`: Unix timestamp in seconds,
 - `Payaffe-Webhook-Signature`: signature value,
 - `Payaffe-Webhook-Event-Type`: event type,
@@ -161,6 +162,9 @@ Receivers must:
 
 Manual resend creates a new Delivery attempt for the same event contract. It
 does not create a new Payment lifecycle event.
+Manual resend takes the same event lease as the delivery worker; while the
+event is being delivered it is refused with `webhook_delivery.in_progress`
+rather than racing the worker.
 Admin-triggered manual resend requires server-side Admin authorization, CSRF
 evidence for the browser route, a fresh Step-up, and Audit Log recording.
 

@@ -1312,6 +1312,53 @@ public sealed class AdminAuthApiTests
     }
 
     [Fact]
+    public async Task Resend_admin_webhook_delivery_is_refused_while_the_event_is_leased()
+    {
+        await using var factory = new PaymentApiFactory();
+        var adminAccountId = await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecret: TotpSecret);
+        var credentialId = await factory.SeedCredentialAsync("integration-token");
+        var now = DateTimeOffset.UtcNow;
+        var paymentId = await SeedPaymentAsync(factory, credentialId, "leased-order", "waiting_for_payment", now.AddMinutes(-10));
+        var eventId = await SeedWebhookDeliveryAsync(factory, credentialId, paymentId, "retry_pending", "http.503", now.AddMinutes(-2));
+        using (var leaseScope = factory.Services.CreateScope())
+        {
+            var leaseDbContext = leaseScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+            var leased = leaseDbContext.WebhookOutboxEvents.Single(webhookEvent => webhookEvent.Id == eventId);
+            leased.LockedBy = "worker-in-flight";
+            leased.LockedUntil = now.AddMinutes(1);
+            await leaseDbContext.SaveChangesAsync();
+        }
+
+        using var client = factory.CreateClient();
+        var sessionCookie = await SignInAndGetSessionCookieAsync(client);
+        var rawSessionToken = ExtractCookieValue(sessionCookie);
+        var csrf = await GetAdminCsrfAsync(factory, rawSessionToken);
+        using var sessionClient = CreateHttpsClient(factory);
+        sessionClient.DefaultRequestHeaders.Add(
+            "Cookie",
+            $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
+        sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
+
+        var response = await sessionClient.PostAsync(
+            $"/api/admin/webhook-deliveries/{eventId}/resend?projectId={ProjectDefaults.DefaultProjectId:D}",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("webhook_delivery.in_progress", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        using var verifyScope = factory.Services.CreateScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Equal("worker-in-flight", verifyDbContext.WebhookOutboxEvents.Single(webhookEvent => webhookEvent.Id == eventId).LockedBy);
+        Assert.Contains(verifyDbContext.AuditLogEntries, auditEntry =>
+            auditEntry.EventType == "admin.webhook_delivery.resend" &&
+            auditEntry.Outcome == "denied" &&
+            auditEntry.ActorId == adminAccountId.ToString("D") &&
+            auditEntry.ReasonCode == "webhook_delivery.in_progress");
+    }
+
+    [Fact]
     public async Task Get_admin_webhook_deliveries_requires_valid_admin_session()
     {
         await using var factory = new PaymentApiFactory();
