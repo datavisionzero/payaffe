@@ -76,7 +76,8 @@ internal sealed class ShopApplication : WebApplicationFactory<Program>
         Guid externalReference,
         string status,
         DateTimeOffset? signedAt = null,
-        bool testMode = false)
+        bool testMode = false,
+        long fiatAmountMinor = 1999)
     {
         DateTimeOffset at = signedAt ?? DateTimeOffset.UtcNow;
         string body = JsonSerializer.Serialize(new Dictionary<string, object?>
@@ -98,7 +99,7 @@ internal sealed class ShopApplication : WebApplicationFactory<Program>
                 ["external_reference"] = externalReference.ToString("D"),
                 ["status"] = status,
                 ["fiat_currency"] = "EUR",
-                ["fiat_amount_minor"] = 1999,
+                ["fiat_amount_minor"] = fiatAmountMinor,
                 ["selected_currency"] = "BTC",
                 ["expected_crypto_amount"] = "0.00039980",
                 ["expected_crypto_amount_atomic"] = "39980",

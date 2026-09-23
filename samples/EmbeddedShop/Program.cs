@@ -114,6 +114,19 @@ app.MapPost("/{storefront}/api/orders", async (
         cancellationToken);
 });
 
+// Resumes an order whose Payment creation failed, with the same idempotency key, instead of
+// placing a second order that could end up with a second Payment.
+app.MapPost("/{storefront}/api/orders/{orderId:guid}/payment", async (
+    string storefront,
+    Guid orderId,
+    HttpContext context,
+    ShopPayments payments,
+    CancellationToken cancellationToken) => await payments.ResumePaymentAsync(
+        storefront,
+        orderId,
+        ShopCustomer.Of(context),
+        cancellationToken));
+
 app.MapGet("/{storefront}/api/orders/{orderId:guid}", (
     string storefront,
     Guid orderId,
@@ -166,12 +179,15 @@ app.MapGet("/{storefront}/api/orders/{orderId:guid}/payment-code.svg", (
         return Results.NotFound();
     }
 
+    // Explicit colours, because the page loads this through <img>: an SVG document shown that
+    // way inherits nothing from the page, so currentColor would be black on the dark theme's
+    // near-black background, and a transparent code would lose its quiet zone there.
     PayaffePaymentQrCode code = PayaffePaymentQrCode.Create(
         order.Instruction,
         new PayaffeQrCodeOptions
         {
-            DarkColor = "currentColor",
-            LightColor = null,
+            DarkColor = "#000000",
+            LightColor = "#ffffff",
             AccessibleLabel = $"Scan to pay order {order.OrderId:D}",
         });
 

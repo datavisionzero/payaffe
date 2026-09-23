@@ -197,6 +197,12 @@ public sealed class CheckoutTests
 
         Assert.Equal("image/svg+xml", response.Content.Headers.ContentType?.MediaType);
         Assert.StartsWith("<svg", svg, StringComparison.Ordinal);
+
+        // Shown through <img>, the code inherits no colour from the page, so it carries its own
+        // contrast rather than turning black on black in a dark theme.
+        Assert.DoesNotContain("currentColor", svg, StringComparison.Ordinal);
+        Assert.Contains("fill=\"#ffffff\"", svg, StringComparison.Ordinal);
+        Assert.Contains("fill=\"#000000\"", svg, StringComparison.Ordinal);
         Assert.DoesNotContain("payaffe", svg, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("http", svg.Replace("http://www.w3.org/2000/svg", "", StringComparison.Ordinal), StringComparison.OrdinalIgnoreCase);
 
@@ -310,6 +316,157 @@ public sealed class CheckoutTests
 
         Assert.Equal("polling", order.GetProperty("lastSignal").GetString());
         Assert.Equal(1, FulfillmentCount(shop, orderId));
+    }
+
+    /// <summary>
+    /// The customer has seen the order identifier, and anything in the same Project can use it as
+    /// an External Reference. A verified Delivery about such a Payment names the order and still
+    /// is not about it.
+    /// </summary>
+    [Fact]
+    public async Task A_delivery_about_another_payment_for_the_same_reference_does_not_fulfil_the_order()
+    {
+        using ShopApplication shop = new();
+        using HttpClient browser = shop.CreateBrowser();
+        Guid orderId = await SelectedOrderAsync(browser, ShopApplication.Teahouse);
+        Guid orderPaymentId = shop.Payaffe.PaymentFor(orderId.ToString("D")).PaymentId;
+        FakePayaffe.StoredPayment other = shop.Payaffe.CreateElsewhere(
+            FakePayaffe.TeahouseToken,
+            orderId.ToString("D"),
+            fiatAmountMinor: 1);
+
+        using HttpResponseMessage otherPayment = await browser.SendAsync(ShopApplication.Delivery(
+            ShopApplication.Teahouse,
+            ShopApplication.TeahouseWebhookSecret,
+            Guid.CreateVersion7(),
+            "payment.completed",
+            other.PaymentId,
+            orderId,
+            "completed",
+            fiatAmountMinor: 1999));
+
+        // The order's own Payment identifier, but not the order's amount.
+        using HttpResponseMessage otherAmount = await browser.SendAsync(ShopApplication.Delivery(
+            ShopApplication.Teahouse,
+            ShopApplication.TeahouseWebhookSecret,
+            Guid.CreateVersion7(),
+            "payment.completed",
+            orderPaymentId,
+            orderId,
+            "completed",
+            fiatAmountMinor: 1));
+
+        foreach (HttpResponseMessage response in new[] { otherPayment, otherAmount })
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(
+                "ignored",
+                (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("status").GetString());
+        }
+
+        JsonElement order = await ReadOrderAsync(browser, ShopApplication.Teahouse, orderId);
+        Assert.Equal("AwaitingPayment", order.GetProperty("fulfillment").GetString());
+        Assert.Equal("waiting_for_payment", order.GetProperty("paymentState").GetString());
+    }
+
+    [Fact]
+    public async Task An_order_whose_creation_answer_was_lost_resumes_with_the_same_payment()
+    {
+        using ShopApplication shop = new();
+        using HttpClient browser = shop.CreateBrowser();
+
+        // More lost answers than the SDK retries, so the customer sees the failure.
+        shop.Payaffe.LostCreationAnswers = 3;
+        using HttpResponseMessage failed = await browser.PostAsJsonAsync(
+            $"/{ShopApplication.Teahouse}/api/orders",
+            new { sku = "mug-01" });
+
+        Assert.Equal(HttpStatusCode.BadGateway, failed.StatusCode);
+        JsonElement problem = await failed.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("payments_unavailable", problem.GetProperty("error").GetString());
+        Assert.True(problem.GetProperty("retryable").GetBoolean());
+        Guid orderId = problem.GetProperty("orderId").GetGuid();
+
+        using HttpResponseMessage resumed = await browser.PostAsync(
+            $"/{ShopApplication.Teahouse}/api/orders/{orderId:D}/payment",
+            content: null);
+        resumed.EnsureSuccessStatusCode();
+        JsonElement order = await resumed.Content.ReadFromJsonAsync<JsonElement>();
+
+        // The Payment created before the answer was lost, not a second one.
+        FakePayaffe.StoredPayment payment = shop.Payaffe.PaymentFor(orderId.ToString("D"));
+        Assert.Equal(orderId, order.GetProperty("orderId").GetGuid());
+        Assert.Equal("pending_currency_selection", order.GetProperty("paymentState").GetString());
+        JsonElement selected = await SelectAsync(browser, ShopApplication.Teahouse, orderId, "BTC");
+        Assert.Equal("BTC", selected.GetProperty("selectedCurrency").GetString());
+        Assert.Equal(
+            1,
+            shop.Payaffe.Requests.Count(request =>
+                request.Path == $"/api/v1/payments/{payment.PaymentId:D}/currency-selection"));
+
+        // Somebody else's browser cannot resume it.
+        using HttpClient stranger = shop.CreateBrowser();
+        using HttpResponseMessage byStranger = await stranger.PostAsync(
+            $"/{ShopApplication.Teahouse}/api/orders/{orderId:D}/payment",
+            content: null);
+        Assert.Equal(HttpStatusCode.NotFound, byStranger.StatusCode);
+    }
+
+    [Fact]
+    public async Task Repeated_selection_starts_one_reconciling_loop()
+    {
+        using ShopApplication shop = new() { ReconcileByPolling = true };
+        using HttpClient browser = shop.CreateBrowser();
+        Guid orderId = await PlaceOrderIdAsync(browser, ShopApplication.Teahouse);
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            await SelectAsync(browser, ShopApplication.Teahouse, orderId, "BTC");
+        }
+
+        string readPath = $"/api/v1/payments/{shop.Payaffe.PaymentFor(orderId.ToString("D")).PaymentId:D}";
+        int Reads() => shop.Payaffe.Requests.Count(request =>
+            request.Method == "GET" && request.Path == readPath);
+
+        for (int wait = 0; wait < 50 && Reads() == 0; wait++)
+        {
+            await Task.Delay(100);
+        }
+
+        // One loop reads once and then waits its polling interval of about two seconds; three
+        // loops would have read three times by now.
+        await Task.Delay(500);
+        Assert.Equal(1, Reads());
+    }
+
+    [Fact]
+    public async Task Polling_recovers_from_transient_and_unexpected_read_failures()
+    {
+        using ShopApplication shop = new() { ReconcileByPolling = true };
+        using HttpClient browser = shop.CreateBrowser();
+        Guid orderId = await PlaceOrderIdAsync(browser, ShopApplication.Teahouse);
+        Guid paymentId = shop.Payaffe.PaymentFor(orderId.ToString("D")).PaymentId;
+
+        // More transport failures than one read retries, then an answer the SDK cannot parse.
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            shop.Payaffe.ReadFaults.Enqueue(() => throw new HttpRequestException("connection refused"));
+        }
+
+        shop.Payaffe.ReadFaults.Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{", System.Text.Encoding.UTF8, "application/json"),
+        });
+        await SelectAsync(browser, ShopApplication.Teahouse, orderId, "BTC");
+        shop.Payaffe.CompletedPayments.Add(paymentId);
+
+        JsonElement order = await WaitForAsync(
+            browser,
+            ShopApplication.Teahouse,
+            orderId,
+            view => view.GetProperty("fulfillment").GetString() == "Fulfilled");
+
+        Assert.Equal("polling", order.GetProperty("lastSignal").GetString());
+        Assert.Empty(shop.Payaffe.ReadFaults);
     }
 
     [Fact]

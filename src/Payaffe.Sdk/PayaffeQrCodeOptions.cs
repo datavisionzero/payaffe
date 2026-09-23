@@ -32,7 +32,10 @@ public sealed class PayaffeQrCodeOptions
     public int QuietZoneModules { get; set; } = 4;
 
     /// <summary>
-    /// The colour of the dark modules. `currentColor` lets the surrounding page decide.
+    /// The colour of the dark modules. `currentColor` lets the surrounding page decide, but only
+    /// when the SVG is inlined into the page's markup: an SVG loaded through an <c>img</c>
+    /// element or as a CSS background is a separate document that inherits no colour, so
+    /// `currentColor` renders black there whatever the page's theme.
     /// </summary>
     public string DarkColor { get; set; } = "#000000";
 

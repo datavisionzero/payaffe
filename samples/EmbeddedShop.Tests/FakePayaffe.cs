@@ -30,6 +30,30 @@ internal sealed class FakePayaffe : HttpMessageHandler
 
     public HashSet<Guid> ExpiredPayments { get; } = [];
 
+    /// <summary>
+    /// How many of the next creations succeed and then lose their answer, which is what a timeout
+    /// after the server committed looks like to the shop.
+    /// </summary>
+    public int LostCreationAnswers { get; set; }
+
+    /// <summary>Stand-ins for the next Payment reads, one per read, in order.</summary>
+    public ConcurrentQueue<Func<HttpResponseMessage>> ReadFaults { get; } = new();
+
+    /// <summary>Creates a Payment in a storefront's Project directly, as another integration would.</summary>
+    public StoredPayment CreateElsewhere(string token, string externalReference, long fiatAmountMinor)
+    {
+        StoredPayment created = new()
+        {
+            PaymentId = Guid.CreateVersion7(),
+            Token = token,
+            ExternalReference = externalReference,
+            FiatCurrency = "EUR",
+            FiatAmountMinor = fiatAmountMinor,
+        };
+        _payments[created.PaymentId] = created;
+        return created;
+    }
+
     public StoredPayment PaymentFor(string externalReference) =>
         _payments.Values.Single(payment => payment.ExternalReference == externalReference);
 
@@ -43,11 +67,24 @@ internal sealed class FakePayaffe : HttpMessageHandler
 
         if (request.Method == HttpMethod.Post && path == "/api/v1/payments")
         {
-            return await CreateAsync(request, token, cancellationToken);
+            HttpResponseMessage created = await CreateAsync(request, token, cancellationToken);
+            if (LostCreationAnswers > 0)
+            {
+                LostCreationAnswers--;
+                created.Dispose();
+                throw new TaskCanceledException("The answer to the creation was lost.");
+            }
+
+            return created;
         }
 
         if (request.Method == HttpMethod.Get && TryReadPaymentId(path, "", out Guid readId))
         {
+            if (ReadFaults.TryDequeue(out Func<HttpResponseMessage>? fault))
+            {
+                return fault();
+            }
+
             return Find(readId, token) is { } payment
                 ? Json(HttpStatusCode.OK, Project(payment))
                 : Problem(HttpStatusCode.NotFound, "payment.not_found");

@@ -83,13 +83,19 @@ origin and appears in your own markup:
 ```csharp
 var qr = PayaffePaymentQrCode.Create(payment.PaymentInstruction!, new PayaffeQrCodeOptions
 {
-    DarkColor = "currentColor",
-    LightColor = null,
+    DarkColor = "#000000",
+    LightColor = "#ffffff",
     AccessibleLabel = $"Scan to pay order {order.Number}",
 });
 
 return Results.Content(qr.ToSvg(), "image/svg+xml");
 ```
+
+Served like this and shown through `<img>`, the SVG is a document of its own
+and inherits nothing from your page, so give it explicit colours: `currentColor`
+would render black even on a dark theme, and a transparent background would lose
+the quiet zone there. `DarkColor = "currentColor"` with `LightColor = null`
+follows the page's colours only when you inline the SVG into your own markup.
 
 The payload is `instruction.Uri`, byte for byte. The helper never assembles a
 URI from an address and an amount, because the amount belongs to a Rate Lock and

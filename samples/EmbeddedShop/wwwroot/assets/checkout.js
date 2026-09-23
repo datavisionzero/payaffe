@@ -71,15 +71,26 @@ async function loadCatalogue() {
   );
 }
 
+// An order whose payment could not be created. Trying again resumes it rather than placing a
+// second order, because the shop's backend may have got a payment it never heard back about.
+let unfinished = null;
+
 async function placeOrder(sku) {
   clearError();
   try {
-    order = await call('/api/orders', { method: 'POST', body: JSON.stringify({ sku }) });
+    order = unfinished?.sku === sku
+      ? await call(`/api/orders/${unfinished.orderId}/payment`, { method: 'POST' })
+      : await call('/api/orders', { method: 'POST', body: JSON.stringify({ sku }) });
+    unfinished = null;
     elements.checkout.hidden = false;
     elements.orderLine.textContent = `${order.item} — ${money(order.amountMinor, order.fiatCurrency)}`;
     renderCurrencies();
     startPolling();
   } catch (failure) {
+    // Without an answer from the shop, whatever was unfinished still is.
+    if (failure.body?.orderId) {
+      unfinished = failure.body.retryable ? { sku, orderId: failure.body.orderId } : null;
+    }
     showError(
       failure.message === 'payments_unavailable'
         ? 'Payments are unavailable right now. Nothing was charged; please try again.'
