@@ -32,6 +32,7 @@ import {
 import { formatDateTime } from "./format";
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
 import { useAdminProject } from "./project-context";
+import { useWithStepUp } from "./step-up";
 import { adminProjectPath } from "./project-routes";
 
 const WEBHOOK_EVENT_TYPES = [
@@ -44,6 +45,8 @@ const WEBHOOK_EVENT_TYPES = [
 ];
 const t = createText({
   allEvents: "All supported Payment events",
+  confirmDisable: "Disable the Webhook Endpoint {url}? Payment events are no longer sent to it.",
+  confirmRotate: "Rotate the secret reference of {url}? Deliveries are signed with the new secret from then on.",
   createWebhookEndpoint: "Create Webhook Endpoint",
   credential: "Integration API Credential",
   disableWebhookEndpoint: "Disable Webhook Endpoint",
@@ -140,6 +143,7 @@ function WebhookEndpointSection() {
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
+  const withStepUp = useWithStepUp();
   const credentials = useQuery(adminQueries.credentials(projectId));
   const query = useQuery(adminQueries.webhookEndpoints(projectId));
   const form = useForm<WebhookEndpointForm>({
@@ -151,7 +155,8 @@ function WebhookEndpointSection() {
     }
   });
   const mutation = useMutation({
-    mutationFn: (command: WebhookEndpointForm) => createAdminWebhookEndpoint(projectId, command),
+    mutationFn: (command: WebhookEndpointForm) =>
+      withStepUp(() => createAdminWebhookEndpoint(projectId, command)),
     onSuccess: async () => {
       form.reset();
       await invalidateAdminConfiguration(queryClient, projectId);
@@ -237,24 +242,27 @@ function WebhookEndpointItem({ endpoint }: { endpoint: AdminWebhookEndpoint }) {
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
+  const withStepUp = useWithStepUp();
   const form = useForm<{ url: string; secretReference: string }>({
     defaultValues: { url: endpoint.url, secretReference: "" }
   });
   const updateMutation = useMutation({
     mutationFn: (url: string) =>
-      updateAdminWebhookEndpoint(projectId, endpoint, { url, eventTypes: endpoint.eventTypes }),
+      withStepUp(() =>
+        updateAdminWebhookEndpoint(projectId, endpoint, { url, eventTypes: endpoint.eventTypes })
+      ),
     onSuccess: async () => invalidateAdminConfiguration(queryClient, projectId)
   });
   const rotateMutation = useMutation({
     mutationFn: (secretReference: string) =>
-      rotateAdminWebhookEndpointSecret(projectId, endpoint, secretReference),
+      withStepUp(() => rotateAdminWebhookEndpointSecret(projectId, endpoint, secretReference)),
     onSuccess: async () => {
       form.reset({ url: endpoint.url, secretReference: "" });
       await invalidateAdminConfiguration(queryClient, projectId);
     }
   });
   const disableMutation = useMutation({
-    mutationFn: () => disableAdminWebhookEndpoint(projectId, endpoint),
+    mutationFn: () => withStepUp(() => disableAdminWebhookEndpoint(projectId, endpoint)),
     onSuccess: async () => invalidateAdminConfiguration(queryClient, projectId)
   });
 
@@ -285,11 +293,22 @@ function WebhookEndpointItem({ endpoint }: { endpoint: AdminWebhookEndpoint }) {
           <div className="flex flex-wrap gap-2">
             <ActionButton
               busy={rotateMutation.isPending}
-              onClick={() => rotateMutation.mutate(form.getValues("secretReference"))}
+              onClick={() => {
+                if (window.confirm(t("confirmRotate", { url: endpoint.url }))) {
+                  rotateMutation.mutate(form.getValues("secretReference"));
+                }
+              }}
             >
               {t("rotateWebhookSecret")}
             </ActionButton>
-            <ActionButton busy={disableMutation.isPending} onClick={() => disableMutation.mutate()}>
+            <ActionButton
+              busy={disableMutation.isPending}
+              onClick={() => {
+                if (window.confirm(t("confirmDisable", { url: endpoint.url }))) {
+                  disableMutation.mutate();
+                }
+              }}
+            >
               {t("disableWebhookEndpoint")}
             </ActionButton>
           </div>
@@ -306,10 +325,11 @@ function WebhookDeliverySection() {
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
+  const withStepUp = useWithStepUp();
   const query = useQuery(adminQueries.webhookDeliveries(projectId));
   const [resentDelivery, setResentDelivery] = useState<AdminWebhookDeliveryResend | null>(null);
   const resendMutation = useMutation({
-    mutationFn: (eventId: string) => resendAdminWebhookDelivery(projectId, eventId),
+    mutationFn: (eventId: string) => withStepUp(() => resendAdminWebhookDelivery(projectId, eventId)),
     onSuccess: async (result) => {
       setResentDelivery(result);
       await Promise.all([

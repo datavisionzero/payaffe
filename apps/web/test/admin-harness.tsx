@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import type { JsonBodyType } from "msw";
 import { setupServer } from "msw/node";
 import type React from "react";
 import { MemoryRouter } from "react-router";
 import { AdminProjectProvider } from "../components/admin/project-context";
+import { StepUpProvider } from "../components/admin/step-up";
 import { ThemeProvider } from "../components/theme-provider";
 
 export const session = {
@@ -196,6 +197,26 @@ const unauthorized = () =>
 
 function guarded(body: JsonBodyType) {
   return state.authenticated ? HttpResponse.json(body) : unauthorized();
+}
+
+// What a step-up-protected endpoint answers until the session has stepped up.
+export const stepUpRequired = () =>
+  HttpResponse.json(
+    { title: "Step-up authentication is required.", code: "admin_step_up.required" },
+    { status: 403 }
+  );
+
+export function hasSteppedUp() {
+  return state.stepUpAuthenticatedAt !== session.stepUpAuthenticatedAt;
+}
+
+export async function completeStepUp(totpCode = "123456") {
+  const dialog = await screen.findByRole("dialog", { name: "Confirm step-up" });
+  fireEvent.change(within(dialog).getByLabelText("Authentication code"), {
+    target: { value: totpCode }
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Confirm" }));
+  return dialog;
 }
 
 function capture(name: string, request: Request) {
@@ -412,13 +433,16 @@ export function renderAdmin(ui: React.ReactNode) {
     }
   });
 
-  return render(
+  const rendered = render(
     <ThemeProvider>
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <AdminProjectProvider project={project}>{ui}</AdminProjectProvider>
+          <AdminProjectProvider project={project}>
+            <StepUpProvider>{ui}</StepUpProvider>
+          </AdminProjectProvider>
         </QueryClientProvider>
       </MemoryRouter>
     </ThemeProvider>
   );
+  return { ...rendered, queryClient };
 }

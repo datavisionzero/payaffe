@@ -23,6 +23,7 @@ import {
 import { formatDateTime } from "./format";
 import { adminProjectPath } from "./project-routes";
 import { adminQueries } from "./queries";
+import { useWithStepUp } from "./step-up";
 
 export function AdminLandingPage() {
   const query = useQuery(adminQueries.projects());
@@ -103,9 +104,11 @@ function Summary({ label, value }: { label: string; value: string }) {
 export function AdminProjectsPage() {
   const queryClient = useQueryClient();
   const query = useQuery(adminQueries.projects());
+  const withStepUp = useWithStepUp();
   const form = useForm<ProjectForm>({ defaultValues: { name: "", slug: "" } });
   const createMutation = useMutation({
-    mutationFn: createAdminProject,
+    mutationFn: (command: Parameters<typeof createAdminProject>[0]) =>
+      withStepUp(() => createAdminProject(command)),
     onSuccess: async () => {
       form.reset();
       await queryClient.invalidateQueries({ queryKey: adminQueries.projects().queryKey });
@@ -113,7 +116,7 @@ export function AdminProjectsPage() {
   });
   const statusMutation = useMutation({
     mutationFn: ({ project, status }: { project: AdminProject; status: string }) =>
-      changeAdminProjectStatus(project, status),
+      withStepUp(() => changeAdminProjectStatus(project, status)),
     onSuccess: async () =>
       queryClient.invalidateQueries({ queryKey: adminQueries.projects().queryKey })
   });

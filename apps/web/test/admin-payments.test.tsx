@@ -6,12 +6,15 @@ import { AdminPaymentsPage } from "../components/admin/payments-page";
 import { settleAdminPayment } from "../lib/admin-api";
 import {
   adminServer,
+  completeStepUp,
+  hasSteppedUp,
   paymentDetail,
   paymentId,
   projectId,
   renderAdmin,
   resetAdminState,
-  state
+  state,
+  stepUpRequired
 } from "./admin-harness";
 
 const nav = vi.hoisted(() => ({ search: "", replace: vi.fn(), push: vi.fn() }));
@@ -174,6 +177,39 @@ describe("AdminPaymentDetailPage", () => {
         }
       });
     });
+  });
+
+  it("asks for step-up during Settlement and settles once it is confirmed", async () => {
+    state.authenticated = true;
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let attempts = 0;
+    adminServer.use(
+      http.get(`/api/admin/payments/${paymentId}`, () =>
+        HttpResponse.json({ ...paymentDetail, status: "observed", version: 3 })
+      ),
+      http.post(`/api/admin/payments/${paymentId}/settle`, () => {
+        attempts += 1;
+        return hasSteppedUp()
+          ? HttpResponse.json({
+              ...paymentDetail,
+              status: "settled",
+              settledAt: "2026-07-05T11:00:00Z",
+              version: 4
+            })
+          : stepUpRequired();
+      })
+    );
+    renderAdmin(<AdminPaymentDetailPage paymentId={paymentId} />);
+
+    fireEvent.change(await screen.findByLabelText("Settlement reason"), {
+      target: { value: "Confirmed with the partner." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Settle Payment" }));
+    await completeStepUp();
+
+    expect(await screen.findByText("settled")).toBeInTheDocument();
+    expect(attempts).toBe(2);
+    expect(window.confirm).toHaveBeenCalledTimes(1);
   });
 
   it("leaves an eligible Payment unchanged when Settlement is not confirmed", async () => {

@@ -330,6 +330,14 @@ The Admin UI must represent these states without exposing sensitive details:
 - rate-limited or locked out,
 - unexpected error with `correlationId`.
 
+When an action answers `admin_step_up.required`, the Admin UI asks for the
+authentication code in place and retries the action once step-up succeeds; a
+sensitive read offers the same prompt and then loads again. Rotating or
+disabling an Integration API Credential or Webhook Endpoint, archiving a
+Project, resending a Webhook Delivery, and manual Settlement ask for
+confirmation first. One-time secrets leave the client caches when the Admin
+clears them, leaves the page, or signs out.
+
 Frontend route guards are UX only. Backend authorization remains authoritative.
 
 ## Browser Storage

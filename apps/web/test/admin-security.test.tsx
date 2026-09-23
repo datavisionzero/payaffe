@@ -7,10 +7,14 @@ import { AdminAuditLogPage } from "../components/admin/audit-log-page";
 import {
   adminServer,
   auditEventId,
+  auditLogDetail,
+  completeStepUp,
+  hasSteppedUp,
   renderAdmin,
   resetAdminState,
   session,
-  state
+  state,
+  stepUpRequired
 } from "./admin-harness";
 
 const nav = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
@@ -30,6 +34,7 @@ vi.mock("../lib/navigation", () => ({
 beforeAll(() => adminServer.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   resetAdminState();
+  nav.replace.mockClear();
   vi.restoreAllMocks();
   adminServer.resetHandlers();
 });
@@ -81,7 +86,30 @@ describe("AdminAuditLogPage", () => {
     await vi.waitFor(() =>
       expect(requestedProjectId).toBe("00000000-0000-0000-0000-000000000001")
     );
-    expect(window.location.search).toBe("?projectId=00000000-0000-0000-0000-000000000001");
+    // Through the router, so its location and history stay in step.
+    expect(nav.replace).toHaveBeenCalledWith(
+      "/admin/audit-log?projectId=00000000-0000-0000-0000-000000000001"
+    );
+    expect(window.location.search).toBe("");
+  });
+
+  it("asks for step-up when the export requires it and exports afterwards", async () => {
+    state.authenticated = true;
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    adminServer.use(
+      http.post("/api/admin/audit-log/export", () =>
+        hasSteppedUp()
+          ? HttpResponse.json({ exportedAt: "2026-07-05T10:30:00Z", entries: [auditLogDetail] })
+          : stepUpRequired()
+      )
+    );
+    renderAdmin(<AdminAuditLogPage />);
+
+    await screen.findByRole("link", { name: "admin.audit_log.list" });
+    fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
+    await completeStepUp();
+
+    expect(await screen.findByText(/Exported 1 event/)).toBeInTheDocument();
   });
 });
 
@@ -100,6 +128,24 @@ describe("AdminAuditLogDetailPage", () => {
       "href",
       "/admin/audit-log"
     );
+  });
+
+  it("offers step-up for a detail that requires it and loads it afterwards", async () => {
+    state.authenticated = true;
+    adminServer.use(
+      http.get(`/api/admin/audit-log/${auditEventId}`, () =>
+        hasSteppedUp() ? HttpResponse.json(auditLogDetail) : stepUpRequired()
+      )
+    );
+    renderAdmin(<AdminAuditLogDetailPage eventId={auditEventId} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This action needs a recent step-up with your authentication code."
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm step-up" }));
+    await completeStepUp();
+
+    expect(await screen.findByText("203.0.113.10")).toBeInTheDocument();
   });
 
   it("reports a missing entry without leaking why", async () => {
@@ -166,6 +212,35 @@ describe("AdminAccountPage", () => {
     expect(screen.getByText("ABCD-EFGH-JK23")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear sensitive value" }));
     expect(screen.queryByText("ABCD-EFGH-JK23")).not.toBeInTheDocument();
+  });
+
+  it("drops cleared recovery codes from the mutation cache", async () => {
+    state.authenticated = true;
+    const { queryClient } = renderAdmin(<AdminAccountPage />);
+    const cachedResults = () =>
+      JSON.stringify(queryClient.getMutationCache().getAll().map((mutation) => mutation.state.data));
+
+    await screen.findByRole("heading", { level: 2, name: "Current session" });
+    fireEvent.click(screen.getByRole("button", { name: "Generate recovery codes" }));
+    expect(await screen.findByText("ABCD-EFGH-JK23")).toBeInTheDocument();
+    expect(cachedResults()).toContain("ABCD-EFGH-JK23");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear sensitive value" }));
+
+    await vi.waitFor(() => expect(cachedResults()).not.toContain("ABCD-EFGH-JK23"));
+  });
+
+  it("drops one-time secrets from the mutation cache on logout", async () => {
+    state.authenticated = true;
+    const { queryClient } = renderAdmin(<AdminAccountPage />);
+
+    await screen.findByText(session.username);
+    fireEvent.click(screen.getByRole("button", { name: "Generate recovery codes" }));
+    expect(await screen.findByText("ABCD-EFGH-JK23")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+
+    await vi.waitFor(() => expect(state.csrf.logout).toBe("csrf-token"));
+    await vi.waitFor(() => expect(queryClient.getMutationCache().getAll()).toEqual([]));
   });
 
   it("logs out with a CSRF token and drops the cached session", async () => {

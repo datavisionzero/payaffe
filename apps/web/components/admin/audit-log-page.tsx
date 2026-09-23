@@ -4,12 +4,12 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "../../lib/link";
 import { createText } from "../../lib/text";
 import { useState } from "react";
-import { useEffect } from "react";
-import { useSearchParams } from "../../lib/navigation";
+import { useRouter, useSearchParams } from "../../lib/navigation";
 import { type AdminAuditLogExport, exportAdminAuditLog } from "../../lib/admin-api";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage } from "./common";
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
+import { useWithStepUp } from "./step-up";
 
 const t = createText({
   auditActor: "Actor",
@@ -29,28 +29,21 @@ const t = createText({
 });
 
 export function AdminAuditLogPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const withStepUp = useWithStepUp();
   const [projectId, setProjectId] = useState(() => searchParams.get("projectId") ?? "");
   const projects = useQuery(adminQueries.projects());
   const query = useQuery(adminQueries.auditLog(projectId || undefined));
   const [exportResult, setExportResult] = useState<AdminAuditLogExport | null>(null);
   const exportMutation = useMutation({
-    mutationFn: () => exportAdminAuditLog(projectId || undefined),
+    mutationFn: () => withStepUp(() => exportAdminAuditLog(projectId || undefined)),
     onSuccess: (result) => {
       setExportResult(result);
       downloadAuditLogExport(result);
     }
   });
   const entries = query.data ?? [];
-
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (projectId) {
-      params.set("projectId", projectId);
-    }
-    const search = params.toString();
-    window.history.replaceState(null, "", `/admin/audit-log${search ? `?${search}` : ""}`);
-  }, [projectId]);
 
   return (
     <div className="space-y-6">
@@ -79,8 +72,13 @@ export function AdminAuditLogPage() {
           <select
             className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
             onChange={(event) => {
+              const next = event.target.value;
               setExportResult(null);
-              setProjectId(event.target.value);
+              setProjectId(next);
+              // Through the router, so its location and history stay in step.
+              router.replace(
+                next ? `/admin/audit-log?${new URLSearchParams({ projectId: next })}` : "/admin/audit-log"
+              );
             }}
             value={projectId}
           >

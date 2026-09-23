@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from "react
 import { Navigate, Outlet, Route, Routes, useParams } from "react-router";
 import { AdminLoginPage } from "./components/admin/login-page";
 import { AdminShell } from "./components/admin/admin-shell";
+import { StepUpProvider } from "./components/admin/step-up";
 import Link from "./lib/link";
 import { reportClientError } from "./lib/client-errors";
 
@@ -117,9 +118,11 @@ function HomePage() {
 function AdminShellRoute() {
   return (
     <AdminShell>
-      <Suspense fallback={<AdminRouteLoading />}>
-        <Outlet />
-      </Suspense>
+      <StepUpProvider>
+        <Suspense fallback={<AdminRouteLoading />}>
+          <Outlet />
+        </Suspense>
+      </StepUpProvider>
     </AdminShell>
   );
 }

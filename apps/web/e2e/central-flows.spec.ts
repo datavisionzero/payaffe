@@ -350,7 +350,7 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });
 
-test("Admin confirms settlement, address import, webhook resend, and audit export", async ({
+test("Admin steps up and confirms settlement, address import, webhook resend, and audit export", async ({
   page
 }) => {
   const projectId = "00000000-0000-0000-0000-000000000001";
@@ -359,6 +359,7 @@ test("Admin confirms settlement, address import, webhook resend, and audit expor
   const mutationHeaders: string[] = [];
   let addressCount = 8;
   let settled = false;
+  let steppedUp = false;
 
   await page.route("**/api/admin/**", async (route) => {
     const request = route.request();
@@ -404,6 +405,23 @@ test("Admin confirms settlement, address import, webhook resend, and audit expor
           updatedAt: "2026-07-05T10:05:00Z",
           version: settled ? 4 : 3
         }
+      });
+    }
+    if (path === "/api/admin/auth/step-up") {
+      expect(await request.postDataJSON()).toEqual({ totpCode: "123456" });
+      steppedUp = true;
+      return route.fulfill({
+        json: {
+          status: "step_up_authenticated",
+          stepUpAuthenticatedAt: "2026-07-05T10:20:00Z",
+          idleExpiresAt: "2026-07-05T22:20:00Z"
+        }
+      });
+    }
+    if (path === `/api/admin/payments/${paymentId}/settle` && !steppedUp) {
+      return route.fulfill({
+        status: 403,
+        json: { title: "Step-up authentication is required.", code: "admin_step_up.required" }
       });
     }
     if (path === `/api/admin/payments/${paymentId}/settle`) {
@@ -544,6 +562,12 @@ test("Admin confirms settlement, address import, webhook resend, and audit expor
     await dialog.accept();
   });
   await page.getByRole("button", { name: "Settle Payment" }).click();
+  const stepUp = page.getByRole("dialog", { name: "Confirm step-up" });
+  await expect(stepUp).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await stepUp.getByLabel("Authentication code").fill("123456");
+  await stepUp.getByRole("button", { name: "Confirm" }).click();
+  await expect(stepUp).toBeHidden();
   await expect(page.getByText("settled", { exact: true })).toBeVisible();
 
   await page.goto(`/admin/projects/${projectId}/addresses`);
@@ -565,7 +589,8 @@ test("Admin confirms settlement, address import, webhook resend, and audit expor
   await download;
   await expect(page.getByText(/Exported 1 event/)).toBeVisible();
 
-  expect(mutationHeaders).toEqual(["csrf-token", "csrf-token", "csrf-token", "csrf-token"]);
+  // Settlement is sent twice around the step-up.
+  expect(mutationHeaders).toEqual(Array(6).fill("csrf-token"));
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
