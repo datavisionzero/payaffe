@@ -70,7 +70,12 @@ the caller.
 
 Integration API requests use a fixed-window default rate limit of 120 requests
 per minute for each route, source IP, and bearer-token fingerprint partition.
-Requests without bearer-token evidence are partitioned by route and source IP.
+A route is its pattern, such as `/api/v1/payments/{paymentId}`, so every
+Payment ID on it shares one budget. A bearer token gets a partition of its own
+once the installation has accepted it; requests without a token, and with a
+token not yet accepted, share the partition of their route and source IP, so
+invented tokens cannot open fresh budgets. A rejected request is recorded in
+the Audit Log once per partition and window, not once per request.
 The bearer token itself must not be stored in the rate-limit key, logs, Audit
 Log entries, traces, metrics, or error responses. The source IP is the one the
 host believes in, which behind a reverse proxy means the proxy's until the
@@ -365,7 +370,13 @@ credential, secret, provider payload, or another Project's resource state.
 
 Validation errors use `validation.failed` with an `errors` extension. The
 extension maps field paths to lists of machine-readable validation codes.
-Validation codes are API contract values, not localized UI strings.
+Validation codes are API contract values, not localized UI strings. A request
+body that is not valid JSON is a `validation.failed` error with
+`request.invalid_json` under `request`.
+
+A failure the API did not anticipate is a `500` with `unexpected_error` and a
+`correlationId`, never a bare status or a stack trace. Payment Creation for an
+archived Project returns `project.archived`.
 
 ## Pagination, Sorting, And Filtering
 

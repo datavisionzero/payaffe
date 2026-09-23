@@ -1,12 +1,14 @@
 using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Auth;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Payaffe.Infrastructure.Persistence;
 
 public sealed class EfIntegrationApiCredentialAuthenticator(
     PayaffeDbContext dbContext,
-    IClock clock)
+    IClock clock,
+    ILogger<EfIntegrationApiCredentialAuthenticator> logger)
     : IIntegrationApiCredentialAuthenticator
 {
     public async Task<AuthenticatedIntegrationApiCredential?> AuthenticateAsync(
@@ -30,9 +32,23 @@ public sealed class EfIntegrationApiCredentialAuthenticator(
             return null;
         }
 
+        // LastUsedAt is bookkeeping. A write that loses to a concurrent change
+        // of the same row, such as a rotation, must not turn a request that
+        // authenticated into an error.
         credential.Credential.LastUsedAt = clock.UtcNow;
         credential.Credential.UpdatedAt = credential.Credential.LastUsedAt.Value;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            dbContext.ChangeTracker.Clear();
+            logger.LogWarning(
+                exception,
+                "Recording the last use of Integration API Credential {CredentialId} failed.",
+                credential.Credential.Id);
+        }
 
         return new AuthenticatedIntegrationApiCredential(
             credential.Credential.Id,

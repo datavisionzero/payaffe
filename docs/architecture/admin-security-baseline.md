@@ -219,9 +219,12 @@ endpoints require rate limits or equivalent abuse protection.
 Admin authentication mutations use a fixed-window default of 30 requests per
 5 minutes for each route and source IP partition. The default applies to
 password login start, MFA completion including Recovery Code use, Step-up, and
-Recovery Code generation or rotation. Operators can override the default
-through `Admin:Authentication:RateLimitPermitLimit` and
-`Admin:Authentication:RateLimitWindow`.
+Recovery Code generation or rotation, and to the sensitive Admin mutations,
+including Audit Log export and Webhook Delivery resend. A route is its
+pattern, so different resource IDs on one route share a budget. Operators can
+override the default through `Admin:Authentication:RateLimitPermitLimit` and
+`Admin:Authentication:RateLimitWindow`. A rejection is recorded in the Audit
+Log once per partition and window.
 
 The source IP of a partition is the connection's, and behind a reverse proxy
 that is the proxy's for every caller until the proxy is named in
