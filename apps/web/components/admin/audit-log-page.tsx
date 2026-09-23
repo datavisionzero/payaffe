@@ -5,9 +5,17 @@ import Link from "../../lib/link";
 import { createText } from "../../lib/text";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "../../lib/navigation";
-import { type AdminAuditLogExport, exportAdminAuditLog } from "../../lib/admin-api";
+import type React from "react";
+import {
+  type AdminAuditLogEntry,
+  type AdminAuditLogExport,
+  type AdminProject,
+  exportAdminAuditLog
+} from "../../lib/admin-api";
 import { EmptyMessage, ErrorMessage, PageHeader, Panel, StateMessage } from "./common";
 import { formatDateTime } from "./format";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
 import { adminQueries } from "./queries";
 import { useWithStepUp } from "./step-up";
 
@@ -16,6 +24,8 @@ const t = createText({
   auditEventType: "Event",
   auditLogCount: "{count, plural, one {# event} other {# events}}",
   auditLogDescription: "Recent security-relevant Admin and system events.",
+  auditLogInstallationDescription: "Installation-wide. Recent security-relevant Admin and system events.",
+  auditLogProjectDescription: "Recent security-relevant Admin and system events of this Project.",
   auditLogEmpty: "No Audit Log entries are available yet.",
   auditLogExport: "Export JSON",
   auditLogExported: "Exported {count, plural, one {# event} other {# events}} at {exportedAt}.",
@@ -31,13 +41,85 @@ const t = createText({
 export function AdminAuditLogPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const withStepUp = useWithStepUp();
   const [projectId, setProjectId] = useState(() => searchParams.get("projectId") ?? "");
   const projects = useQuery(adminQueries.projects());
-  const query = useQuery(adminQueries.auditLog(projectId || undefined));
+
+  return (
+    <AuditLogView
+      description={t("auditLogInstallationDescription")}
+      detailHref={(entry) =>
+        `/admin/audit-log/${entry.eventId}${entry.projectId ? `?projectId=${entry.projectId}` : ""}`
+      }
+      filter={(clearExport) => (
+        <Panel>
+          <label className="block max-w-sm text-sm font-medium">
+            <span>Project filter</span>
+            <select
+              className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
+              onChange={(event) => {
+                const next = event.target.value;
+                clearExport();
+                setProjectId(next);
+                // Through the router, so its location and history stay in step.
+                router.replace(
+                  next ? `/admin/audit-log?${new URLSearchParams({ projectId: next })}` : "/admin/audit-log"
+                );
+              }}
+              value={projectId}
+            >
+              <option value="">All Projects and installation events</option>
+              {projects.data?.map((project) => (
+                <option key={project.projectId} value={project.projectId}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </Panel>
+      )}
+      projectId={projectId || undefined}
+      projects={projects.data}
+      showProjectColumn
+    />
+  );
+}
+
+// The Project view is fixed to its route Project, so it needs neither the
+// filter nor a Project column, and its export covers only that Project.
+export function AdminProjectAuditLogPage() {
+  const project = useAdminProject();
+
+  return (
+    <AuditLogView
+      description={t("auditLogProjectDescription")}
+      detailHref={(entry) => adminProjectPath(project.projectId, `/audit-log/${entry.eventId}`)}
+      projectId={project.projectId}
+      projects={[project]}
+      showProjectColumn={false}
+    />
+  );
+}
+
+function AuditLogView({
+  description,
+  detailHref,
+  filter,
+  projectId,
+  projects,
+  showProjectColumn
+}: {
+  description: string;
+  detailHref: (entry: AdminAuditLogEntry) => string;
+  filter?: (clearExport: () => void) => React.ReactNode;
+  projectId: string | undefined;
+  projects: AdminProject[] | undefined;
+  showProjectColumn: boolean;
+}) {
+  const withStepUp = useWithStepUp();
+  const query = useQuery(adminQueries.auditLog(projectId));
   const [exportResult, setExportResult] = useState<AdminAuditLogExport | null>(null);
   const exportMutation = useMutation({
-    mutationFn: () => withStepUp(() => exportAdminAuditLog(projectId || undefined)),
+    mutationFn: () => withStepUp(() => exportAdminAuditLog(projectId)),
     onSuccess: (result) => {
       setExportResult(result);
       downloadAuditLogExport(result);
@@ -63,34 +145,10 @@ export function AdminAuditLogPage() {
             </button>
           </>
         }
-        description={`Installation-wide. ${t("auditLogDescription")}`}
+        description={description}
         title={t("auditLogTitle")}
       />
-      <Panel>
-        <label className="block max-w-sm text-sm font-medium">
-          <span>Project filter</span>
-          <select
-            className="mt-2 block h-10 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-3"
-            onChange={(event) => {
-              const next = event.target.value;
-              setExportResult(null);
-              setProjectId(next);
-              // Through the router, so its location and history stay in step.
-              router.replace(
-                next ? `/admin/audit-log?${new URLSearchParams({ projectId: next })}` : "/admin/audit-log"
-              );
-            }}
-            value={projectId}
-          >
-            <option value="">All Projects and installation events</option>
-            {projects.data?.map((project) => (
-              <option key={project.projectId} value={project.projectId}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </Panel>
+      {filter?.(() => setExportResult(null))}
       {query.isPending ? <StateMessage>{t("auditLogLoading")}</StateMessage> : null}
       {query.isError ? <ErrorMessage error={query.error} /> : null}
       {exportMutation.isError ? <ErrorMessage error={exportMutation.error} /> : null}
@@ -112,7 +170,7 @@ export function AdminAuditLogPage() {
                   <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">
                     <th className="py-2 pr-4 font-medium">{t("auditOccurredAt")}</th>
                     <th className="py-2 pr-4 font-medium">{t("auditEventType")}</th>
-                    <th className="py-2 pr-4 font-medium">Project</th>
+                    {showProjectColumn ? <th className="py-2 pr-4 font-medium">Project</th> : null}
                     <th className="py-2 pr-4 font-medium">{t("auditOutcome")}</th>
                     <th className="py-2 pr-4 font-medium">{t("auditActor")}</th>
                     <th className="py-2 pr-4 font-medium">{t("auditSubject")}</th>
@@ -129,17 +187,19 @@ export function AdminAuditLogPage() {
                       <td className="max-w-[220px] break-words py-3 pr-4 font-medium">
                         <Link
                           className="text-[var(--brand-ink)] hover:text-[var(--brand-ink)]"
-                          href={`/admin/audit-log/${entry.eventId}${entry.projectId ? `?projectId=${entry.projectId}` : ""}`}
+                          href={detailHref(entry)}
                         >
                           {entry.eventType}
                         </Link>
                       </td>
-                      <td className="max-w-[180px] break-words py-3 pr-4">
-                        {entry.projectId
-                          ? projects.data?.find((project) => project.projectId === entry.projectId)
-                              ?.name ?? entry.projectId
-                          : "Installation-wide"}
-                      </td>
+                      {showProjectColumn ? (
+                        <td className="max-w-[180px] break-words py-3 pr-4">
+                          {entry.projectId
+                            ? projects?.find((project) => project.projectId === entry.projectId)
+                                ?.name ?? entry.projectId
+                            : "Installation-wide"}
+                        </td>
+                      ) : null}
                       <td className="py-3 pr-4">
                         <span className="inline-flex rounded-md bg-[var(--surface-strong)] px-2 py-1 text-xs font-medium">
                           {entry.outcome}

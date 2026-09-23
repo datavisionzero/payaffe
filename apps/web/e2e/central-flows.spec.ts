@@ -357,6 +357,27 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
   );
   await expect(page.getByText("payaffe_playwright_one_time_token")).not.toBeVisible();
 
+  // The audit log and Account keep the Project within reach.
+  await navigation.getByRole("link", { name: "Audit log", exact: true }).click();
+  await expect(page).toHaveURL(
+    /\/admin\/projects\/ebc46c0b-c785-47d5-a2b6-5d417374bd79\/audit-log$/
+  );
+  await expect(page.getByRole("heading", { level: 1, name: "Audit log" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Project filter" })).toHaveCount(0);
+  await navigation.getByRole("link", { name: "Account" }).click();
+  await expect(page).toHaveURL(/\/admin\/account$/);
+  await expect(navigation.getByRole("link", { name: "Payments" })).toHaveAttribute(
+    "href",
+    "/admin/projects/ebc46c0b-c785-47d5-a2b6-5d417374bd79/payments"
+  );
+  await navigation.getByRole("link", { name: "Installation audit log" }).click();
+  await expect(page).toHaveURL(/\/admin\/audit-log$/);
+  await expect(page.getByRole("combobox", { name: "Project filter" })).toBeVisible();
+  await navigation.getByRole("link", { name: "Payments" }).click();
+  await expect(page).toHaveURL(
+    /\/admin\/projects\/ebc46c0b-c785-47d5-a2b6-5d417374bd79\/payments$/
+  );
+
   await page.setViewportSize({ width: 320, height: 720 });
   await page.getByRole("button", { name: "Menu" }).click();
   await expect(navigation.getByRole("link", { name: "Payments" })).toBeVisible();

@@ -30,6 +30,7 @@ afterEach(() => {
   nav.pathname = `/admin/projects/${projectId}`;
   nav.replace.mockClear();
   nav.push.mockClear();
+  window.localStorage.clear();
   vi.restoreAllMocks();
   adminServer.resetHandlers();
 });
@@ -93,6 +94,7 @@ describe("AdminShell", () => {
       "Integrations",
       "Addresses",
       "Audit log",
+      "Installation audit log",
       "Account"
     ]) {
       expect(within(navigation).getByRole("link", { name })).toBeInTheDocument();
@@ -102,6 +104,88 @@ describe("AdminShell", () => {
       "page"
     );
     expect(screen.getAllByText("admin@example.test").length).toBeGreaterThan(0);
+  });
+
+  it("links the Project audit log and the installation audit log separately", async () => {
+    state.authenticated = true;
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    await screen.findByText("Protected content");
+    const navigation = screen.getByRole("navigation", { name: "Admin sections" });
+    expect(within(navigation).getByRole("list", { name: "Default Project" })).toBeInTheDocument();
+    expect(within(navigation).getByRole("link", { name: "Audit log" })).toHaveAttribute(
+      "href",
+      `/admin/projects/${projectId}/audit-log`
+    );
+    expect(within(navigation).getByRole("link", { name: "Installation audit log" })).toHaveAttribute(
+      "href",
+      "/admin/audit-log"
+    );
+  });
+
+  it.each(["/admin/account", "/admin/audit-log", "/admin/projects"])(
+    "keeps the remembered Project in the navigation on %s",
+    async (pathname) => {
+      state.authenticated = true;
+      window.localStorage.setItem("payaffe:selected-project-id", projectId);
+      nav.pathname = pathname;
+      renderAdmin(
+        <AdminShell>
+          <p>Protected content</p>
+        </AdminShell>
+      );
+
+      await screen.findByText("Protected content");
+      const navigation = screen.getByRole("navigation", { name: "Admin sections" });
+      expect(within(navigation).getByRole("link", { name: "Payments" })).toHaveAttribute(
+        "href",
+        `/admin/projects/${projectId}/payments`
+      );
+      expect(screen.getByRole("combobox", { name: "Project" })).toHaveValue(projectId);
+      // The page itself stays installation-wide.
+      expect(screen.queryByText(/This Project is unavailable/)).not.toBeInTheDocument();
+    }
+  );
+
+  it("shows no Project group on an installation view before a Project was chosen", async () => {
+    state.authenticated = true;
+    window.localStorage.removeItem("payaffe:selected-project-id");
+    nav.pathname = "/admin/account";
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    await screen.findByText("Protected content");
+    const navigation = screen.getByRole("navigation", { name: "Admin sections" });
+    expect(within(navigation).queryByRole("link", { name: "Payments" })).not.toBeInTheDocument();
+    expect(within(navigation).getByRole("link", { name: "Account" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+  });
+
+  it("drops a remembered Project that no longer exists", async () => {
+    state.authenticated = true;
+    window.localStorage.setItem(
+      "payaffe:selected-project-id",
+      "ebc46c0b-c785-47d5-a2b6-5d417374bd79"
+    );
+    nav.pathname = "/admin/account";
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    await screen.findByText("Protected content");
+    const navigation = screen.getByRole("navigation", { name: "Admin sections" });
+    expect(within(navigation).queryByRole("link", { name: "Payments" })).not.toBeInTheDocument();
   });
 
   it("marks the owning section for a nested route", async () => {

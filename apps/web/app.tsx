@@ -17,6 +17,16 @@ const AdminAuditLogDetailPage = lazy(() =>
     default: module.AdminAuditLogDetailPage
   }))
 );
+const AdminProjectAuditLogDetailPage = lazy(() =>
+  import("./components/admin/audit-log-detail-page").then((module) => ({
+    default: module.AdminProjectAuditLogDetailPage
+  }))
+);
+const AdminProjectAuditLogPage = lazy(() =>
+  import("./components/admin/audit-log-page").then((module) => ({
+    default: module.AdminProjectAuditLogPage
+  }))
+);
 const AdminAuditLogPage = lazy(() =>
   import("./components/admin/audit-log-page").then((module) => ({ default: module.AdminAuditLogPage }))
 );
@@ -93,6 +103,8 @@ export function App() {
             <Route path="integrations" element={<AdminIntegrationsPage />} />
             <Route path="integrations/new" element={<AdminIntegrationCreatePage />} />
             <Route path="addresses" element={<AdminAddressesPage />} />
+            <Route path="audit-log" element={<AdminProjectAuditLogPage />} />
+            <Route path="audit-log/:eventId" element={<AdminProjectAuditLogRoute />} />
           </Route>
           <Route path="payments" element={<LegacyProjectRedirect suffix="/payments" />} />
           <Route path="payments/:paymentId" element={<LegacyPaymentRoute />} />
@@ -177,6 +189,11 @@ function LegacyPaymentRoute() {
 function AdminAuditLogRoute() {
   const { eventId } = useParams();
   return eventId ? <AdminAuditLogDetailPage eventId={eventId} /> : <Navigate replace to="/admin/audit-log" />;
+}
+
+function AdminProjectAuditLogRoute() {
+  const { eventId } = useParams();
+  return eventId ? <AdminProjectAuditLogDetailPage eventId={eventId} /> : <Navigate replace to=".." />;
 }
 
 function NotFoundPage() {

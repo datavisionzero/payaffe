@@ -12,9 +12,11 @@ import {
   FolderKanbanIcon,
   KeyRoundIcon,
   ListChecksIcon,
+  ScrollTextIcon,
   UserRoundIcon,
   WalletCardsIcon
 } from "lucide-react";
+import type { AdminProject } from "../../lib/admin-api";
 import { type AdminAttention, useAdminAttention } from "./attention";
 import { adminProjectCreatePath, adminProjectPath } from "./project-routes";
 
@@ -22,9 +24,7 @@ const t = createText({
   ariaLabel: "Admin sections",
   lowCapacity: "low capacity",
   needsAttention: "needs attention",
-  "groups.operations": "Operations",
-  "groups.configuration": "Configuration",
-  "groups.security": "Security",
+  "groups.installation": "Installation",
   "items.overview": "Overview",
   "items.projects": "Projects",
   "items.payments": "Payments",
@@ -33,51 +33,48 @@ const t = createText({
   "items.integrations": "Integrations",
   "items.addresses": "Addresses",
   "items.auditLog": "Audit log",
+  "items.installationAuditLog": "Installation audit log",
   "items.account": "Account"
 });
 
+// The Project group stays while an installation view is open, so the Admin is
+// one click away from the Project they were working in.
 export function AdminNav({
   onNavigate,
   open,
-  projectId
+  project
 }: {
   onNavigate: () => void;
   open: boolean;
-  projectId: string | null;
+  project: AdminProject | null;
 }) {
   const pathname = usePathname();
-  const attention = useAdminAttention(projectId);
-  const projectPath = projectId ? adminProjectPath(projectId) : null;
+  const attention = useAdminAttention(project?.projectId ?? null);
+  const projectPath = project ? adminProjectPath(project.projectId) : null;
   const groups = [
-    {
-      key: "operations",
-      items: [
-        { key: "projects", href: "/admin/projects", icon: FolderKanbanIcon },
-        ...(projectPath
-          ? [
+    ...(project && projectPath
+      ? [
+          {
+            key: "project",
+            title: project.name,
+            items: [
               { key: "overview", href: projectPath, icon: GaugeIcon },
               { key: "payments", href: `${projectPath}/payments`, icon: CreditCardIcon },
               { key: "monitoring", href: `${projectPath}/monitoring`, icon: ActivityIcon },
-              { key: "webhooks", href: `${projectPath}/webhooks`, icon: BlocksIcon }
-            ]
-          : [])
-      ]
-    },
-    ...(projectPath
-      ? [
-          {
-            key: "configuration",
-            items: [
+              { key: "webhooks", href: `${projectPath}/webhooks`, icon: BlocksIcon },
               { key: "integrations", href: `${projectPath}/integrations`, icon: KeyRoundIcon },
-              { key: "addresses", href: `${projectPath}/addresses`, icon: WalletCardsIcon }
+              { key: "addresses", href: `${projectPath}/addresses`, icon: WalletCardsIcon },
+              { key: "auditLog", href: `${projectPath}/audit-log`, icon: ListChecksIcon }
             ]
           }
         ]
       : []),
     {
-      key: "security",
+      key: "installation",
+      title: t("groups.installation"),
       items: [
-        { key: "auditLog", href: "/admin/audit-log", icon: ListChecksIcon },
+        { key: "projects", href: "/admin/projects", icon: FolderKanbanIcon },
+        { key: "installationAuditLog", href: "/admin/audit-log", icon: ScrollTextIcon },
         { key: "account", href: "/admin/account", icon: UserRoundIcon }
       ]
     }
@@ -98,7 +95,7 @@ export function AdminNav({
             className="px-3 text-xs font-semibold tracking-wide text-[var(--muted-foreground)] uppercase"
             id={`admin-nav-${group.key}`}
           >
-            {t(`groups.${group.key}`)}
+            {group.title}
           </p>
           <ul aria-labelledby={`admin-nav-${group.key}`} className="mt-2 grid gap-1">
             {group.items.map((item) => {

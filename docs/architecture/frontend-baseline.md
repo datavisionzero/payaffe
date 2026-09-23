@@ -55,7 +55,9 @@ selection is only a convenience and is never authorization evidence:
 | `/admin/projects/{projectId}/integrations` | Integration API Credentials |
 | `/admin/projects/{projectId}/integrations/new` | Integration API Credential creation and its one-time bearer token |
 | `/admin/projects/{projectId}/addresses` | Project Watch-Only Wallet Sources and native ETH Address Pool |
-| `/admin/audit-log` | Audit Log list and export |
+| `/admin/projects/{projectId}/audit-log` | Audit Log list and export fixed to the Project |
+| `/admin/projects/{projectId}/audit-log/{eventId}` | Audit Log entry detail within the Project |
+| `/admin/audit-log` | Installation-wide Audit Log list and export with an optional Project filter |
 | `/admin/audit-log/{eventId}` | Audit Log entry detail |
 | `/admin/account` | Session, step-up, recovery codes, sign-out |
 
@@ -207,9 +209,12 @@ copied shadcn defaults is a failure.
   an always-visible Project switcher, and an account menu at the right.
 - The Project switcher reads Project context from the URL, names the current
   Project, links to the Project overview, and preserves the equivalent view
-  when switching where that view exists.
-- Navigation groups separate operations, configuration, and installation
-  security. Attention badges have accessible names and are scoped to the
+  when switching where that view exists. On installation views, whose routes
+  carry no Project, the switcher and navigation keep the last Selected Project
+  from browser-local storage as a convenience.
+- Navigation has a Project group, headed by the Selected Project's name, and an
+  Installation group for Projects, the installation-wide Audit Log, and
+  Account. Attention badges have accessible names and are scoped to the
   Selected Project unless visibly labelled otherwise.
 - Screen headers use a compact 3rem minimum row with a small semibold title,
   muted metadata, and actions aligned consistently. Body text defaults to the
