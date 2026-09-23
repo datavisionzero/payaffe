@@ -263,6 +263,16 @@ public sealed class PaymentApplicationService(
             cancellationToken);
         if (address is null)
         {
+            // A concurrent selection of another currency holds the Payment's
+            // address reservation; answer with that selection.
+            var current = await paymentStore.FindByPayerPageIdAsync(payment.PayerPageId, cancellationToken);
+            if (current?.SelectedCurrency is not null)
+            {
+                return StringComparer.Ordinal.Equals(current.SelectedCurrency, supportedCurrency)
+                    ? SelectPaymentCurrencyResult.AlreadySelected(ToResponse(current))
+                    : SelectPaymentCurrencyResult.CurrencyAlreadySelected(ToResponse(current));
+            }
+
             return SelectPaymentCurrencyResult.PaymentAddressUnavailable();
         }
 
@@ -299,14 +309,32 @@ public sealed class PaymentApplicationService(
         if (storeResult.Kind == SelectCurrencyStoreResultKind.Selected &&
             storeResult.Payment is not null)
         {
-            await blockchainObservationAdapter.StartWatchingAsync(
-                new BlockchainObservationTarget(
+            // The selection is committed and polling does not depend on this
+            // call, so a provider failure here must not turn it into an error.
+            try
+            {
+                await blockchainObservationAdapter.StartWatchingAsync(
+                    new BlockchainObservationTarget(
+                        payment.Id,
+                        supportedCurrency,
+                        address.PaymentAddress,
+                        quote.ExpectedCryptoAmount,
+                        payment.ProjectId),
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Blockchain Observation could not start watching Payment {PaymentId} in Project {ProjectId} ({SupportedCurrency}); polling will pick it up.",
                     payment.Id,
-                    supportedCurrency,
-                    address.PaymentAddress,
-                    quote.ExpectedCryptoAmount,
-                    payment.ProjectId),
-                cancellationToken);
+                    payment.ProjectId,
+                    supportedCurrency);
+            }
         }
 
         return storeResult.Kind switch
@@ -420,6 +448,10 @@ public sealed class PaymentApplicationService(
                 RecordBlockchainObservationResult.PaymentNotReady(),
             RecordBlockchainObservationStoreResultKind.ObservationMismatch =>
                 RecordBlockchainObservationResult.ObservationMismatch(),
+            RecordBlockchainObservationStoreResultKind.IgnoredBeforeSelection =>
+                RecordBlockchainObservationResult.IgnoredBeforeSelection(ToResponse(storeResult.Payment!)),
+            RecordBlockchainObservationStoreResultKind.AlreadyIgnoredBeforeSelection =>
+                RecordBlockchainObservationResult.AlreadyIgnoredBeforeSelection(ToResponse(storeResult.Payment!)),
             _ => throw new InvalidOperationException($"Unsupported observation result {storeResult.Kind}."),
         };
     }
@@ -543,6 +575,16 @@ public sealed class PaymentApplicationService(
                         }
 
                         break;
+                    case RecordBlockchainObservationResultKind.IgnoredBeforeSelection:
+                        rejectedCount++;
+                        _logger.LogWarning(
+                            "Payment Address of Payment {PaymentId} in Project {ProjectId} ({SupportedCurrency}) received transaction {TransactionHash} before currency selection; it does not count and an Address History Alert was raised.",
+                            target.PaymentId,
+                            target.ProjectId,
+                            target.SupportedCurrency,
+                            observation.TransactionHash);
+                        break;
+                    case RecordBlockchainObservationResultKind.AlreadyIgnoredBeforeSelection:
                     case RecordBlockchainObservationResultKind.PaymentNotFound:
                     case RecordBlockchainObservationResultKind.PaymentNotReady:
                     case RecordBlockchainObservationResultKind.ObservationMismatch:
@@ -577,8 +619,8 @@ public sealed class PaymentApplicationService(
                     target.SupportedCurrency,
                     observation.TransactionHash,
                     observation.Confirmations,
-                    BlockHash: null,
-                    BlockHeight: null,
+                    observation.BlockHash,
+                    observation.BlockHeight,
                     target.ProjectId),
                 cancellationToken);
             return result.Kind;
@@ -630,7 +672,8 @@ public sealed class PaymentApplicationService(
                 GetRequiredConfirmations("LTC"),
                 Math.Max(0, _options.LtcReorgMonitoringDepth),
                 GetRequiredConfirmations("ETH"),
-                Math.Max(0, _options.EthReorgMonitoringDepth)),
+                Math.Max(0, _options.EthReorgMonitoringDepth),
+                clock.UtcNow),
             maxTransactions,
             cancellationToken);
 
@@ -670,6 +713,37 @@ public sealed class PaymentApplicationService(
             if (observation is null)
             {
                 missingObservationCount++;
+                try
+                {
+                    var missing = await paymentStore.RecordMissingBlockchainTransactionAsync(
+                        new BlockchainTransactionMissingDraft(
+                            target.PaymentId,
+                            target.SupportedCurrency,
+                            target.TransactionHash,
+                            clock.UtcNow,
+                            target.ProjectId),
+                        new PaymentEventDraft(
+                            Guid.NewGuid(),
+                            target.PaymentId,
+                            "payment.reorg_alerted",
+                            clock.UtcNow,
+                            Details: null),
+                        cancellationToken);
+                    if (missing.Kind == UpdateBlockchainTransactionConfirmationsStoreResultKind.ReorgAlerted)
+                    {
+                        reorgAlertCount++;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    failedCount++;
+                    LogTargetFailure(exception, "reorg miss", target.PaymentId, target.ProjectId, target.SupportedCurrency);
+                }
+
                 continue;
             }
 
@@ -682,8 +756,8 @@ public sealed class PaymentApplicationService(
                         target.SupportedCurrency,
                         target.TransactionHash,
                         observation.Confirmations,
-                        BlockHash: null,
-                        BlockHeight: null,
+                        observation.BlockHash,
+                        observation.BlockHeight,
                         target.ProjectId),
                     cancellationToken);
             }

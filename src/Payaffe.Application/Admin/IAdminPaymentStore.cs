@@ -25,4 +25,9 @@ public interface IAdminPaymentStore
         Guid projectId,
         int limit,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<AdminAddressHistoryAlertReadModel>> ListAddressHistoryAlertsAsync(
+        Guid projectId,
+        int limit,
+        CancellationToken cancellationToken);
 }

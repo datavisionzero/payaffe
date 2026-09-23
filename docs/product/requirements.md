@@ -219,6 +219,7 @@ Payment completion is based on the sum of confirmed Matching Blockchain Transact
 - Multiple Matching Blockchain Transactions may complete one Payment together.
 - Matching Blockchain Transactions must belong to the selected Supported Currency and payment address.
 - Matching Blockchain Transactions must fall within the Payment Expiration or Late Acceptance Window rules.
+- A Blockchain Transaction with an Observed Payment Time more than two hours before currency selection does not count toward the Payment. `payaffe` records it once as an Address History Alert, visible to Admins and written to the log.
 - A later matching transaction may complete a Payment after an earlier underpaid transaction.
 
 Underpayments are handled with a configurable Payment Tolerance per Project.
@@ -273,6 +274,8 @@ If a blockchain reorganization affects a completed Payment, `payaffe` does not a
 Instead, `payaffe` creates a Reorg Alert and records the event in Payment Event History.
 
 Admins review Reorg Alerts manually.
+
+A completed Payment's Matching Blockchain Transaction counts as affected by a reorganization when Blockchain Truth reports it in a different block, stops reporting it on three consecutive checks, or reports fewer confirmations on two consecutive checks. A single lower count is treated as provider lag. Monitoring continues after a Reorg Alert until Reorg Monitoring Depth is reached; while an alert for a transaction is open, no second alert is raised for it.
 
 Reorg Monitoring Depth is configurable per Project and Supported Currency.
 

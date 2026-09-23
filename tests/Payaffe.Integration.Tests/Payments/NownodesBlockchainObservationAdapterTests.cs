@@ -46,6 +46,8 @@ public sealed class NownodesBlockchainObservationAdapterTests
                 }
               ],
               "confirmations": 3,
+              "blockHash": "0000000000000000000block-840000",
+              "blockHeight": 840000,
               "blockTime": 1783166700
             }
             """);
@@ -79,6 +81,8 @@ public sealed class NownodesBlockchainObservationAdapterTests
         Assert.Equal(DateTimeOffset.Parse("2026-07-04T12:05:00Z"), observation.ObservedAt);
         Assert.Equal(3, observation.Confirmations);
         Assert.Equal("nownodes", observation.ProviderName);
+        Assert.Equal("0000000000000000000block-840000", observation.BlockHash);
+        Assert.Equal(840000, observation.BlockHeight);
         Assert.Equal("nownodes:tx-123", observation.ProviderObservationId);
         Assert.Equal(
             ["/api/v2/address/btc-test-address", "/api/v2/tx/tx-123", "/api/v2/tx/tx-outgoing"],

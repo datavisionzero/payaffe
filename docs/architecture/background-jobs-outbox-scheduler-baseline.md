@@ -114,9 +114,10 @@ state guards.
 Required deduplication or idempotency examples:
 
 - Payment Creation uses Integration API Credential plus `Idempotency-Key`.
-- Matching Blockchain Transactions are deduplicated by Supported Currency,
-  Payment Address, and transaction hash or another provider-independent stable
-  transaction identity.
+- Matching Blockchain Transactions are deduplicated per Payment by Supported
+  Currency and transaction hash or another provider-independent stable
+  transaction identity. One Blockchain Transaction that pays several Payment
+  Addresses is a Matching Blockchain Transaction of each of those Payments.
 - Webhook receivers deduplicate by `event_id`; `payaffe` must not create
   multiple lifecycle events for one state transition.
 - Manual Webhook resend reuses the same event contract and does not create a

@@ -170,7 +170,10 @@ option state past the Payment's expiration.
 
 Fiat Amounts remain integer minor units. EUR and USD have two decimal places,
 so `1999` means EUR 19.99 or USD 19.99. The JSON value is an integer; generated
-clients must preserve signed 64-bit precision.
+clients must preserve signed 64-bit precision. A Payment's Fiat Amount is at
+most 1,000,000.00 (`100000000` minor units) in either currency; a larger amount
+is rejected at creation with `validation.failed` and `fiat_amount.too_large`
+under `fiatAmountMinor`.
 
 Cryptocurrency amounts and exchange rates are JSON strings, never JSON
 floating-point numbers. A decimal value uses ASCII digits, an optional decimal

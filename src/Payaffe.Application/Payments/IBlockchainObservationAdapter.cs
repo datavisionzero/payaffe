@@ -23,10 +23,17 @@ public sealed record BlockchainObservationTarget(
     string ExpectedCryptoAmount,
     Guid ProjectId = default);
 
+/// <summary>
+/// One Blockchain Transaction as the provider reports it for a Payment Address.
+/// The block it is in is null while it is unconfirmed or when the provider does
+/// not say.
+/// </summary>
 public sealed record BlockchainObservation(
     string TransactionHash,
     string ObservedAmount,
     DateTimeOffset ObservedAt,
     int Confirmations,
     string ProviderName,
-    string? ProviderObservationId);
+    string? ProviderObservationId,
+    string? BlockHash = null,
+    long? BlockHeight = null);

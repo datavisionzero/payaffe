@@ -255,6 +255,7 @@ test("Admin signs in, navigates the admin sections, and writes with CSRF", async
       "/api/admin/audit-log": { entries: [] },
       "/api/admin/webhook-deliveries": { deliveries: [] },
       "/api/admin/reorg-alerts": { alerts: [] },
+      "/api/admin/address-history-alerts": { alerts: [] },
       "/api/admin/integration-api-credentials": { credentials: [] },
       "/api/admin/webhook-endpoints": { endpoints: [] },
       "/api/admin/observation-health": { currencies: [] },
@@ -541,6 +542,7 @@ test("Admin steps up and confirms settlement, address import, webhook resend, an
         ]
       },
       "/api/admin/reorg-alerts": { alerts: [] },
+      "/api/admin/address-history-alerts": { alerts: [] },
       "/api/admin/integration-api-credentials": { credentials: [] },
       "/api/admin/webhook-endpoints": { endpoints: [] },
       "/api/admin/observation-health": { currencies: [] },
@@ -654,6 +656,7 @@ test("Admin reaches the Webhook Deliveries view by its own URL", async ({ page }
       "/api/admin/payments": { payments: [] },
       "/api/admin/audit-log": { entries: [] },
       "/api/admin/reorg-alerts": { alerts: [] },
+      "/api/admin/address-history-alerts": { alerts: [] },
       "/api/admin/integration-api-credentials": { credentials: [] },
       "/api/admin/webhook-endpoints": { endpoints: [] },
       "/api/admin/observation-health": { currencies: [] },

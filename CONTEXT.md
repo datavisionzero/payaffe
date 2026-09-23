@@ -66,7 +66,7 @@ An on-chain transfer observed on a supported blockchain.
 _Avoid_: Payment
 
 **Matching Blockchain Transaction**:
-A Blockchain Transaction for the Payment's selected Supported Currency and payment address that is eligible to count toward Payment completion.
+A Blockchain Transaction for the Payment's selected Supported Currency and payment address that is eligible to count toward Payment completion. A Blockchain Transaction whose Observed Payment Time lies more than two hours before currency selection is not one.
 _Avoid_: Deposit, installment
 
 **Blockchain Observation**:
@@ -181,6 +181,10 @@ _Avoid_: Finality, safety level
 **Reorg Alert**:
 An Admin-visible warning that a completed Payment's Matching Blockchain Transaction was affected by a blockchain reorganization.
 _Avoid_: Payment reversal, uncomplete
+
+**Address History Alert**:
+An Admin-visible warning that a Payment Address received a Blockchain Transaction observed before its Payment's currency selection; that transaction does not count toward the Payment.
+_Avoid_: Address reuse error, old payment
 
 **Reorg Monitoring Depth**:
 The configured number of blocks after completion during which `payaffe` monitors for blockchain reorganizations affecting completed Payments.

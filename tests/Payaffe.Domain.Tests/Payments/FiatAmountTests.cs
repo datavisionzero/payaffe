@@ -31,4 +31,14 @@ public sealed class FiatAmountTests
 
         Assert.Equal("fiat_amount.not_positive", exception.Code);
     }
+
+    [Fact]
+    public void Create_accepts_at_most_one_million_and_rejects_more()
+    {
+        Assert.Equal(100_000_000, FiatAmount.Create("USD", 100_000_000).MinorUnits);
+
+        var exception = Assert.Throws<DomainRuleException>(() => FiatAmount.Create("EUR", 100_000_001));
+
+        Assert.Equal("fiat_amount.too_large", exception.Code);
+    }
 }

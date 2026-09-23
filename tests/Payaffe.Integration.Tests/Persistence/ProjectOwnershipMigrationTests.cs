@@ -62,7 +62,9 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
                 ('202609160001_AddProjectOwnership', '10.0.9'),
                 ('202609160002_AddProjectPaymentConfigurationAndAddressSources', '10.0.9'),
                 ('202609230001_AddInstallationMode', '10.0.9'),
-                ('202609230002_AddSimulatedTransactions', '10.0.9');
+                ('202609230002_AddSimulatedTransactions', '10.0.9'),
+                ('202609240011_KeyMatchingTransactionsByPayment', '10.0.9'),
+                ('202609240013_AddAddressHistoryAlerts', '10.0.9');
             """);
         await using (var scope = provider.CreateAsyncScope())
         {
@@ -78,7 +80,9 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
                 @address_migration_id,
                 @instruction_migration_id,
                 '202609230001_AddInstallationMode',
-                '202609230002_AddSimulatedTransactions');
+                '202609230002_AddSimulatedTransactions',
+                '202609240011_KeyMatchingTransactionsByPayment',
+                '202609240013_AddAddressHistoryAlerts');
             alter table app.payment_address_assignments
                 drop constraint ck_payment_address_assignments_chain_id;
             alter table app.payment_address_assignments

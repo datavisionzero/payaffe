@@ -9,6 +9,7 @@ import {
   listAdminIntegrationApiCredentials,
   listAdminPayments,
   listAdminProjects,
+  listAdminAddressHistoryAlerts,
   listAdminReorgAlerts,
   listAdminWebhookDeliveries,
   listAdminWebhookEndpoints
@@ -69,6 +70,11 @@ export const adminQueries = {
   reorgAlerts: (projectId: string) => ({
     queryKey: ["admin-project", projectId, "reorg-alerts"],
     queryFn: () => listAdminReorgAlerts(projectId),
+    retry: false
+  }),
+  addressHistoryAlerts: (projectId: string) => ({
+    queryKey: ["admin-project", projectId, "address-history-alerts"],
+    queryFn: () => listAdminAddressHistoryAlerts(projectId),
     retry: false
   })
 } as const;

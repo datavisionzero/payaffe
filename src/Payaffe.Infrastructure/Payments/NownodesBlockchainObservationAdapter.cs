@@ -56,6 +56,15 @@ public sealed class NownodesBlockchainObservationAdapter(
         return observations;
     }
 
+    public async Task<bool> IsObservationAvailableAsync(
+        string supportedCurrency,
+        CancellationToken cancellationToken)
+    {
+        var apiKeyReference = options.Value.Nownodes.ApiKeyReference;
+        return !string.IsNullOrWhiteSpace(apiKeyReference) &&
+               !string.IsNullOrWhiteSpace(await secretResolver.ResolveAsync(apiKeyReference, cancellationToken));
+    }
+
     private async Task<string> ResolveApiKeyAsync(CancellationToken cancellationToken)
     {
         var apiKeyReference = options.Value.Nownodes.ApiKeyReference;
@@ -189,13 +198,18 @@ public sealed class NownodesBlockchainObservationAdapter(
         var confirmations = TryReadInt32(transaction, "confirmations", out var readConfirmations)
             ? Math.Max(0, readConfirmations)
             : 0;
+        // Blockbook reports a height of zero or below for a transaction that
+        // is not in a block yet.
+        var inBlock = TryReadInt32(transaction, "blockHeight", out var blockHeight) && blockHeight > 0;
         observation = new BlockchainObservation(
             transactionHash,
             FormatCryptoAmount(amount / amountUnit),
             observedAt,
             confirmations,
             ProviderName,
-            $"nownodes:{transactionHash}");
+            $"nownodes:{transactionHash}",
+            inBlock && TryReadString(transaction, "blockHash", out var blockHash) ? blockHash : null,
+            inBlock ? blockHeight : null);
         return true;
     }
 

@@ -53,6 +53,8 @@ public sealed class BlockchairBlockchainObservationAdapterTests
         Assert.Equal(DateTimeOffset.Parse("2026-07-04T12:05:00Z"), observation.ObservedAt);
         Assert.Equal(3, observation.Confirmations);
         Assert.Equal("blockchair", observation.ProviderName);
+        Assert.Null(observation.BlockHash);
+        Assert.Equal(840000, observation.BlockHeight);
         Assert.Equal("blockchair:tx-123", observation.ProviderObservationId);
         Assert.NotNull(handler.RequestUri);
         Assert.Equal(
@@ -311,6 +313,25 @@ public sealed class BlockchairBlockchainObservationAdapterTests
 
         Assert.Contains("Unsupported Blockchair Blockchain Observation currency", exception.Message, StringComparison.Ordinal);
         Assert.Null(handler.RequestUri);
+    }
+
+    /// <summary>
+    /// Readiness is checked before a Payment Address is assigned, so a
+    /// missing API key refuses the selection instead of failing after it.
+    /// </summary>
+    [Fact]
+    public async Task Observation_is_available_only_with_a_configured_api_key()
+    {
+        var handler = new CapturingHttpMessageHandler("{}");
+        var withoutKey = CreateAdapter(handler, new BlockchainObservationProviderOptions
+        {
+            BaseUrl = new Uri("https://blockchair.test"),
+            ApiKeyReference = null,
+            MaxTransactionsPerAddressPoll = 10,
+        });
+
+        Assert.False(await withoutKey.IsObservationAvailableAsync("BTC", CancellationToken.None));
+        Assert.True(await CreateAdapter(handler).IsObservationAvailableAsync("BTC", CancellationToken.None));
     }
 
     private static BlockchairBlockchainObservationAdapter CreateAdapter(

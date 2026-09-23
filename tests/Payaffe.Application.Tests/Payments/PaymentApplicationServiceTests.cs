@@ -181,6 +181,29 @@ public sealed class PaymentApplicationServiceTests
         Assert.Equal("0.00039980", observation.Target.ExpectedCryptoAmount);
     }
 
+    /// <summary>
+    /// The selection is committed before watching starts. A provider failure
+    /// at that point must not turn a saved selection into a server error.
+    /// </summary>
+    [Fact]
+    public async Task Select_currency_succeeds_when_starting_to_watch_fails_after_the_selection_is_saved()
+    {
+        var store = new CapturingSelectionStore();
+        var service = CreateService(
+            store,
+            TimeSpan.FromHours(1),
+            new FixedExchangeRateSource(),
+            new FixedPaymentAddressProvider(),
+            new FailingWatchAdapter());
+
+        var result = await service.SelectCurrencyAsync(
+            new SelectPaymentCurrencyCommand("payer-page-id", "btc"),
+            CancellationToken.None);
+
+        Assert.Equal(SelectPaymentCurrencyResultKind.Selected, result.Kind);
+        Assert.NotNull(store.Selection);
+    }
+
     [Fact]
     public async Task Select_currency_rechecks_a_transiently_unavailable_payment_option()
     {
@@ -711,6 +734,14 @@ public sealed class PaymentApplicationServiceTests
             return Task.FromResult(new ExpireDuePaymentsStoreResult(2));
         }
 
+        public Task<UpdateBlockchainTransactionConfirmationsStoreResult> RecordMissingBlockchainTransactionAsync(
+            BlockchainTransactionMissingDraft missingTransaction,
+            PaymentEventDraft reorgPaymentEvent,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(UpdateBlockchainTransactionConfirmationsStoreResult.TransactionNotFound());
+        }
+
         public Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
             BlockchainTransactionConfirmationUpdateDraft confirmationUpdate,
             PaymentCompletionPolicyDraft completionPolicy,
@@ -863,6 +894,14 @@ public sealed class PaymentApplicationServiceTests
             return Task.FromResult(new ExpireDuePaymentsStoreResult(0));
         }
 
+        public Task<UpdateBlockchainTransactionConfirmationsStoreResult> RecordMissingBlockchainTransactionAsync(
+            BlockchainTransactionMissingDraft missingTransaction,
+            PaymentEventDraft reorgPaymentEvent,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(UpdateBlockchainTransactionConfirmationsStoreResult.TransactionNotFound());
+        }
+
         public Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
             BlockchainTransactionConfirmationUpdateDraft confirmationUpdate,
             PaymentCompletionPolicyDraft completionPolicy,
@@ -1010,6 +1049,14 @@ public sealed class PaymentApplicationServiceTests
             return Task.FromResult(new ExpireDuePaymentsStoreResult(0));
         }
 
+        public Task<UpdateBlockchainTransactionConfirmationsStoreResult> RecordMissingBlockchainTransactionAsync(
+            BlockchainTransactionMissingDraft missingTransaction,
+            PaymentEventDraft reorgPaymentEvent,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(UpdateBlockchainTransactionConfirmationsStoreResult.TransactionNotFound());
+        }
+
         public Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
             BlockchainTransactionConfirmationUpdateDraft confirmationUpdate,
             PaymentCompletionPolicyDraft completionPolicy,
@@ -1107,6 +1154,14 @@ public sealed class PaymentApplicationServiceTests
             CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
+        }
+
+        public Task<UpdateBlockchainTransactionConfirmationsStoreResult> RecordMissingBlockchainTransactionAsync(
+            BlockchainTransactionMissingDraft missingTransaction,
+            PaymentEventDraft reorgPaymentEvent,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(UpdateBlockchainTransactionConfirmationsStoreResult.TransactionNotFound());
         }
 
         public Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
@@ -1243,6 +1298,14 @@ public sealed class PaymentApplicationServiceTests
             CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
+        }
+
+        public Task<UpdateBlockchainTransactionConfirmationsStoreResult> RecordMissingBlockchainTransactionAsync(
+            BlockchainTransactionMissingDraft missingTransaction,
+            PaymentEventDraft reorgPaymentEvent,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(UpdateBlockchainTransactionConfirmationsStoreResult.TransactionNotFound());
         }
 
         public Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
@@ -1426,6 +1489,19 @@ public sealed class PaymentApplicationServiceTests
                     "healthy-observation"),
             ]);
         }
+    }
+
+    private sealed class FailingWatchAdapter : IBlockchainObservationAdapter
+    {
+        public Task StartWatchingAsync(
+            BlockchainObservationTarget target,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Provider API key reference could not be resolved.");
+
+        public Task<IReadOnlyList<BlockchainObservation>> PollAsync(
+            BlockchainObservationTarget target,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<BlockchainObservation>>([]);
     }
 
     private sealed class SelectiveBlockchainObservationAdapter(
