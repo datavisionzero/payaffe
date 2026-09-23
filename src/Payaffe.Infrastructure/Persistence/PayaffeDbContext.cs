@@ -1017,9 +1017,9 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasName("ak_matching_blockchain_transactions_project_id_id");
             entity.HasIndex(transaction => new { transaction.ProjectId, transaction.PaymentId })
                 .HasDatabaseName("ix_matching_blockchain_transactions_project_payment");
-            entity.HasIndex(transaction => new { transaction.SupportedCurrency, transaction.TransactionHash })
+            entity.HasIndex(transaction => new { transaction.ProjectId, transaction.PaymentId, transaction.SupportedCurrency, transaction.TransactionHash })
                 .IsUnique()
-                .HasDatabaseName("uq_matching_blockchain_transactions_currency_hash");
+                .HasDatabaseName("uq_matching_blockchain_transactions_payment_currency_hash");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(

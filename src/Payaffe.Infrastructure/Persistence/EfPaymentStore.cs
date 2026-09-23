@@ -399,7 +399,8 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             .SingleOrDefaultAsync(
                 candidate => candidate.SupportedCurrency == observation.SupportedCurrency &&
                              candidate.TransactionHash == observation.TransactionHash &&
-                             candidate.ProjectId == payment.ProjectId,
+                             candidate.ProjectId == payment.ProjectId &&
+                             candidate.PaymentId == payment.Id,
                 cancellationToken);
         if (existingTransaction is not null)
         {
