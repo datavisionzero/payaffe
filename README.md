@@ -91,7 +91,7 @@ published port binds to `127.0.0.1`. A complete Caddy configuration is in
 
 Then create the first admin. There is no first-run registration page, on purpose
 ([ADR 0020](docs/adr/0020-the-first-admin-is-created-by-a-local-command.md)) —
-one command, which prompts for a password:
+one command, which prompts for a password of at least sixteen characters:
 
 ```sh
 docker compose --profile operations run --rm migrations \

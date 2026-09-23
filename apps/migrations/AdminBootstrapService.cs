@@ -15,6 +15,12 @@ public sealed class AdminBootstrapService(
     IClock clock,
     IOptions<AdminAuthenticationOptions> options)
 {
+    /// <summary>
+    /// Sixteen characters, because without a second factor (ADR 0028) the
+    /// password may be the only credential this account ever has.
+    /// </summary>
+    public const int MinimumPasswordLength = 16;
+
     private const string RecoveryCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private const long BootstrapAdvisoryLockId = 0x44565A504159;
     private readonly AdminAuthenticationOptions _options = options.Value;
@@ -37,6 +43,16 @@ public sealed class AdminBootstrapService(
                 occurredAt,
                 correlationId,
                 "admin_bootstrap.invalid_input",
+                cancellationToken);
+            return AdminBootstrapResult.InvalidInput();
+        }
+
+        if (request.Password.Length < MinimumPasswordLength)
+        {
+            await RecordFailureAsync(
+                occurredAt,
+                correlationId,
+                "admin_bootstrap.password_too_short",
                 cancellationToken);
             return AdminBootstrapResult.InvalidInput();
         }

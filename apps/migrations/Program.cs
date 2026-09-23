@@ -38,7 +38,19 @@ if (Console.IsInputRedirected || Console.IsOutputRedirected)
     return 2;
 }
 
-var password = ReadSecret("Password: ");
+// The schema is applied first, so the first admin can be created before any
+// host has started, or while one is still migrating: both wait on the same
+// advisory lock.
+await MigrationRunner.ApplyAsync(host.Services, CancellationToken.None);
+
+var password = ReadSecret($"Password (at least {AdminBootstrapService.MinimumPasswordLength} characters): ");
+if (password.Length < AdminBootstrapService.MinimumPasswordLength)
+{
+    Console.Error.WriteLine(
+        $"The password has to be at least {AdminBootstrapService.MinimumPasswordLength} characters.");
+    return 2;
+}
+
 var passwordConfirmation = ReadSecret("Confirm password: ");
 if (!string.Equals(password, passwordConfirmation, StringComparison.Ordinal))
 {

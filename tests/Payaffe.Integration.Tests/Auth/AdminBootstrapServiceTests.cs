@@ -166,6 +166,30 @@ public sealed class AdminBootstrapServiceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal("failure", audit.Outcome);
     }
 
+    [Fact]
+    public async Task A_password_shorter_than_sixteen_characters_creates_nothing()
+    {
+        var connectionString = await postgres.CreateDatabaseAsync();
+        using var services = await CreateServicesAsync(connectionString);
+        using var scope = services.CreateScope();
+
+        var request = CreateRequest("correlation-short") with
+        {
+            Password = new string('x', AdminBootstrapService.MinimumPasswordLength - 1),
+        };
+        var result = await scope.ServiceProvider
+            .GetRequiredService<AdminBootstrapService>()
+            .BootstrapAsync(request, CancellationToken.None);
+
+        Assert.Equal(AdminBootstrapStatus.InvalidInput, result.Status);
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Empty(await dbContext.AdminAccounts.ToArrayAsync());
+        var audit = await dbContext.AuditLogEntries.SingleAsync(
+            entry => entry.CorrelationId == "correlation-short");
+        Assert.Equal("failure", audit.Outcome);
+        Assert.Equal("admin_bootstrap.password_too_short", audit.ReasonCode);
+    }
+
     private static AdminBootstrapRequest CreateRequest(string correlationId) =>
         new(
             "admin@example.test",

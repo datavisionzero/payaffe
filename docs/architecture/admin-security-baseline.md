@@ -170,13 +170,15 @@ codes, or session values to logs or Audit Log entries.
 The first local Admin Account is provisioned through the dedicated local
 operations command decided by
 [ADR 0020](../adr/0020-the-first-admin-is-created-by-a-local-command.md).
-The command is an explicit operator action after migrations and is not exposed
-through HTTP or MCP.
+The command is an explicit operator action and is not exposed through HTTP or
+MCP. It applies the schema itself before it creates anything, so it does not
+depend on a host having started first.
 
 Bootstrap succeeds only while no Admin Account exists and serializes the
 empty-state check with account creation. It reads the password through a
-masked interactive prompt, stores only protected password and Recovery Code
-hashes, and shows Recovery Codes once.
+masked interactive prompt, refuses a password shorter than sixteen characters,
+stores only protected password and Recovery Code hashes, and shows Recovery
+Codes once.
 
 It asks for no second factor
 ([ADR 0028](../adr/0028-the-second-factor-is-optional-and-enrolled-later.md)).
