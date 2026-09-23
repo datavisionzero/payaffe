@@ -28,6 +28,7 @@ import {
 import { formatDateTime } from "./format";
 import { adminQueries, invalidateAdminConfiguration } from "./queries";
 import { useAdminProject } from "./project-context";
+import { useWithStepUp } from "./step-up";
 
 const t = createText({
   createCredential: "Create credential",
@@ -36,6 +37,8 @@ const t = createText({
   credentialToken: "New Integration API bearer token",
   credentialsDescription: "Create, rotate, and disable credentials used by external systems.",
   credentialsTitle: "Integration API Credentials",
+  confirmDisable: "Disable {name}? Requests with its token are rejected from then on.",
+  confirmRotate: "Rotate the token of {name}? The current token stops working immediately.",
   disableCredential: "Disable credential",
   loading: "Loading",
   notAvailable: "Not available",
@@ -48,11 +51,14 @@ export function AdminIntegrationsPage() {
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
+  const withStepUp = useWithStepUp();
   const [secret, setSecret] = useState<AdminIntegrationApiCredentialSecret | null>(null);
   const form = useForm<CredentialForm>({ defaultValues: { name: "" } });
   const query = useQuery(adminQueries.credentials(projectId));
   const createMutation = useMutation({
-    mutationFn: (name: string) => createAdminIntegrationApiCredential(projectId, name),
+    mutationFn: (name: string) => withStepUp(() => createAdminIntegrationApiCredential(projectId, name)),
+    // The result carries the one-time token; it leaves the cache with the page.
+    gcTime: 0,
     onSuccess: async (result) => {
       setSecret(result);
       form.reset();
@@ -62,7 +68,8 @@ export function AdminIntegrationsPage() {
   });
   const rotateMutation = useMutation({
     mutationFn: (credential: AdminIntegrationApiCredential) =>
-      rotateAdminIntegrationApiCredential(projectId, credential),
+      withStepUp(() => rotateAdminIntegrationApiCredential(projectId, credential)),
+    gcTime: 0,
     onSuccess: async (result) => {
       setSecret(result);
       await invalidateAdminConfiguration(queryClient, projectId);
@@ -70,7 +77,7 @@ export function AdminIntegrationsPage() {
   });
   const disableMutation = useMutation({
     mutationFn: (credential: AdminIntegrationApiCredential) =>
-      disableAdminIntegrationApiCredential(projectId, credential),
+      withStepUp(() => disableAdminIntegrationApiCredential(projectId, credential)),
     onSuccess: async () => invalidateAdminConfiguration(queryClient, projectId)
   });
   const submit = form.handleSubmit((values) => {
@@ -106,7 +113,11 @@ export function AdminIntegrationsPage() {
         {secret ? (
           <SensitiveValuePanel
             label={t("credentialToken")}
-            onClear={() => setSecret(null)}
+            onClear={() => {
+              setSecret(null);
+              createMutation.reset();
+              rotateMutation.reset();
+            }}
             value={secret.token}
           />
         ) : null}
@@ -139,13 +150,21 @@ export function AdminIntegrationsPage() {
               <div className="mt-4 flex flex-wrap gap-2">
                 <ActionButton
                   busy={rotateMutation.isPending}
-                  onClick={() => rotateMutation.mutate(credential)}
+                  onClick={() => {
+                    if (window.confirm(t("confirmRotate", { name: credential.name }))) {
+                      rotateMutation.mutate(credential);
+                    }
+                  }}
                 >
                   {t("rotateCredential")}
                 </ActionButton>
                 <ActionButton
                   busy={disableMutation.isPending}
-                  onClick={() => disableMutation.mutate(credential)}
+                  onClick={() => {
+                    if (window.confirm(t("confirmDisable", { name: credential.name }))) {
+                      disableMutation.mutate(credential);
+                    }
+                  }}
                 >
                   {t("disableCredential")}
                 </ActionButton>

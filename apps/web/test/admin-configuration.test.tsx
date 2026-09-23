@@ -1,9 +1,47 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
+import axe from "axe-core";
+import { HttpResponse, http } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminAddressesPage } from "../components/admin/addresses-page";
 import { AdminIntegrationsPage } from "../components/admin/integrations-page";
 import { AdminWebhooksPage } from "../components/admin/webhooks-page";
-import { adminServer, credentialId, renderAdmin, resetAdminState, state } from "./admin-harness";
+import {
+  adminServer,
+  completeStepUp,
+  credentialId,
+  hasSteppedUp,
+  renderAdmin,
+  resetAdminState,
+  state,
+  stepUpRequired
+} from "./admin-harness";
+
+const credential = {
+  id: credentialId,
+  name: "Shop integration",
+  status: "active",
+  createdAt: "2026-07-05T10:00:00Z",
+  lastUsedAt: null,
+  updatedAt: "2026-07-05T10:00:00Z",
+  version: 1
+};
+
+const endpoint = {
+  id: "9c1dcbf5-a43b-4542-8cdb-aa2634aa99aa",
+  integrationApiCredentialId: credentialId,
+  url: "https://partner.example.test/webhooks",
+  secretReference: "partner-v1",
+  status: "active",
+  eventTypes: ["payment.completed"],
+  createdAt: "2026-07-05T11:00:00Z",
+  updatedAt: "2026-07-05T11:00:00Z",
+  version: 1
+};
+
+function createCredential(name = "New integration") {
+  fireEvent.change(screen.getByLabelText("Credential name"), { target: { value: name } });
+  fireEvent.click(screen.getByRole("button", { name: "Create credential" }));
+}
 
 const nav = vi.hoisted(() => ({ search: "", replace: vi.fn(), push: vi.fn() }));
 vi.mock("../lib/navigation", () => ({
@@ -45,6 +83,138 @@ describe("AdminIntegrationsPage", () => {
     expect(await screen.findByText("payaffe_test_one_time_token")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear sensitive value" }));
     expect(screen.queryByText("payaffe_test_one_time_token")).not.toBeInTheDocument();
+  });
+
+  it("drops the one-time token from the mutation cache when it is cleared", async () => {
+    state.authenticated = true;
+    const { queryClient } = renderAdmin(<AdminIntegrationsPage />);
+    const cachedResults = () =>
+      JSON.stringify(queryClient.getMutationCache().getAll().map((mutation) => mutation.state.data));
+
+    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    createCredential();
+    expect(await screen.findByText("payaffe_test_one_time_token")).toBeInTheDocument();
+    expect(cachedResults()).toContain("payaffe_test_one_time_token");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear sensitive value" }));
+
+    await vi.waitFor(() => expect(cachedResults()).not.toContain("payaffe_test_one_time_token"));
+  });
+
+  it("asks for step-up when required and retries the create", async () => {
+    state.authenticated = true;
+    let creates = 0;
+    adminServer.use(
+      http.post("/api/admin/integration-api-credentials", () => {
+        creates += 1;
+        return hasSteppedUp()
+          ? HttpResponse.json(
+              {
+                credential: { ...credential, name: "New integration" },
+                token: "payaffe_test_one_time_token"
+              },
+              { status: 201 }
+            )
+          : stepUpRequired();
+      })
+    );
+    renderAdmin(<AdminIntegrationsPage />);
+
+    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    createCredential();
+    const dialog = await completeStepUp();
+
+    expect(await screen.findByText("payaffe_test_one_time_token")).toBeInTheDocument();
+    expect(state.csrf.stepUp).toBe("csrf-token");
+    expect(creates).toBe(2);
+    expect(dialog).not.toBeInTheDocument();
+  });
+
+  it("has no automated accessibility violations in the step-up prompt", async () => {
+    state.authenticated = true;
+    adminServer.use(http.post("/api/admin/integration-api-credentials", () => stepUpRequired()));
+    renderAdmin(<AdminIntegrationsPage />);
+
+    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    createCredential();
+    const dialog = await screen.findByRole("dialog", { name: "Confirm step-up" });
+
+    const result = await axe.run(dialog, { rules: { "color-contrast": { enabled: false } } });
+    expect(result.violations).toEqual([]);
+  });
+
+  it("keeps the prompt open when the step-up code is rejected", async () => {
+    state.authenticated = true;
+    let creates = 0;
+    adminServer.use(
+      http.post("/api/admin/integration-api-credentials", () => {
+        creates += 1;
+        return stepUpRequired();
+      })
+    );
+    renderAdmin(<AdminIntegrationsPage />);
+
+    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    createCredential();
+    const dialog = await completeStepUp("000000");
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("The step-up code is invalid.");
+    expect(creates).toBe(1);
+  });
+
+  it("does not retry when step-up is cancelled and says why the action failed", async () => {
+    state.authenticated = true;
+    let creates = 0;
+    adminServer.use(
+      http.post("/api/admin/integration-api-credentials", () => {
+        creates += 1;
+        return stepUpRequired();
+      })
+    );
+    renderAdmin(<AdminIntegrationsPage />);
+
+    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    createCredential();
+    const dialog = await screen.findByRole("dialog", { name: "Confirm step-up" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This action needs a recent step-up with your authentication code."
+    );
+    expect(creates).toBe(1);
+    expect(state.csrf.stepUp).toBeUndefined();
+  });
+
+  it.each([
+    [
+      "Rotate token",
+      "rotate",
+      "Rotate the token of Shop integration? The current token stops working immediately."
+    ],
+    [
+      "Disable credential",
+      "disable",
+      "Disable Shop integration? Requests with its token are rejected from then on."
+    ]
+  ])("asks before %s and sends nothing when declined", async (button, action, question) => {
+    state.authenticated = true;
+    const requests: string[] = [];
+    adminServer.use(
+      http.post(`/api/admin/integration-api-credentials/${credentialId}/${action}`, () => {
+        requests.push(action);
+        return HttpResponse.json({ credential, token: "payaffe_test_rotated_token" });
+      })
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderAdmin(<AdminIntegrationsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: button }));
+    expect(confirm).toHaveBeenCalledWith(question);
+    expect(requests).toEqual([]);
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: button }));
+    await vi.waitFor(() => expect(requests).toEqual([action]));
   });
 });
 
@@ -104,6 +274,39 @@ describe("AdminWebhooksPage", () => {
       "Resend payment.created for order-123?"
     );
     expect(state.webhookResendEventId).toBeNull();
+  });
+
+  it.each([
+    [
+      "Rotate secret reference",
+      "rotate-secret",
+      "Rotate the secret reference of https://partner.example.test/webhooks? Deliveries are signed with the new secret from then on."
+    ],
+    [
+      "Disable Webhook Endpoint",
+      "disable",
+      "Disable the Webhook Endpoint https://partner.example.test/webhooks? Payment events are no longer sent to it."
+    ]
+  ])("asks before %s and sends nothing when declined", async (button, action, question) => {
+    state.authenticated = true;
+    const requests: string[] = [];
+    adminServer.use(
+      http.get("/api/admin/webhook-endpoints", () => HttpResponse.json({ endpoints: [endpoint] })),
+      http.post(`/api/admin/webhook-endpoints/${endpoint.id}/${action}`, () => {
+        requests.push(action);
+        return HttpResponse.json({ endpoint });
+      })
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderAdmin(<AdminWebhooksPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: button }));
+    expect(confirm).toHaveBeenCalledWith(question);
+    expect(requests).toEqual([]);
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: button }));
+    await vi.waitFor(() => expect(requests).toEqual([action]));
   });
 
   it("shows the endpoints view by default", async () => {

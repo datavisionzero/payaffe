@@ -24,6 +24,7 @@ import {
 } from "./common";
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
+import { useWithStepUp } from "./step-up";
 
 const t = createText({
   accountDescription: "This session, step-up confirmation, recovery codes, and sign-out.",
@@ -53,6 +54,7 @@ const t = createText({
 
 export function AdminAccountPage() {
   const queryClient = useQueryClient();
+  const withStepUp = useWithStepUp();
   const session = useQuery(adminQueries.session());
   const [recoveryCodes, setRecoveryCodes] = useState<AdminRecoveryCodes | null>(null);
   const stepUpForm = useForm<AdminMfaForm>({ defaultValues: { totpCode: "" } });
@@ -63,6 +65,8 @@ export function AdminAccountPage() {
         predicate: (candidate) => candidate.queryKey[0] !== "admin-session"
       });
       queryClient.setQueryData(adminQueries.session().queryKey, null);
+      // One-time secrets live in mutation results; none may outlive the session.
+      queryClient.getMutationCache().clear();
       window.localStorage?.removeItem("payaffe:selected-project-id");
     }
   });
@@ -74,7 +78,9 @@ export function AdminAccountPage() {
     }
   });
   const recoveryCodesMutation = useMutation({
-    mutationFn: generateAdminRecoveryCodes,
+    mutationFn: () => withStepUp(generateAdminRecoveryCodes),
+    // The result carries the one-time codes; it leaves the cache with the page.
+    gcTime: 0,
     onSuccess: (result) => {
       setRecoveryCodes(result);
     }
@@ -158,7 +164,10 @@ export function AdminAccountPage() {
           ) : null}
           {recoveryCodes ? (
             <RecoveryCodesPanel
-              onClear={() => setRecoveryCodes(null)}
+              onClear={() => {
+                setRecoveryCodes(null);
+                recoveryCodesMutation.reset();
+              }}
               recoveryCodes={recoveryCodes}
             />
           ) : null}

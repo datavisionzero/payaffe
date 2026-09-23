@@ -73,6 +73,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         predicate: (candidate) => String(candidate.queryKey[0]).startsWith("admin")
       });
       queryClient.setQueryData(adminQueries.session().queryKey, null);
+      // One-time secrets live in mutation results; none may outlive the session.
+      queryClient.getMutationCache().clear();
       window.localStorage?.removeItem("payaffe:selected-project-id");
     };
     window.addEventListener("payaffe:admin-session-expired", expireSession);

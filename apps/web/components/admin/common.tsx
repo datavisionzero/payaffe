@@ -17,7 +17,7 @@ const t = createText({
   "errors.admin_session.invalid": "The session is no longer valid.",
   "errors.admin_csrf.invalid": "The request expired. Retry the action.",
   "errors.admin_step_up.invalid": "The step-up code is invalid.",
-  "errors.admin_step_up.required": "Confirm step-up before viewing this sensitive detail.",
+  "errors.admin_step_up.required": "This action needs a recent step-up with your authentication code.",
   "errors.audit_log.not_found": "The Audit Log entry was not found.",
   "errors.webhook_delivery.not_found": "The Webhook Delivery was not found.",
   "errors.webhook_delivery.not_resendable": "The Webhook Delivery cannot be resent.",

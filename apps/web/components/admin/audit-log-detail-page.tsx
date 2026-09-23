@@ -8,6 +8,7 @@ import { ErrorMessage, InfoItem, PageHeader, Panel, StateMessage } from "./commo
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
 import { useSearchParams } from "../../lib/navigation";
+import { StepUpButton, isStepUpRequired } from "./step-up";
 
 const t = createText({
   auditActor: "Actor",
@@ -43,7 +44,14 @@ export function AdminAuditLogDetailPage({ eventId }: { eventId: string }) {
         {t("backToAuditLog")}
       </Link>
       {query.isPending ? <StateMessage>{t("auditLogDetailLoading")}</StateMessage> : null}
-      {query.isError ? <ErrorMessage error={query.error} /> : null}
+      {query.isError ? (
+        <div>
+          <ErrorMessage error={query.error} />
+          {isStepUpRequired(query.error) ? (
+            <StepUpButton onConfirmed={() => void query.refetch()} />
+          ) : null}
+        </div>
+      ) : null}
       {query.data ? (
         <Panel>
           <AuditLogDetailContent entry={query.data} />

@@ -22,6 +22,7 @@ import {
 import { formatDateTime, formatFiatAmount } from "./format";
 import { adminQueries } from "./queries";
 import { useAdminProject } from "./project-context";
+import { useWithStepUp } from "./step-up";
 import { adminProjectPath } from "./project-routes";
 
 const t = createText({
@@ -82,10 +83,11 @@ function PaymentDetailContent({ payment }: { payment: AdminPaymentDetail }) {
   const project = useAdminProject();
   const projectId = project.projectId;
   const queryClient = useQueryClient();
+  const withStepUp = useWithStepUp();
   const form = useForm<SettlementForm>({ defaultValues: { reason: "" } });
   const mutation = useMutation({
     mutationFn: (values: SettlementForm) =>
-      settleAdminPayment(projectId, payment.paymentId, payment.version, values.reason),
+      withStepUp(() => settleAdminPayment(projectId, payment.paymentId, payment.version, values.reason)),
     onSuccess: async (result) => {
       form.reset();
       queryClient.setQueryData(adminQueries.payment(projectId, payment.paymentId).queryKey, result);
