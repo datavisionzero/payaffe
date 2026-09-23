@@ -181,6 +181,7 @@ them:
 - `PAYAFFE_WEBHOOK_DELIVERY_MAX_RETRY_DELAY`
 - `PAYAFFE_WEBHOOK_DELIVERY_RETRY_JITTER_RATIO`
 - `PAYAFFE_WEBHOOK_DELIVERY_LEASE_DURATION`
+- `PAYAFFE_WEBHOOK_DELIVERY_REQUEST_TIMEOUT`
 - `PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS`
 - `PAYAFFE_OBSERVATION_WORKER_ENABLED`
 - `PAYAFFE_OBSERVATION_WORKER_POLL_INTERVAL`
@@ -391,8 +392,19 @@ A crashed instance does not block the system: its lease is bounded by
 lease has to outlive one batch run, so raise it for deployments with large
 batches; startup validation rejects values below one second or above one hour.
 
+A Webhook Delivery lease covers one event rather than a batch. It has to outlast
+one delivery request, so `PAYAFFE_WEBHOOK_DELIVERY_REQUEST_TIMEOUT` (thirty
+seconds by default) bounds the request and startup validation requires the
+lease to exceed it by at least thirty seconds. Every write after the claim is
+conditional on still holding the lease, so an instance whose lease expired
+discards its outcome instead of overwriting the instance that took over. An
+event that fails for any reason other than the receiver's answer is counted as
+a failed attempt with `webhook_delivery.processing_failed` and retried with the
+usual backoff until its attempts run out, so it cannot hold up the others.
+
 `app.background_worker_leases` also records the last success, last failure,
-last safe error code, and consecutive failure count per worker, which is the
+last safe error code, and consecutive failure count per worker, including
+`webhook-delivery`, which reports every batch there without taking the lease, which is the
 first place to look when scheduled work appears stalled.
 
 ## Partner Credential And Webhook Rotation
@@ -601,6 +613,9 @@ way up. Which version a pull moves to is
 An installation upgrading from 0.3.0 or earlier whose shop receives webhooks on
 an internal address allowlists it first; see
 [Webhook targets on an internal address](#webhook-targets-on-an-internal-address).
+An installation that set `PAYAFFE_WEBHOOK_DELIVERY_LEASE_DURATION` below one
+minute raises it to at least thirty seconds above
+`PAYAFFE_WEBHOOK_DELIVERY_REQUEST_TIMEOUT`, or the hosts refuse to start.
 
 ## Ports
 

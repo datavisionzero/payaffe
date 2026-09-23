@@ -216,6 +216,7 @@ services:
       Webhooks__Delivery__PollInterval: ${PAYAFFE_WEBHOOK_DELIVERY_POLL_INTERVAL:-00:00:10}
       Webhooks__Delivery__MaxEventsPerPoll: ${PAYAFFE_WEBHOOK_DELIVERY_MAX_EVENTS_PER_POLL:-25}
       Webhooks__Delivery__LeaseDuration: ${PAYAFFE_WEBHOOK_DELIVERY_LEASE_DURATION:-00:02:00}
+      Webhooks__Delivery__RequestTimeout: ${PAYAFFE_WEBHOOK_DELIVERY_REQUEST_TIMEOUT:-00:00:30}
       Workers__Health__ProbeInterval: ${PAYAFFE_WORKER_HEALTH_PROBE_INTERVAL:-00:00:15}
       Workers__Health__MaxAge: ${PAYAFFE_WORKER_HEALTH_MAX_AGE:-00:01:00}
     # The worker serves no HTTP endpoint, so the healthcheck runs the same

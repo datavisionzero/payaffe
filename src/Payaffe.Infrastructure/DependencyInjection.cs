@@ -158,7 +158,11 @@ public static class DependencyInjection
         services.AddSingleton<IValidateOptions<WebhookDeliveryOptions>, WebhookDeliveryOptionsValidator>();
         services.AddSingleton(serviceProvider => WebhookTargetPolicy.Parse(
             serviceProvider.GetRequiredService<IOptions<WebhookDeliveryOptions>>().Value.AllowedPrivateTargets));
-        services.AddHttpClient<WebhookDeliveryProcessor>(IdentifyProduct)
+        services.AddHttpClient<WebhookDeliveryProcessor>((serviceProvider, client) =>
+            {
+                IdentifyProduct(client);
+                client.Timeout = serviceProvider.GetRequiredService<IOptions<WebhookDeliveryOptions>>().Value.RequestTimeout;
+            })
             .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
                 WebhookDeliveryHttpHandler.Create(serviceProvider.GetRequiredService<WebhookTargetPolicy>()));
         if (registerHostedWorkers)

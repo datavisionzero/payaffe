@@ -113,6 +113,17 @@ public sealed class WebhookDeliveryOptionsValidator : IValidateOptions<WebhookDe
         failures.AddRange(PaymentLifecycleWorkerOptionsValidator.ValidateLeaseDuration(
             options.LeaseDuration,
             "Webhooks:Delivery"));
+        if (options.RequestTimeout < TimeSpan.FromSeconds(1) ||
+            options.RequestTimeout > TimeSpan.FromMinutes(5))
+        {
+            failures.Add("Webhooks:Delivery:RequestTimeout must be between one second and five minutes.");
+        }
+        else if (options.LeaseDuration < options.RequestTimeout + WebhookDeliveryOptions.LeaseMargin)
+        {
+            failures.Add(
+                $"Webhooks:Delivery:LeaseDuration must exceed RequestTimeout by at least {WebhookDeliveryOptions.LeaseMargin.TotalSeconds:0} seconds.");
+        }
+
         failures.AddRange(WebhookTargetPolicy.Validate(options.AllowedPrivateTargets));
 
         return failures.Count == 0

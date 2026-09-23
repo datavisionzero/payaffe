@@ -66,6 +66,48 @@ public sealed class BackgroundWorkerLeaseManager(PayaffeDbContext dbContext)
         CancellationToken cancellationToken) =>
         ReleaseAsync(workerName, now, succeeded: false, safeErrorCode, cancellationToken);
 
+    /// <summary>
+    /// Records the outcome of a run for a worker that excludes concurrent work
+    /// per item rather than with this named lease, such as Webhook Delivery.
+    /// The row then carries its last success, last failure and consecutive
+    /// failure count like any other worker's, which is what the repeated
+    /// failure alert reads. The update is one statement, so instances that
+    /// report at the same time do not lose each other's count.
+    /// </summary>
+    public async Task RecordRunAsync(
+        string workerName,
+        DateTimeOffset now,
+        bool succeeded,
+        string? safeErrorCode,
+        CancellationToken cancellationToken)
+    {
+        if (!dbContext.Database.IsRelational())
+        {
+            return;
+        }
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            insert into app.background_worker_leases
+                (worker_name, consecutive_failure_count, updated_at, version)
+            values ({workerName}, 0, {now}, 1)
+            on conflict (worker_name) do nothing
+            """,
+            cancellationToken);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            update app.background_worker_leases
+            set last_succeeded_at = case when {succeeded} then {now} else last_succeeded_at end,
+                last_failed_at = case when {succeeded} then last_failed_at else {now} end,
+                last_safe_error_code = {safeErrorCode},
+                consecutive_failure_count = case when {succeeded} then 0 else consecutive_failure_count + 1 end,
+                updated_at = {now},
+                version = version + 1
+            where worker_name = {workerName}
+            """,
+            cancellationToken);
+    }
+
     private async Task ReleaseAsync(
         string workerName,
         DateTimeOffset now,

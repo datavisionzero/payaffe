@@ -112,4 +112,43 @@ public sealed class WorkerOptionsValidatorTests
             .Validate(null, new WebhookDeliveryOptions { AllowedPrivateTargets = "shop.internal, 10.0.0.0/8" })
             .Succeeded);
     }
+
+    [Fact]
+    public void Rejects_a_webhook_lease_that_a_slow_receiver_can_outlast()
+    {
+        var result = new WebhookDeliveryOptionsValidator().Validate(
+            null,
+            new WebhookDeliveryOptions
+            {
+                RequestTimeout = TimeSpan.FromSeconds(30),
+                LeaseDuration = TimeSpan.FromSeconds(45),
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            "Webhooks:Delivery:LeaseDuration must exceed RequestTimeout by at least 30 seconds.",
+            result.Failures!);
+        Assert.True(new WebhookDeliveryOptionsValidator().Validate(
+            null,
+            new WebhookDeliveryOptions
+            {
+                RequestTimeout = TimeSpan.FromSeconds(30),
+                LeaseDuration = TimeSpan.FromSeconds(60),
+            }).Succeeded);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(301)]
+    public void Rejects_a_webhook_request_timeout_out_of_range(int seconds)
+    {
+        var result = new WebhookDeliveryOptionsValidator().Validate(
+            null,
+            new WebhookDeliveryOptions { RequestTimeout = TimeSpan.FromSeconds(seconds) });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            "Webhooks:Delivery:RequestTimeout must be between one second and five minutes.",
+            result.Failures!);
+    }
 }

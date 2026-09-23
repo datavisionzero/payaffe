@@ -1099,7 +1099,13 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(webhookEvent => webhookEvent.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
             entity.Property(webhookEvent => webhookEvent.NextAttemptAt).HasColumnName("next_attempt_at").HasColumnType("timestamp with time zone");
             entity.Property(webhookEvent => webhookEvent.AttemptCount).HasColumnName("attempt_count").HasColumnType("integer");
-            entity.Property(webhookEvent => webhookEvent.LockedBy).HasColumnName("locked_by").HasColumnType("text");
+            // The event lease owner. Every write after a claim is conditional
+            // on it, so a worker whose lease expired cannot overwrite the event
+            // that another worker now holds.
+            entity.Property(webhookEvent => webhookEvent.LockedBy)
+                .HasColumnName("locked_by")
+                .HasColumnType("text")
+                .IsConcurrencyToken();
             entity.Property(webhookEvent => webhookEvent.LockedUntil).HasColumnName("locked_until").HasColumnType("timestamp with time zone");
             entity.Property(webhookEvent => webhookEvent.LastErrorCode).HasColumnName("last_error_code").HasColumnType("text");
             entity.Property(webhookEvent => webhookEvent.CorrelationId).HasColumnName("correlation_id").HasColumnType("text");
