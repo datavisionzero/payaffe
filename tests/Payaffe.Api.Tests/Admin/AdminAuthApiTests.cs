@@ -4,8 +4,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Payaffe.Api.Tests.Payments;
+using Payaffe.Application.Admin;
 using Payaffe.Infrastructure.Auth;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
@@ -828,6 +831,69 @@ public sealed class AdminAuthApiTests
             auditEntry.ReasonCode == "admin_step_up.required");
     }
 
+    /// <summary>
+    /// A session begun on the password alone keeps no exemption once the
+    /// account enrolls a factor: the exemption follows the account, not the
+    /// state it was in at sign-in.
+    /// </summary>
+    [Fact]
+    public async Task Password_only_session_requires_step_up_once_the_account_enrolls_a_factor()
+    {
+        await using var factory = new PaymentApiFactory();
+        var adminAccountId = await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecretReference: null);
+        using var signInClient = factory.CreateClient();
+        var loginResponse = await signInClient.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new { username = "admin@example.test", password = "correct-password" });
+        loginResponse.EnsureSuccessStatusCode();
+        var passwordOnlyToken = ExtractCookieValue(Assert.Single(
+            loginResponse.Headers.GetValues("Set-Cookie"),
+            cookie => cookie.StartsWith("__Host-payaffe-admin=", StringComparison.Ordinal)));
+        var eventId = await SeedAuditEntryAsync(
+            factory,
+            DateTimeOffset.UtcNow,
+            "admin.logout",
+            "success",
+            adminAccountId,
+            "admin_logout.session_revoked");
+        using var passwordOnlyClient = factory.CreateClient();
+        passwordOnlyClient.DefaultRequestHeaders.Add("Cookie", $"__Host-payaffe-admin={passwordOnlyToken}");
+
+        // Before enrollment there is nothing to step up with.
+        var beforeEnrollment = await passwordOnlyClient.GetAsync($"/api/admin/audit-log/{eventId}");
+        Assert.Equal(HttpStatusCode.OK, beforeEnrollment.StatusCode);
+
+        await factory.EnrollTotpAsync(adminAccountId, "secret-ref:test-admin", TotpSecret);
+
+        var afterEnrollment = await passwordOnlyClient.GetAsync($"/api/admin/audit-log/{eventId}");
+        Assert.Equal(HttpStatusCode.Forbidden, afterEnrollment.StatusCode);
+        Assert.Contains(
+            "admin_step_up.required",
+            await afterEnrollment.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+
+        // The first sign-in that proves the factor ends the session left over
+        // from before it, and says so in the Audit Log.
+        using var mfaClient = factory.CreateClient();
+        await SignInAndGetSessionCookieAsync(mfaClient);
+
+        var revoked = await passwordOnlyClient.GetAsync("/api/admin/session");
+        Assert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Single(dbContext.AdminSessions, session => session.RevokedAt == null);
+        Assert.Contains(dbContext.AuditLogEntries, entry =>
+            entry.EventType == "admin.sessions.revoke" &&
+            entry.Outcome == "revoked" &&
+            entry.ActorId == adminAccountId.ToString("D") &&
+            entry.SubjectType == "admin_account" &&
+            entry.ReasonCode == "admin_session.second_factor_enrolled");
+    }
+
     [Fact]
     public async Task Get_admin_audit_log_detail_returns_detail_fields_and_audits_access()
     {
@@ -1504,9 +1570,10 @@ public sealed class AdminAuthApiTests
             $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
         sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
 
+        // The sign-in used the current step, and a step is accepted once.
         var response = await sessionClient.PostAsJsonAsync(
             "/api/admin/auth/step-up",
-            new { totpCode = ComputeTotpCode(TotpSecret, DateTimeOffset.UtcNow) });
+            new { totpCode = NextTotpCode() });
 
         response.EnsureSuccessStatusCode();
         var stepUp = await response.Content.ReadFromJsonAsync<StepUpResponse>();
@@ -1566,6 +1633,165 @@ public sealed class AdminAuthApiTests
             entry.ActorId == adminAccountId.ToString("D") &&
             entry.SubjectId == session.Id.ToString("D") &&
             entry.ReasonCode == "admin_step_up.invalid");
+    }
+
+    /// <summary>
+    /// With a skew of one step a code stays valid for about 90 seconds. Seen
+    /// once, it must not work a second time within that window, neither for a
+    /// new sign-in nor for step-up.
+    /// </summary>
+    [Fact]
+    public async Task Totp_code_is_accepted_once_across_sign_in_and_step_up()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecret: TotpSecret);
+        using var client = factory.CreateClient();
+        var code = ComputeTotpCode(TotpSecret, DateTimeOffset.UtcNow);
+        var firstSignIn = await CompleteMfaAsync(client, code);
+        firstSignIn.EnsureSuccessStatusCode();
+        var rawSessionToken = ExtractCookieValue(Assert.Single(
+            firstSignIn.Headers.GetValues("Set-Cookie"),
+            cookie => cookie.StartsWith("__Host-payaffe-admin=", StringComparison.Ordinal)));
+
+        using var replayClient = factory.CreateClient();
+        var replayedSignIn = await CompleteMfaAsync(replayClient, code);
+        Assert.Equal(HttpStatusCode.Unauthorized, replayedSignIn.StatusCode);
+
+        var csrf = await GetAdminCsrfAsync(factory, rawSessionToken);
+        using var sessionClient = CreateHttpsClient(factory);
+        sessionClient.DefaultRequestHeaders.Add(
+            "Cookie",
+            $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
+        sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
+        var replayedStepUp = await sessionClient.PostAsJsonAsync("/api/admin/auth/step-up", new { totpCode = code });
+        Assert.Equal(HttpStatusCode.Unauthorized, replayedStepUp.StatusCode);
+
+        var nextStepUp = await sessionClient.PostAsJsonAsync("/api/admin/auth/step-up", new { totpCode = NextTotpCode() });
+        nextStepUp.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>
+    /// Repeating the password step gives a fresh challenge with a fresh
+    /// attempt cap, and a correct password must not clear the second-factor
+    /// count either; only the account-level limit bounds the guessing.
+    /// </summary>
+    [Fact]
+    public async Task Wrong_codes_across_fresh_challenges_lock_the_second_factor()
+    {
+        await using var factory = new PaymentApiFactory();
+        var adminAccountId = await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecret: TotpSecret);
+        using var client = factory.CreateClient();
+        var wrongCode = WrongTotpCode();
+
+        // Two wrong codes per challenge stays under the per-challenge cap of
+        // five, so only the account-level count of ten can stop this.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var response = await CompleteMfaAsync(client, wrongCode, newChallenge: attempt % 2 == 0);
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        var correctCode = await CompleteMfaAsync(client, ComputeTotpCode(TotpSecret, DateTimeOffset.UtcNow));
+        Assert.Equal(HttpStatusCode.Unauthorized, correctCode.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Empty(dbContext.AdminSessions);
+        var account = Assert.Single(dbContext.AdminAccounts);
+        Assert.NotNull(account.SecondFactorLockedUntil);
+        Assert.Equal(0, account.FailedPasswordAttemptCount);
+        Assert.Contains(dbContext.AuditLogEntries, entry =>
+            entry.EventType == "admin.second_factor.lock" &&
+            entry.Outcome == "denied" &&
+            entry.SubjectId == adminAccountId.ToString("D") &&
+            entry.ReasonCode == "admin_second_factor.locked");
+        Assert.Contains(dbContext.AuditLogEntries, entry =>
+            entry.EventType == "admin.mfa_complete" &&
+            entry.ReasonCode == "admin_mfa.second_factor_locked");
+    }
+
+    [Fact]
+    public async Task Wrong_step_up_codes_lock_the_second_factor()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecret: TotpSecret);
+        using var client = factory.CreateClient();
+        var rawSessionToken = ExtractCookieValue(await SignInAndGetSessionCookieAsync(client));
+        var csrf = await GetAdminCsrfAsync(factory, rawSessionToken);
+        using var sessionClient = CreateHttpsClient(factory);
+        sessionClient.DefaultRequestHeaders.Add(
+            "Cookie",
+            $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
+        sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
+        var wrongCode = WrongTotpCode();
+
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var response = await sessionClient.PostAsJsonAsync("/api/admin/auth/step-up", new { totpCode = wrongCode });
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        var correctCode = await sessionClient.PostAsJsonAsync("/api/admin/auth/step-up", new { totpCode = NextTotpCode() });
+        Assert.Equal(HttpStatusCode.Unauthorized, correctCode.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.NotNull(Assert.Single(dbContext.AdminAccounts).SecondFactorLockedUntil);
+        Assert.Contains(dbContext.AuditLogEntries, entry =>
+            entry.EventType == "admin.step_up" &&
+            entry.ReasonCode == "admin_step_up.second_factor_locked");
+    }
+
+    /// <summary>
+    /// An answer that skips the key derivation comes back measurably sooner,
+    /// which tells a caller the username does not exist or is locked.
+    /// </summary>
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData("disabled")]
+    [InlineData("locked")]
+    public async Task Login_start_spends_a_password_check_on_accounts_it_refuses(string accountState)
+    {
+        var hasher = new CountingPasswordHasher();
+        await using var baseFactory = new PaymentApiFactory();
+        await using var factory = baseFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAdminPasswordHasher>();
+                services.AddSingleton<IAdminPasswordHasher>(hasher);
+            }));
+        if (accountState != "unknown")
+        {
+            var adminAccountId = await baseFactory.SeedAdminAccountAsync(
+                "admin@example.test",
+                "correct-password",
+                status: accountState == "disabled" ? "disabled" : "active");
+            if (accountState == "locked")
+            {
+                using var scope = factory.Services.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+                var account = dbContext.AdminAccounts.Single(candidate => candidate.Id == adminAccountId);
+                account.LockedUntil = DateTimeOffset.UtcNow.AddMinutes(10);
+                await dbContext.SaveChangesAsync();
+            }
+        }
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new { username = "admin@example.test", password = "correct-password" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(1, hasher.VerifyCount);
     }
 
     [Fact]
@@ -1733,6 +1959,61 @@ public sealed class AdminAuthApiTests
         Assert.Equal("system", auditEntry.ActorType);
         Assert.Equal("unknown", auditEntry.SubjectId);
         Assert.Equal("admin_login.invalid_credentials", auditEntry.ReasonCode);
+    }
+
+    /// <summary>
+    /// The code for the next time step, still within the allowed skew. Used
+    /// where the current step was already spent on the sign-in.
+    /// </summary>
+    private static string NextTotpCode() => ComputeTotpCode(TotpSecret, DateTimeOffset.UtcNow.AddSeconds(30));
+
+    /// <summary>A six-digit code valid for none of the steps within the skew.</summary>
+    private static string WrongTotpCode()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var valid = new[] { -60, -30, 0, 30, 60 }
+            .Select(offset => ComputeTotpCode(TotpSecret, now.AddSeconds(offset)))
+            .ToHashSet(StringComparer.Ordinal);
+        return Enumerable.Range(0, 10)
+            .Select(digit => new string((char)('0' + digit), 6))
+            .First(candidate => !valid.Contains(candidate));
+    }
+
+    private Guid? _pendingChallengeId;
+
+    private async Task<HttpResponseMessage> CompleteMfaAsync(
+        HttpClient client,
+        string totpCode,
+        bool newChallenge = true)
+    {
+        if (newChallenge || _pendingChallengeId is null)
+        {
+            var loginResponse = await client.PostAsJsonAsync(
+                "/api/admin/auth/login",
+                new { username = "admin@example.test", password = "correct-password" });
+            loginResponse.EnsureSuccessStatusCode();
+            _pendingChallengeId = (await loginResponse.Content.ReadFromJsonAsync<LoginStartResponse>())!.ChallengeId;
+        }
+
+        return await client.PostAsJsonAsync(
+            "/api/admin/auth/mfa",
+            new { challengeId = _pendingChallengeId, totpCode });
+    }
+
+    private sealed class CountingPasswordHasher : IAdminPasswordHasher
+    {
+        private readonly AdminPasswordHasher _inner = new();
+        private int _verifyCount;
+
+        public int VerifyCount => _verifyCount;
+
+        public string HashPassword(string password) => _inner.HashPassword(password);
+
+        public bool VerifyPassword(string password, string passwordHash)
+        {
+            Interlocked.Increment(ref _verifyCount);
+            return _inner.VerifyPassword(password, passwordHash);
+        }
     }
 
     private static string ComputeTotpCode(byte[] secret, DateTimeOffset now)

@@ -4,8 +4,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Payaffe.Infrastructure.Persistence;
 
+/// <remarks>
+/// Every write to an account, a login challenge or a Recovery Code increments
+/// its <c>Version</c>, which the model marks as a concurrency token. Without
+/// that, parallel read-modify-write calls all matched <c>version = 1</c> and
+/// all succeeded: a Recovery Code or challenge could be redeemed twice, and
+/// parallel failures overwrote each other's count. A write that loses the race
+/// re-reads and re-applies, so counters count every failure and single-use
+/// items are used once.
+/// </remarks>
 public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSecurityStore
 {
+    private const int MaxConcurrencyAttempts = 20;
+
     public async Task<AdminAccountReadModel?> FindByNormalizedUsernameAsync(
         string normalizedUsername,
         CancellationToken cancellationToken)
@@ -25,6 +36,17 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<string?> FindAccountStatusAsync(
+        Guid adminAccountId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.AdminAccounts
+            .AsNoTracking()
+            .Where(account => account.Id == adminAccountId)
+            .Select(account => account.Status)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task RecordSuccessfulPasswordVerificationAsync(
         Guid adminAccountId,
         DateTimeOffset occurredAt,
@@ -32,25 +54,25 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var adminAccount = await dbContext.AdminAccounts.SingleAsync(
-            account => account.Id == adminAccountId,
+        await SaveWithRetryAsync(
+            async () =>
+            {
+                await ResetPasswordFailuresAsync(adminAccountId, occurredAt, cancellationToken);
+
+                dbContext.AdminLoginChallenges.Add(new AdminLoginChallengeRecord
+                {
+                    Id = loginChallenge.Id,
+                    AdminAccountId = loginChallenge.AdminAccountId,
+                    ExpiresAt = loginChallenge.ExpiresAt,
+                    FailedAttemptCount = 0,
+                    CreatedAt = loginChallenge.CreatedAt,
+                });
+
+                AddAuditEntry(auditEntry);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            },
             cancellationToken);
-        adminAccount.FailedPasswordAttemptCount = 0;
-        adminAccount.LockedUntil = null;
-        adminAccount.LastPasswordVerifiedAt = occurredAt;
-        adminAccount.UpdatedAt = occurredAt;
-
-        dbContext.AdminLoginChallenges.Add(new AdminLoginChallengeRecord
-        {
-            Id = loginChallenge.Id,
-            AdminAccountId = loginChallenge.AdminAccountId,
-            ExpiresAt = loginChallenge.ExpiresAt,
-            FailedAttemptCount = 0,
-            CreatedAt = loginChallenge.CreatedAt,
-        });
-
-        AddAuditEntry(auditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task RecordPasswordOnlyAuthenticationAsync(
@@ -60,56 +82,51 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var adminAccount = await dbContext.AdminAccounts.SingleAsync(
-            account => account.Id == adminAccountId,
+        await SaveWithRetryAsync(
+            async () =>
+            {
+                await ResetPasswordFailuresAsync(adminAccountId, occurredAt, cancellationToken);
+
+                // No challenge row: there is no second step to remember the state of.
+                AddSession(session);
+                AddAuditEntry(auditEntry);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            },
             cancellationToken);
-        adminAccount.FailedPasswordAttemptCount = 0;
-        adminAccount.LockedUntil = null;
-        adminAccount.LastPasswordVerifiedAt = occurredAt;
-        adminAccount.UpdatedAt = occurredAt;
-
-        // No challenge row: there is no second step to remember the state of.
-        dbContext.AdminSessions.Add(new AdminSessionRecord
-        {
-            Id = session.Id,
-            AdminAccountId = session.AdminAccountId,
-            TokenHash = session.TokenHash,
-            CreatedAt = session.CreatedAt,
-            LastSeenAt = session.LastSeenAt,
-            ExpiresAt = session.ExpiresAt,
-            IdleExpiresAt = session.IdleExpiresAt,
-            MfaAuthenticatedAt = session.MfaAuthenticatedAt,
-            StepUpAuthenticatedAt = session.StepUpAuthenticatedAt,
-        });
-
-        AddAuditEntry(auditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task RecordFailedPasswordVerificationAsync(
-        Guid? adminAccountId,
+    public async Task<AdminFailedAttemptOutcome> RecordFailedPasswordVerificationAsync(
+        Guid adminAccountId,
         DateTimeOffset occurredAt,
-        int? failedPasswordAttemptCount,
-        DateTimeOffset? lockedUntil,
-        AdminAuditEntry auditEntry,
+        int maxFailedAttempts,
+        TimeSpan lockoutDuration,
+        Func<AdminFailedAttemptOutcome, AdminAuditEntry> createAuditEntry,
         CancellationToken cancellationToken)
     {
-        if (adminAccountId is not null)
-        {
-            var adminAccount = await dbContext.AdminAccounts.SingleAsync(
-                account => account.Id == adminAccountId,
-                cancellationToken);
-            if (failedPasswordAttemptCount is not null)
+        return await SaveWithRetryAsync(
+            async () =>
             {
-                adminAccount.FailedPasswordAttemptCount = failedPasswordAttemptCount.Value;
-            }
+                var adminAccount = await dbContext.AdminAccounts.SingleAsync(
+                    account => account.Id == adminAccountId,
+                    cancellationToken);
+                adminAccount.FailedPasswordAttemptCount++;
+                var outcome = new AdminFailedAttemptOutcome(
+                    adminAccount.FailedPasswordAttemptCount,
+                    adminAccount.FailedPasswordAttemptCount >= maxFailedAttempts);
+                if (outcome.LimitReached)
+                {
+                    adminAccount.LockedUntil = occurredAt.Add(lockoutDuration);
+                }
 
-            adminAccount.LockedUntil = lockedUntil;
-            adminAccount.UpdatedAt = occurredAt;
-        }
+                adminAccount.UpdatedAt = occurredAt;
+                adminAccount.Version++;
 
-        AddAuditEntry(auditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
+                AddAuditEntry(createAuditEntry(outcome));
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return outcome;
+            },
+            cancellationToken);
     }
 
     public async Task<AdminLoginChallengeReadModel?> FindLoginChallengeAsync(
@@ -130,65 +147,66 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
                     account.Status,
                     challenge.ExpiresAt,
                     challenge.FailedAttemptCount,
-                    challenge.ConsumedAt))
+                    challenge.ConsumedAt,
+                    account.SecondFactorLockedUntil))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public async Task RecordFailedMfaVerificationAsync(
-        Guid? challengeId,
+    public async Task<AdminFailedAttemptOutcome> RecordFailedMfaVerificationAsync(
+        Guid challengeId,
         DateTimeOffset occurredAt,
-        int? failedAttemptCount,
-        DateTimeOffset? consumedAt,
-        AdminAuditEntry auditEntry,
+        int maxFailedAttempts,
+        Func<AdminFailedAttemptOutcome, AdminAuditEntry> createAuditEntry,
         CancellationToken cancellationToken)
     {
-        if (challengeId is not null)
-        {
-            var challenge = await dbContext.AdminLoginChallenges.SingleAsync(
-                candidate => candidate.Id == challengeId,
-                cancellationToken);
-            if (failedAttemptCount is not null)
+        return await SaveWithRetryAsync(
+            async () =>
             {
-                challenge.FailedAttemptCount = failedAttemptCount.Value;
-            }
+                var challenge = await dbContext.AdminLoginChallenges.SingleAsync(
+                    candidate => candidate.Id == challengeId,
+                    cancellationToken);
+                challenge.FailedAttemptCount++;
+                var outcome = new AdminFailedAttemptOutcome(
+                    challenge.FailedAttemptCount,
+                    challenge.FailedAttemptCount >= maxFailedAttempts);
+                if (outcome.LimitReached)
+                {
+                    challenge.ConsumedAt ??= occurredAt;
+                }
 
-            if (consumedAt is not null)
-            {
-                challenge.ConsumedAt = consumedAt;
-            }
-        }
+                challenge.Version++;
 
-        AddAuditEntry(auditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
+                AddAuditEntry(createAuditEntry(outcome));
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return outcome;
+            },
+            cancellationToken);
     }
 
-    public async Task CompleteMfaVerificationAsync(
+    public async Task<bool> CompleteMfaVerificationAsync(
         Guid challengeId,
         DateTimeOffset consumedAt,
+        long acceptedTimeStep,
         AdminSessionDraft session,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var challenge = await dbContext.AdminLoginChallenges.SingleAsync(
-            candidate => candidate.Id == challengeId,
+        return await SaveWithRetryAsync(
+            async () =>
+            {
+                if (!await ConsumeChallengeAsync(challengeId, consumedAt, cancellationToken) ||
+                    !await AcceptSecondFactorAsync(session.AdminAccountId, consumedAt, acceptedTimeStep, cancellationToken))
+                {
+                    dbContext.ChangeTracker.Clear();
+                    return false;
+                }
+
+                AddSession(session);
+                AddAuditEntry(auditEntry);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            },
             cancellationToken);
-        challenge.ConsumedAt = consumedAt;
-
-        dbContext.AdminSessions.Add(new AdminSessionRecord
-        {
-            Id = session.Id,
-            AdminAccountId = session.AdminAccountId,
-            TokenHash = session.TokenHash,
-            CreatedAt = session.CreatedAt,
-            LastSeenAt = session.LastSeenAt,
-            ExpiresAt = session.ExpiresAt,
-            IdleExpiresAt = session.IdleExpiresAt,
-            MfaAuthenticatedAt = session.MfaAuthenticatedAt,
-            StepUpAuthenticatedAt = session.StepUpAuthenticatedAt,
-        });
-
-        AddAuditEntry(auditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<AdminRecoveryCodeReadModel>> FindActiveRecoveryCodesAsync(
@@ -202,7 +220,7 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
             .ToListAsync(cancellationToken);
     }
 
-    public async Task CompleteMfaVerificationWithRecoveryCodeAsync(
+    public async Task<bool> CompleteMfaVerificationWithRecoveryCodeAsync(
         Guid challengeId,
         Guid recoveryCodeId,
         DateTimeOffset consumedAt,
@@ -211,33 +229,35 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         AdminAuditEntry recoveryCodeAuditEntry,
         CancellationToken cancellationToken)
     {
-        var challenge = await dbContext.AdminLoginChallenges.SingleAsync(
-            candidate => candidate.Id == challengeId,
+        return await SaveWithRetryAsync(
+            async () =>
+            {
+                if (!await ConsumeChallengeAsync(challengeId, consumedAt, cancellationToken))
+                {
+                    return false;
+                }
+
+                var recoveryCode = await dbContext.AdminRecoveryCodes.SingleAsync(
+                    candidate => candidate.Id == recoveryCodeId,
+                    cancellationToken);
+                if (recoveryCode.Status != "active")
+                {
+                    dbContext.ChangeTracker.Clear();
+                    return false;
+                }
+
+                recoveryCode.Status = "used";
+                recoveryCode.UsedAt = consumedAt;
+                recoveryCode.Version++;
+                await AcceptSecondFactorAsync(session.AdminAccountId, consumedAt, acceptedTimeStep: null, cancellationToken);
+
+                AddSession(session);
+                AddAuditEntry(mfaAuditEntry);
+                AddAuditEntry(recoveryCodeAuditEntry);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            },
             cancellationToken);
-        challenge.ConsumedAt = consumedAt;
-
-        var recoveryCode = await dbContext.AdminRecoveryCodes.SingleAsync(
-            candidate => candidate.Id == recoveryCodeId,
-            cancellationToken);
-        recoveryCode.Status = "used";
-        recoveryCode.UsedAt = consumedAt;
-
-        dbContext.AdminSessions.Add(new AdminSessionRecord
-        {
-            Id = session.Id,
-            AdminAccountId = session.AdminAccountId,
-            TokenHash = session.TokenHash,
-            CreatedAt = session.CreatedAt,
-            LastSeenAt = session.LastSeenAt,
-            ExpiresAt = session.ExpiresAt,
-            IdleExpiresAt = session.IdleExpiresAt,
-            MfaAuthenticatedAt = session.MfaAuthenticatedAt,
-            StepUpAuthenticatedAt = session.StepUpAuthenticatedAt,
-        });
-
-        AddAuditEntry(mfaAuditEntry);
-        AddAuditEntry(recoveryCodeAuditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<AdminSessionReadModel?> FindSessionByTokenHashAsync(
@@ -261,7 +281,8 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
                     session.IdleExpiresAt,
                     session.MfaAuthenticatedAt,
                     session.StepUpAuthenticatedAt,
-                    session.RevokedAt))
+                    session.RevokedAt,
+                    account.SecondFactorLockedUntil))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -280,22 +301,78 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task RecordSuccessfulStepUpAsync(
+    public async Task<bool> RecordSuccessfulStepUpAsync(
         Guid sessionId,
         DateTimeOffset occurredAt,
         DateTimeOffset idleExpiresAt,
+        long? acceptedTimeStep,
         AdminAuditEntry auditEntry,
         CancellationToken cancellationToken)
     {
-        var session = await dbContext.AdminSessions.SingleAsync(
-            candidate => candidate.Id == sessionId,
-            cancellationToken);
-        session.StepUpAuthenticatedAt = occurredAt;
-        session.LastSeenAt = occurredAt;
-        session.IdleExpiresAt = idleExpiresAt;
+        return await SaveWithRetryAsync(
+            async () =>
+            {
+                var session = await dbContext.AdminSessions.SingleAsync(
+                    candidate => candidate.Id == sessionId,
+                    cancellationToken);
+                if (acceptedTimeStep is not null)
+                {
+                    if (!await AcceptSecondFactorAsync(session.AdminAccountId, occurredAt, acceptedTimeStep, cancellationToken))
+                    {
+                        dbContext.ChangeTracker.Clear();
+                        return false;
+                    }
 
-        AddAuditEntry(auditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
+                    session.MfaAuthenticatedAt ??= occurredAt;
+                }
+
+                session.StepUpAuthenticatedAt = occurredAt;
+                session.LastSeenAt = occurredAt;
+                session.IdleExpiresAt = idleExpiresAt;
+
+                AddAuditEntry(auditEntry);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            },
+            cancellationToken);
+    }
+
+    public async Task<AdminFailedAttemptOutcome> RecordFailedSecondFactorAsync(
+        Guid adminAccountId,
+        DateTimeOffset occurredAt,
+        int maxFailedAttempts,
+        TimeSpan lockoutDuration,
+        Func<AdminFailedAttemptOutcome, AdminAuditEntry?> createAuditEntry,
+        CancellationToken cancellationToken)
+    {
+        return await SaveWithRetryAsync(
+            async () =>
+            {
+                var adminAccount = await dbContext.AdminAccounts.SingleAsync(
+                    account => account.Id == adminAccountId,
+                    cancellationToken);
+                adminAccount.FailedSecondFactorAttemptCount++;
+                var outcome = new AdminFailedAttemptOutcome(
+                    adminAccount.FailedSecondFactorAttemptCount,
+                    adminAccount.FailedSecondFactorAttemptCount >= maxFailedAttempts);
+                if (outcome.LimitReached)
+                {
+                    adminAccount.SecondFactorLockedUntil = occurredAt.Add(lockoutDuration);
+                }
+
+                adminAccount.UpdatedAt = occurredAt;
+                adminAccount.Version++;
+
+                var auditEntry = createAuditEntry(outcome);
+                if (auditEntry is not null)
+                {
+                    AddAuditEntry(auditEntry);
+                }
+
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return outcome;
+            },
+            cancellationToken);
     }
 
     public async Task RecordFailedStepUpAsync(
@@ -314,34 +391,41 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
         AdminAuditEntry revokedAuditEntry,
         CancellationToken cancellationToken)
     {
-        var activeCodes = await dbContext.AdminRecoveryCodes
-            .Where(code => code.AdminAccountId == adminAccountId && code.Status == "active")
-            .ToListAsync(cancellationToken);
-        foreach (var activeCode in activeCodes)
-        {
-            activeCode.Status = "revoked";
-            activeCode.RevokedAt = occurredAt;
-        }
-
-        foreach (var recoveryCode in recoveryCodes)
-        {
-            dbContext.AdminRecoveryCodes.Add(new AdminRecoveryCodeRecord
+        await SaveWithRetryAsync(
+            async () =>
             {
-                Id = recoveryCode.Id,
-                AdminAccountId = recoveryCode.AdminAccountId,
-                CodeHash = recoveryCode.CodeHash,
-                Status = "active",
-                CreatedAt = recoveryCode.CreatedAt,
-            });
-        }
+                var activeCodes = await dbContext.AdminRecoveryCodes
+                    .Where(code => code.AdminAccountId == adminAccountId && code.Status == "active")
+                    .ToListAsync(cancellationToken);
+                foreach (var activeCode in activeCodes)
+                {
+                    activeCode.Status = "revoked";
+                    activeCode.RevokedAt = occurredAt;
+                    activeCode.Version++;
+                }
 
-        if (activeCodes.Count > 0)
-        {
-            AddAuditEntry(revokedAuditEntry);
-        }
+                foreach (var recoveryCode in recoveryCodes)
+                {
+                    dbContext.AdminRecoveryCodes.Add(new AdminRecoveryCodeRecord
+                    {
+                        Id = recoveryCode.Id,
+                        AdminAccountId = recoveryCode.AdminAccountId,
+                        CodeHash = recoveryCode.CodeHash,
+                        Status = "active",
+                        CreatedAt = recoveryCode.CreatedAt,
+                    });
+                }
 
-        AddAuditEntry(generatedAuditEntry);
-        await dbContext.SaveChangesAsync(cancellationToken);
+                if (activeCodes.Count > 0)
+                {
+                    AddAuditEntry(revokedAuditEntry);
+                }
+
+                AddAuditEntry(generatedAuditEntry);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            },
+            cancellationToken);
     }
 
     public async Task RecordSecurityAuditAsync(
@@ -365,6 +449,145 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
 
         AddAuditEntry(auditEntry);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<int> RevokeSessionsWithoutSecondFactorAsync(
+        Guid adminAccountId,
+        Guid currentSessionId,
+        DateTimeOffset revokedAt,
+        AdminAuditEntry auditEntry,
+        CancellationToken cancellationToken)
+    {
+        var sessions = await dbContext.AdminSessions
+            .Where(session =>
+                session.AdminAccountId == adminAccountId &&
+                session.Id != currentSessionId &&
+                session.MfaAuthenticatedAt == null &&
+                session.RevokedAt == null &&
+                session.ExpiresAt > revokedAt)
+            .ToListAsync(cancellationToken);
+        if (sessions.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var session in sessions)
+        {
+            session.RevokedAt = revokedAt;
+        }
+
+        AddAuditEntry(auditEntry);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return sessions.Count;
+    }
+
+    private async Task ResetPasswordFailuresAsync(
+        Guid adminAccountId,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        var adminAccount = await dbContext.AdminAccounts.SingleAsync(
+            account => account.Id == adminAccountId,
+            cancellationToken);
+        adminAccount.FailedPasswordAttemptCount = 0;
+        adminAccount.LockedUntil = null;
+        adminAccount.LastPasswordVerifiedAt = occurredAt;
+        adminAccount.UpdatedAt = occurredAt;
+        adminAccount.Version++;
+    }
+
+    /// <summary>
+    /// Records a verified second factor on the account: the TOTP step it used,
+    /// if any, and a cleared failure count. Returns false when the step is not
+    /// later than the last one accepted, which is how a code observed once is
+    /// kept from working again within its validity window.
+    /// </summary>
+    private async Task<bool> AcceptSecondFactorAsync(
+        Guid adminAccountId,
+        DateTimeOffset occurredAt,
+        long? acceptedTimeStep,
+        CancellationToken cancellationToken)
+    {
+        var adminAccount = await dbContext.AdminAccounts.SingleAsync(
+            account => account.Id == adminAccountId,
+            cancellationToken);
+        if (acceptedTimeStep is not null)
+        {
+            if (adminAccount.LastTotpTimeStep is not null &&
+                acceptedTimeStep.Value <= adminAccount.LastTotpTimeStep.Value)
+            {
+                return false;
+            }
+
+            adminAccount.LastTotpTimeStep = acceptedTimeStep;
+        }
+
+        adminAccount.FailedSecondFactorAttemptCount = 0;
+        adminAccount.SecondFactorLockedUntil = null;
+        adminAccount.UpdatedAt = occurredAt;
+        adminAccount.Version++;
+        return true;
+    }
+
+    /// <summary>
+    /// Marks the challenge consumed, or returns false with nothing tracked when
+    /// it was already consumed or has expired.
+    /// </summary>
+    private async Task<bool> ConsumeChallengeAsync(
+        Guid challengeId,
+        DateTimeOffset consumedAt,
+        CancellationToken cancellationToken)
+    {
+        var challenge = await dbContext.AdminLoginChallenges.SingleAsync(
+            candidate => candidate.Id == challengeId,
+            cancellationToken);
+        if (challenge.ConsumedAt is not null || challenge.ExpiresAt <= consumedAt)
+        {
+            dbContext.ChangeTracker.Clear();
+            return false;
+        }
+
+        challenge.ConsumedAt = consumedAt;
+        challenge.Version++;
+        return true;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="attempt"/> and, when its save loses a concurrency
+    /// race, discards what it tracked and runs it again against fresh rows.
+    /// </summary>
+    private async Task<T> SaveWithRetryAsync<T>(
+        Func<Task<T>> attempt,
+        CancellationToken cancellationToken)
+    {
+        for (var attemptNumber = 1; ; attemptNumber++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await attempt();
+            }
+            catch (DbUpdateConcurrencyException) when (attemptNumber < MaxConcurrencyAttempts)
+            {
+                dbContext.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    private void AddSession(AdminSessionDraft session)
+    {
+        dbContext.AdminSessions.Add(new AdminSessionRecord
+        {
+            Id = session.Id,
+            AdminAccountId = session.AdminAccountId,
+            TokenHash = session.TokenHash,
+            CreatedAt = session.CreatedAt,
+            LastSeenAt = session.LastSeenAt,
+            ExpiresAt = session.ExpiresAt,
+            IdleExpiresAt = session.IdleExpiresAt,
+            MfaAuthenticatedAt = session.MfaAuthenticatedAt,
+            StepUpAuthenticatedAt = session.StepUpAuthenticatedAt,
+        });
     }
 
     private void AddAuditEntry(AdminAuditEntry auditEntry)

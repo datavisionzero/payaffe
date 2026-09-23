@@ -20,6 +20,12 @@ public sealed class AdminAccountRecord
 
     public DateTimeOffset? LastPasswordVerifiedAt { get; set; }
 
+    public long? LastTotpTimeStep { get; set; }
+
+    public int FailedSecondFactorAttemptCount { get; set; }
+
+    public DateTimeOffset? SecondFactorLockedUntil { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

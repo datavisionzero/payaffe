@@ -10,6 +10,14 @@ public sealed class AdminAuthenticationOptions
 
     public int MaxFailedMfaAttempts { get; set; } = 5;
 
+    /// <summary>
+    /// Wrong second-factor codes an account may accumulate across challenges
+    /// and step-ups before its second factor is locked for
+    /// <see cref="LockoutDuration"/>. A correct password does not reset it;
+    /// only a verified second factor does.
+    /// </summary>
+    public int MaxFailedSecondFactorAttempts { get; set; } = 10;
+
     public int TotpAllowedTimeStepSkew { get; set; } = 1;
 
     public TimeSpan SessionAbsoluteLifetime { get; set; } = TimeSpan.FromDays(7);

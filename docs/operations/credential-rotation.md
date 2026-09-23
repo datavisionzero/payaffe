@@ -67,6 +67,9 @@ For a suspected compromise:
 2. Change the password through the controlled operator process.
 3. Replace the TOTP enrollment, which means provisioning a new secret under
    `Admin:TotpSecrets:<name>` and updating the account's restricted reference.
+   Enrolling a factor on an account that had none makes its existing
+   password-only sessions step up for every sensitive action, and the first
+   sign-in or step-up with the new factor revokes them.
 4. Generate new Recovery Codes. Generation revokes every previously active code
    and shows the new ones exactly once.
 5. Review the Audit Log for `admin.*` events, for Settlement, Credential,

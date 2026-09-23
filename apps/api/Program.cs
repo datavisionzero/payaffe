@@ -2778,12 +2778,22 @@ static bool HasRecentStepUp(
     DateTimeOffset occurredAt,
     AdminAuthenticationOptions options)
 {
-    // Null means the account has no second factor enrolled, so there is no
-    // step-up to be fresh (ADR 0028). Treating that as "not fresh" would make
-    // the sensitive operations unreachable for such an account rather than
-    // protected, which is the opposite of what a gate is for.
-    return principal.StepUpAuthenticatedAt is null
-        || principal.StepUpAuthenticatedAt.Value.Add(options.StepUpLifetime) >= occurredAt;
+    // An account with no second factor has no step-up to be fresh (ADR 0028).
+    // Treating that as "not fresh" would make the sensitive operations
+    // unreachable for such an account rather than protected.
+    //
+    // Enrollment is read from the account now, not from the session: a session
+    // begun on the password alone before a factor was enrolled must step up
+    // like any other. A step-up only counts once the session has cleared a
+    // factor, so a factorless step-up recorded before enrollment does not.
+    if (!principal.HasEnrolledSecondFactor)
+    {
+        return true;
+    }
+
+    return principal.MfaAuthenticatedAt is not null
+        && principal.StepUpAuthenticatedAt is not null
+        && principal.StepUpAuthenticatedAt.Value.Add(options.StepUpLifetime) >= occurredAt;
 }
 
 static AdminAuditEntry CreateAdminAuditEntry(
