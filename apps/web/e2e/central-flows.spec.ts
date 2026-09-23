@@ -157,6 +157,7 @@ test("Payer sees unavailable options and the expired state without horizontal ov
   await page.reload();
   await expect(page.getByText("Payment expired")).toBeVisible();
   await expect(page.getByText(/regular payment window has expired/)).toBeVisible();
+  await expect(page.getByLabel("QR code for the payment instruction")).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
   state = "error";

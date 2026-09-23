@@ -100,7 +100,9 @@ values, so a browser reporting `{ClientErrorName}` gets those characters logged
 rather than a substitution. Messages are reduced to one line, control characters
 are removed, a query string is dropped from the path, and everything is cut to a
 cap and flagged with an ellipsis. The stack trace is carried in the field a log
-store keeps an exception in, so it is searchable there.
+store keeps an exception in, so it is searchable there. The payer page reports
+its path as `/pay/{payerPageId}`: the Payer Page ID grants access to the
+Payment, so it is not logged.
 
 `PAYAFFE_CLIENT_ERRORS_ENABLED=false` leaves the endpoint unmapped. An
 installation that does not want a publicly postable surface does not get one

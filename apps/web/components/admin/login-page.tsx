@@ -149,7 +149,7 @@ export function AdminLoginPage() {
               autoComplete="username"
               error={loginForm.formState.errors.username?.message}
               label={t("username")}
-              type="email"
+              type="text"
               {...loginForm.register("username")}
             />
             <TextField

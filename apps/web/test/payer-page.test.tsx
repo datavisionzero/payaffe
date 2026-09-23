@@ -43,6 +43,8 @@ const selectedPayment = {
 
 const testPayment = {
   ...selectedPayment,
+  // The page's own route names the Payment; the URL's shape is the server's.
+  payerPageUrl: "https://pay.example.test/pay/fixed-payer-page-id/",
   testMode: true,
   paymentAddress: "tb1qsimulated",
   paymentInstruction: {
@@ -196,9 +198,138 @@ describe("PayerPage", () => {
     renderPayerPage();
     fireEvent.click(await screen.findByRole("button", { name: "Pay with BTC" }));
 
-    expect(await screen.findByText("Payment details could not be loaded.")).toBeInTheDocument();
-    expect(screen.getByText("Correlation ID: correlation-123")).toBeInTheDocument();
+    expect(await screen.findByText("Correlation ID: correlation-123")).toBeInTheDocument();
+    // LTC shows the same reason as an option; the selection error is the second.
+    expect(screen.getAllByText("An exchange rate is not currently available.")).toHaveLength(2);
+    expect(screen.queryByText("Payment details could not be loaded.")).not.toBeInTheDocument();
     expect(screen.queryByText("Provider details that should not be rendered.")).not.toBeInTheDocument();
+  });
+
+  it("says a Payment has expired when selecting fails for that reason", async () => {
+    server.use(
+      http.post("/api/payer/payments/fixed-payer-page-id/currency-selection", () =>
+        HttpResponse.json({ title: "Payment has expired.", code: "payment.expired" }, { status: 409 })
+      )
+    );
+    renderPayerPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Pay with BTC" }));
+
+    expect(
+      await screen.findByText("This Payment has expired. Do not send a transfer.")
+    ).toBeInTheDocument();
+  });
+
+  it("shows a generic message for a selection failure it does not know", async () => {
+    server.use(
+      http.post("/api/payer/payments/fixed-payer-page-id/currency-selection", () =>
+        HttpResponse.json({ title: "Boom.", code: "something.else" }, { status: 500 })
+      )
+    );
+    renderPayerPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Pay with BTC" }));
+
+    expect(
+      await screen.findByText("The currency could not be selected. Please try again.")
+    ).toBeInTheDocument();
+  });
+
+  it("reloads the Payment and drops the error when a currency was already selected", async () => {
+    let selected = false;
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
+        HttpResponse.json(selected ? selectedPayment : pendingPayment)
+      ),
+      http.post("/api/payer/payments/fixed-payer-page-id/currency-selection", () => {
+        // Selected in another tab between this page's last poll and the click.
+        selected = true;
+        return HttpResponse.json(
+          {
+            title: "Payment currency has already been selected.",
+            code: "payment.currency_already_selected"
+          },
+          { status: 409 }
+        );
+      })
+    );
+    renderPayerPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Pay with ETH" }));
+
+    expect(await screen.findByText("btc-test-address")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for payment")).toBeInTheDocument();
+    expect(
+      screen.queryByText("A currency has already been selected for this Payment.")
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the selection when an older poll resolves after it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let reads = 0;
+    let releaseStalePoll: () => void = () => undefined;
+    const stalePoll = new Promise<void>((resolve) => {
+      releaseStalePoll = resolve;
+    });
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", async () => {
+        reads += 1;
+        if (reads === 2) {
+          await stalePoll;
+        }
+        return HttpResponse.json(reads >= 3 ? selectedPayment : pendingPayment);
+      })
+    );
+    renderPayerPage();
+
+    const button = await screen.findByRole("button", { name: "Pay with BTC" });
+    await vi.advanceTimersByTimeAsync(5000);
+    await waitFor(() => expect(reads).toBe(2));
+    fireEvent.click(button);
+    expect(await screen.findByText("Waiting for payment")).toBeInTheDocument();
+
+    releaseStalePoll();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(screen.getByText("Waiting for payment")).toBeInTheDocument();
+    expect(screen.queryByText("Currency selection pending")).not.toBeInTheDocument();
+  });
+
+  it.each(["completed", "expired", "settled"])(
+    "shows no payable instruction once the Payment is %s",
+    async (status) => {
+      server.use(
+        http.get("/api/payer/payments/fixed-payer-page-id", () =>
+          HttpResponse.json({ ...selectedPayment, status })
+        )
+      );
+      renderPayerPage();
+
+      expect(await screen.findByText(`Payment ${status}`)).toBeInTheDocument();
+      expect(screen.queryByLabelText("QR code for the payment instruction")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: "Open payment instruction in a compatible wallet" })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("btc-test-address")).not.toBeInTheDocument();
+    }
+  );
+
+  it("names an unknown unavailable reason without showing its key", async () => {
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
+        HttpResponse.json({
+          ...pendingPayment,
+          paymentOptions: [
+            {
+              supportedCurrency: "BTC",
+              status: "unavailable",
+              unavailableReasonCode: "provider.new_reason"
+            }
+          ]
+        })
+      )
+    );
+    renderPayerPage();
+
+    expect(await screen.findByText("This currency is not currently available.")).toBeInTheDocument();
+    expect(screen.queryByText(/unavailableReasons\./)).not.toBeInTheDocument();
   });
 
   it("uses the server-authored instruction URI for the wallet link", async () => {
