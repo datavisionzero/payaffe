@@ -5,6 +5,7 @@ using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Payments;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Payaffe.Infrastructure.Persistence;
@@ -25,17 +26,37 @@ internal static class DefaultProjectUpgrade
                 candidate => candidate.ProjectId == ProjectDefaults.DefaultProjectId,
                 cancellationToken);
 
-        if (configuration.LegacySettingsFingerprint.Length > 0)
+        // Payments that selected a currency before the multi-Project upgrade
+        // carry no policy snapshot yet. While any exist the upgrade is still
+        // under way, and every starting host has to agree on the legacy values
+        // the snapshots are taken from.
+        var upgradePending = await dbContext.Payments.AnyAsync(
+            payment => payment.ProjectId == ProjectDefaults.DefaultProjectId &&
+                       payment.SelectedCurrency != null &&
+                       payment.ConfirmationRequirement == null,
+            cancellationToken);
+
+        if (configuration.LegacySettingsFingerprint.Length > 0 &&
+            !CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(configuration.LegacySettingsFingerprint),
+                Convert.FromHexString(fingerprint)))
         {
-            if (!CryptographicOperations.FixedTimeEquals(
-                    Convert.FromHexString(configuration.LegacySettingsFingerprint),
-                    Convert.FromHexString(fingerprint)))
+            if (upgradePending)
             {
                 throw new InvalidOperationException(
                     "The effective legacy Project settings differ from the values that created the default Project. " +
                     "All starting hosts must use the same Payments and PaymentAddresses settings during the multi-Project upgrade.");
             }
 
+            // After the upgrade the default Project's configuration record is
+            // the source of truth, so a changed legacy value is not a reason
+            // to stop the installation.
+            serviceProvider.GetService<ILoggerFactory>()
+                ?.CreateLogger(typeof(DefaultProjectUpgrade))
+                .LogWarning(
+                    "The configured Payments and PaymentAddresses Project settings differ from the values that created the default Project. " +
+                    "The database owns these settings since the multi-Project upgrade, so the configured values are ignored; " +
+                    "change them on the Project in the Admin UI.");
         }
 
         if (configuration.LegacySettingsFingerprint.Length == 0)

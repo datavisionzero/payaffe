@@ -1,5 +1,6 @@
 using Payaffe.Infrastructure.Persistence.Records;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 
 namespace Payaffe.Infrastructure.Persistence;
 
@@ -58,6 +59,14 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
     public DbSet<WebhookEndpointRecord> WebhookEndpoints => Set<WebhookEndpointRecord>();
 
     public DbSet<WebhookDeliveryAttemptRecord> WebhookDeliveryAttempts => Set<WebhookDeliveryAttemptRecord>();
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        // The schema is hand-written SQL, so the model declares every index the
+        // migrations create and no more. The convention would add an index per
+        // foreign key that the database does not have.
+        configurationBuilder.Conventions.Remove<ForeignKeyIndexConvention>();
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -536,6 +545,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(record => new { record.ProjectId, record.IntegrationApiCredentialId, record.IdempotencyKey })
                 .IsUnique()
                 .HasDatabaseName("uq_payment_creation_idempotency_project_credential_key");
+            entity.HasIndex(record => record.PaymentId)
+                .HasDatabaseName("ix_payment_creation_idempotency_payment_id");
             entity.HasOne<IntegrationApiCredentialRecord>()
                 .WithMany()
                 .HasForeignKey(record => new { record.ProjectId, record.IntegrationApiCredentialId })
@@ -681,6 +692,12 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .IsUnique()
                 .HasFilter("idempotency_key IS NOT NULL")
                 .HasDatabaseName("uq_simulated_transactions_payment_idempotency_key");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_simulated_transactions_supported_currency",
+                    "supported_currency in ('BTC', 'LTC', 'ETH')");
+            });
         });
     }
 
@@ -796,6 +813,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(import => new { import.ProjectId, import.ImportedAt })
                 .HasDatabaseName("ix_native_eth_address_pool_imports_project_imported_at");
+            entity.HasIndex(import => import.ImportedByAdminAccountId)
+                .HasDatabaseName("ix_native_eth_address_pool_imports_admin_account_id");
         });
 
         modelBuilder.Entity<NativeEthAddressRecord>(entity =>
@@ -845,6 +864,8 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasDatabaseName("uq_native_eth_addresses_assigned_payment_id");
             entity.HasIndex(address => new { address.ProjectId, address.Status, address.CreatedAt })
                 .HasDatabaseName("ix_native_eth_addresses_project_status_created_at");
+            entity.HasIndex(address => address.ImportId)
+                .HasDatabaseName("ix_native_eth_addresses_import_id");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
@@ -1099,6 +1120,10 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasName("ak_webhook_events_project_id_id");
             entity.HasIndex(webhookEvent => new { webhookEvent.ProjectId, webhookEvent.Status, webhookEvent.NextAttemptAt })
                 .HasDatabaseName("ix_webhook_events_project_status_next_attempt_at");
+            entity.HasIndex(webhookEvent => webhookEvent.PaymentId)
+                .HasDatabaseName("ix_webhook_events_payment_id");
+            entity.HasIndex(webhookEvent => webhookEvent.IntegrationApiCredentialId)
+                .HasDatabaseName("ix_webhook_events_integration_api_credential_id");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(

@@ -108,7 +108,7 @@ meant for an installation:
 | Tag | Moved by | For |
 | --- | --- | --- |
 | `0.1.0` | nothing, once published | what an installation pins |
-| `latest` | a release tag, never a prerelease | an installation that accepts every release |
+| `latest` | the highest release tag, never a prerelease or a patch to an older line | an installation that accepts every release |
 | `main` | every green trunk push | our own staging installation |
 
 `main` is the trunk, which is to say a commit whose tests passed and nothing
@@ -299,21 +299,36 @@ interval, and `PAYAFFE_OBSERVATION_WORKER_MAX_PAYMENTS_PER_POLL` bounds the
 number of active Payments queried per poll.
 
 Webhook Endpoint records must store a secret reference instead of a raw
-secret. For Compose-based installations, use references in this form:
+secret. For Compose-based installations, the default Project uses references in
+this form:
 
 ```text
 configuration:Webhooks:EndpointSecrets:<name>
 ```
 
-Then provide the corresponding secret through the shared backend environment,
-for example `Webhooks__EndpointSecrets__checkout` in a non-versioned `.env`
-file or another operator-controlled secret source. The `api` service validates
-the reference when an Admin saves the Endpoint, and the `worker` service signs
-the delivered events, so both hosts must be able to resolve it. Do not add real Webhook Endpoint
-secrets to `.env.example`, Compose files, logs, Audit Log entries, or Webhook
-Delivery history.
+and every other Project names itself in the reference:
 
-The Compose baseline exposes two non-versioned slots for the first partner:
+```text
+configuration:Webhooks:Projects:<project-id>:EndpointSecrets:<name>
+```
+
+The `api` service validates the reference when an Admin saves the Endpoint, and
+the `worker` service signs the delivered events, so both hosts must be able to
+resolve it. Both read `.env` as environment in addition to the variables the
+Compose file maps, so a secret is provided by adding the configuration key with
+`__` for `:` to `.env`:
+
+```text
+Webhooks__EndpointSecrets__checkout=...
+Webhooks__Projects__0b9c3f5e-8d1a-4c2e-9f6b-2a7d4e1c8b30__EndpointSecrets__shop-v1=...
+```
+
+and restarting both services (`docker compose up -d`). Do not add real Webhook
+Endpoint secrets to `.env.example`, Compose files, logs, Audit Log entries, or
+Webhook Delivery history.
+
+The Compose baseline also maps two slots for the first partner of the default
+Project:
 
 - `PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1` resolves from
   `configuration:Webhooks:EndpointSecrets:partner-v1`.
@@ -321,8 +336,10 @@ The Compose baseline exposes two non-versioned slots for the first partner:
   `configuration:Webhooks:EndpointSecrets:partner-v2`.
 
 The values stay in `.env`; the versioned example contains empty placeholders.
-Additional endpoints can use additional server-side configuration mappings.
-
+Reading `.env` into the containers needs Docker Compose 2.24 or later. With an
+older Compose, or when the configuration lives elsewhere than `.env` (for
+example `docker compose --env-file`), map the keys in a `compose.override.yaml`
+under the `environment` of both `api` and `worker`.
 
 ## Running More Than One Instance
 
@@ -507,6 +524,10 @@ applied before anything else is started, and it runs the same code the hosts do:
 ```sh
 docker compose --profile operations run --rm migrations
 ```
+
+It receives the same settings as the hosts, because applying the schema also
+records the Installation Mode and seeds the default Project's settings: a run
+against a fresh Test Mode database records `test`, not `live`.
 
 It is also what creates the first admin; see
 [credential-rotation.md](credential-rotation.md).

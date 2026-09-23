@@ -195,9 +195,21 @@ and project-specific jobs.
 Current environment-backed Project settings cannot be read by a SQL migration.
 Before readiness, a one-time, advisory-lock-protected upgrader materializes the
 effective legacy Payment, confirmation, tolerance, reorg, address-source, and
-capacity settings as default-Project configuration. A second host validates the
-same effective values and fails readiness on disagreement rather than silently
-choosing one. Installation-wide settings remain in runtime configuration.
+capacity settings as default-Project configuration. While the upgrade is
+pending, meaning default-Project Payments with a selected currency still lack a
+policy snapshot, a second host validates the same effective values and fails
+readiness on disagreement rather than silently choosing one. Installation-wide
+settings remain in runtime configuration.
+
+Once the upgrade has finished, the database owns the default Project's Payment
+Expiration, Late Acceptance Window, payment tolerance, confirmation
+requirements, reorg monitoring depths, and native ETH low-capacity threshold.
+The corresponding `Payments` and `PaymentAddresses` values are read only on the
+first start; a later difference is logged as a warning and ignored, and the
+settings are changed on the Project. The BTC and LTC extended public keys stay
+in runtime configuration, because the database holds only their fingerprint: a
+configured key that differs from the one bound to the default Project is
+refused at every start, since deriving from another key can reuse addresses.
 
 The upgrade must preserve these invariants:
 

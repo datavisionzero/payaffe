@@ -41,8 +41,10 @@ The protected backend operation is
 
 It requires an authenticated Admin session, CSRF evidence, and recent Step-up
 authentication. Imports are atomic and audited. Capacity is available through
-`GET /api/admin/native-eth-address-pool`; the low-capacity threshold is configured
-with `PAYAFFE_NATIVE_ETH_LOW_CAPACITY_THRESHOLD`.
+`GET /api/admin/native-eth-address-pool`; the low-capacity threshold is a Project
+setting. `PAYAFFE_NATIVE_ETH_LOW_CAPACITY_THRESHOLD` seeds it for the default
+Project on the first start only; after that, change it on the Project, and a
+different configured value is logged as a warning and ignored.
 
 `PAYAFFE_NATIVE_ETH_NETWORK` and `PAYAFFE_NATIVE_ETH_CHAIN_ID` identify the
 chain for imported addresses and for generated wallet URIs. They default to
