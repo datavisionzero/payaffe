@@ -21,6 +21,11 @@ public interface IPaymentStore
         string payerPageId,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Returns the least recently polled active Payments and records them as
+    /// polled at <paramref name="observedUntil"/>, so consecutive calls rotate
+    /// through every active Payment.
+    /// </summary>
     Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
         DateTimeOffset observedUntil,
         int maxPayments,

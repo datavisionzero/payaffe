@@ -138,7 +138,10 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         int maxPayments,
         CancellationToken cancellationToken)
     {
-        return await dbContext.Payments
+        // Least recently polled first, never-polled before all others. A poll
+        // that finds nothing changes no Payment, so ordering by anything the
+        // poll does not write would pick the same Payments on every tick.
+        var targets = await dbContext.Payments
             .AsNoTracking()
             .Where(payment =>
                 (payment.Status == "waiting_for_payment" || payment.Status == "observed") &&
@@ -146,7 +149,8 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                 payment.SelectedCurrency != null &&
                 payment.PaymentAddress != null &&
                 payment.ExpectedCryptoAmount != null)
-            .OrderBy(payment => payment.UpdatedAt)
+            .OrderBy(payment => payment.LastPolledAt.HasValue)
+            .ThenBy(payment => payment.LastPolledAt)
             .ThenBy(payment => payment.Id)
             .Take(maxPayments)
             .Select(payment => new BlockchainObservationTarget(
@@ -156,6 +160,36 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                 payment.ExpectedCryptoAmount!,
                 payment.ProjectId))
             .ToListAsync(cancellationToken);
+
+        // Stamped before the poll, so a target whose poll fails moves to the
+        // back of the rotation as well.
+        var paymentIds = targets.Select(target => target.PaymentId).ToArray();
+        if (dbContext.Database.IsRelational())
+        {
+            // Not a Payment change: no version bump, so it never conflicts
+            // with a concurrent lifecycle write.
+            await dbContext.Payments
+                .Where(payment => paymentIds.Contains(payment.Id))
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(payment => payment.LastPolledAt, observedUntil),
+                    cancellationToken);
+        }
+        else
+        {
+            await DiscardChangesOnFailureAsync(async () =>
+            {
+                foreach (var payment in await dbContext.Payments
+                             .Where(payment => paymentIds.Contains(payment.Id))
+                             .ToListAsync(cancellationToken))
+                {
+                    payment.LastPolledAt = observedUntil;
+                }
+
+                return await dbContext.SaveChangesAsync(cancellationToken);
+            });
+        }
+
+        return targets;
     }
 
     public async Task<IReadOnlyList<BlockchainReorgMonitoringTarget>> ListBlockchainReorgMonitoringTargetsAsync(

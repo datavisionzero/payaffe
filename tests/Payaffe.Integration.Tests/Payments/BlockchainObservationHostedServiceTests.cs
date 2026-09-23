@@ -228,6 +228,39 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
                      entry.Message.Contains(poisonedPaymentId!.Value.ToString(), StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A poll that finds nothing changes no Payment. The batch rotates by when
+    /// a Payment was last polled, so Payments that were never paid cannot keep
+    /// a paid one beyond the batch size from being polled until it expires.
+    /// </summary>
+    [Fact]
+    public async Task Every_active_payment_is_polled_in_turn_when_there_are_more_than_one_batch()
+    {
+        Guid? paidPaymentId = null;
+        var observationAdapter = new DelegatingBlockchainObservationAdapter(target =>
+            target.PaymentId == paidPaymentId
+                ? [new BlockchainObservation("tx-paid", "0.00039980", WorkerNow.AddMinutes(1), 1, "test-provider", null)]
+                : []);
+        await using var context = await BuildContextAsync(observationAdapter, paymentCount: 5);
+        var payments = context.ServiceProvider.GetRequiredService<PaymentApplicationService>();
+
+        await payments.PollBlockchainObservationsAsync(2, CancellationToken.None);
+        var firstBatch = observationAdapter.PolledTargets.Select(target => target.PaymentId).ToHashSet();
+        context.DbContext.ChangeTracker.Clear();
+        paidPaymentId = context.DbContext.Payments
+            .Select(payment => payment.Id)
+            .AsEnumerable()
+            .First(paymentId => !firstBatch.Contains(paymentId));
+
+        // ceil(5 / 2) ticks reach every Payment.
+        await payments.PollBlockchainObservationsAsync(2, CancellationToken.None);
+        await payments.PollBlockchainObservationsAsync(2, CancellationToken.None);
+
+        context.DbContext.ChangeTracker.Clear();
+        Assert.Equal(5, observationAdapter.PolledTargets.Select(target => target.PaymentId).Distinct().Count());
+        Assert.Equal("completed", context.DbContext.Payments.Single(payment => payment.Id == paidPaymentId).Status);
+    }
+
     private async Task<WorkerContext> BuildContextAsync(
         IBlockchainObservationAdapter observationAdapter,
         int paymentCount = 1,

@@ -463,6 +463,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(payment => payment.ConfirmedEligibleTotal).HasColumnName("confirmed_eligible_total").HasColumnType("text");
             entity.Property(payment => payment.CompletedAt).HasColumnName("completed_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.SettledAt).HasColumnName("settled_at").HasColumnType("timestamp with time zone");
+            entity.Property(payment => payment.LastPolledAt).HasColumnName("last_polled_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.Version)
@@ -486,6 +487,9 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(payment => payment.PayerPageId)
                 .IsUnique()
                 .HasDatabaseName("uq_payments_payer_page_id");
+            entity.HasIndex(payment => new { payment.LastPolledAt, payment.Id })
+                .HasFilter("status in ('waiting_for_payment', 'observed')")
+                .HasDatabaseName("ix_payments_observation_rotation");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(
