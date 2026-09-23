@@ -8,6 +8,12 @@ public sealed record FiatAmount
         "USD",
     };
 
+    /// <summary>
+    /// 1,000,000.00 in EUR or USD. The limit is part of the Integration API
+    /// contract; it also keeps every crypto conversion inside decimal range.
+    /// </summary>
+    public const long MaxMinorUnits = 100_000_000;
+
     private FiatAmount(string currency, long minorUnits)
     {
         Currency = currency;
@@ -38,6 +44,13 @@ public sealed record FiatAmount
             throw new DomainRuleException(
                 "Fiat Amount must be greater than zero minor units.",
                 "fiat_amount.not_positive");
+        }
+
+        if (minorUnits > MaxMinorUnits)
+        {
+            throw new DomainRuleException(
+                "Fiat Amount must be at most 1,000,000.00.",
+                "fiat_amount.too_large");
         }
 
         return new FiatAmount(normalizedCurrency, minorUnits);

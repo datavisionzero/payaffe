@@ -45,8 +45,12 @@ public sealed class CoinGeckoExchangeRateSource(
             normalizedFiatCurrency,
             normalizedSupportedCurrency,
             cancellationToken);
+        // A rate becomes a Rate Lock only while its own observation time is
+        // within the maximum stale age, on every path: an upstream that keeps
+        // answering with a frozen price is fetched fresh but is not fresh.
         if (cached is not null &&
-            requestedAt - cached.FetchedAt <= _options.CacheInterval)
+            requestedAt - cached.FetchedAt <= _options.CacheInterval &&
+            IsWithinMaxStaleAge(cached, requestedAt))
         {
             var freshQuote = CreateQuote(cached, fiatAmountMinor, isStale: false);
             if (freshQuote is not null)
@@ -63,11 +67,13 @@ public sealed class CoinGeckoExchangeRateSource(
         if (refreshed is not null)
         {
             await rateCache.UpsertAsync(refreshed, cancellationToken);
-            return CreateQuote(refreshed, fiatAmountMinor, isStale: false);
+            if (IsWithinMaxStaleAge(refreshed, requestedAt))
+            {
+                return CreateQuote(refreshed, fiatAmountMinor, isStale: false);
+            }
         }
 
-        if (cached is not null &&
-            requestedAt - cached.ObservedAt <= _options.MaxStaleAge)
+        if (cached is not null && IsWithinMaxStaleAge(cached, requestedAt))
         {
             return CreateQuote(cached, fiatAmountMinor, isStale: true);
         }
@@ -229,6 +235,9 @@ public sealed class CoinGeckoExchangeRateSource(
         }
     }
 
+    private bool IsWithinMaxStaleAge(CachedExchangeRate rate, DateTimeOffset requestedAt) =>
+        requestedAt - rate.ObservedAt <= _options.MaxStaleAge;
+
     private static RateLockQuote? CreateQuote(
         CachedExchangeRate rate,
         long fiatAmountMinor,
@@ -246,7 +255,17 @@ public sealed class CoinGeckoExchangeRateSource(
 
         var fiatAmount = fiatAmountMinor / 100m;
         var precision = rate.SupportedCurrency == "ETH" ? 18 : 8;
-        var expectedAmount = RoundUp(fiatAmount / rateValue, precision);
+        decimal expectedAmount;
+        try
+        {
+            expectedAmount = RoundUp(fiatAmount / rateValue, precision);
+        }
+        catch (OverflowException)
+        {
+            // Only an implausibly small rate gets here; it is no usable rate.
+            return null;
+        }
+
         return new RateLockQuote(
             rate.SupportedCurrency,
             isStale ? $"{rate.RateSource}:stale-cache" : rate.RateSource,

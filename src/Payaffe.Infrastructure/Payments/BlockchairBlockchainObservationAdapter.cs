@@ -55,6 +55,15 @@ public sealed class BlockchairBlockchainObservationAdapter(
         };
     }
 
+    public async Task<bool> IsObservationAvailableAsync(
+        string supportedCurrency,
+        CancellationToken cancellationToken)
+    {
+        var apiKeyReference = options.Value.Blockchair.ApiKeyReference;
+        return !string.IsNullOrWhiteSpace(apiKeyReference) &&
+               !string.IsNullOrWhiteSpace(await secretResolver.ResolveAsync(apiKeyReference, cancellationToken));
+    }
+
     private async Task<string> ResolveApiKeyAsync(CancellationToken cancellationToken)
     {
         var apiKeyReference = options.Value.Blockchair.ApiKeyReference;

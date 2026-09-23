@@ -3023,6 +3023,10 @@ static void AddFiatAmountErrors(
     {
         errors["fiatAmountMinor"] = ["fiat_amount.not_positive"];
     }
+    else if (fiatAmountMinor > FiatAmount.MaxMinorUnits)
+    {
+        errors["fiatAmountMinor"] = ["fiat_amount.too_large"];
+    }
 }
 
 static void AddExternalReferenceErrors(
@@ -3344,7 +3348,7 @@ public sealed class CreatePaymentHttpRequest
     public string? FiatCurrency { get; init; }
 
     [Required]
-    [Range(1, long.MaxValue)]
+    [Range(1, FiatAmount.MaxMinorUnits)]
     public long FiatAmountMinor { get; init; }
 
     [Required]

@@ -199,6 +199,26 @@ public sealed class PaymentApiTests
     }
 
     [Fact]
+    public async Task Create_payment_rejects_a_fiat_amount_above_one_million()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "create-too-large");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/payments",
+            new { fiatCurrency = "EUR", fiatAmountMinor = 100_000_001L, externalReference = "order-too-large" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var problem = await ReadProblemAsync(response);
+        Assert.Equal("validation.failed", problem.RootElement.GetProperty("code").GetString());
+        Assert.Equal(
+            "fiat_amount.too_large",
+            problem.RootElement.GetProperty("errors").GetProperty("fiatAmountMinor")[0].GetString());
+    }
+
+    [Fact]
     public async Task Create_payment_creates_pending_currency_selection_payment()
     {
         await using var factory = new PaymentApiFactory();

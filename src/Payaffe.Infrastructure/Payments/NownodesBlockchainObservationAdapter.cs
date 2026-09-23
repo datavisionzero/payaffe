@@ -56,6 +56,15 @@ public sealed class NownodesBlockchainObservationAdapter(
         return observations;
     }
 
+    public async Task<bool> IsObservationAvailableAsync(
+        string supportedCurrency,
+        CancellationToken cancellationToken)
+    {
+        var apiKeyReference = options.Value.Nownodes.ApiKeyReference;
+        return !string.IsNullOrWhiteSpace(apiKeyReference) &&
+               !string.IsNullOrWhiteSpace(await secretResolver.ResolveAsync(apiKeyReference, cancellationToken));
+    }
+
     private async Task<string> ResolveApiKeyAsync(CancellationToken cancellationToken)
     {
         var apiKeyReference = options.Value.Nownodes.ApiKeyReference;

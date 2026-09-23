@@ -3,6 +3,7 @@ using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Persistence.Records;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 
 namespace Payaffe.Infrastructure.Persistence;
 
@@ -271,13 +272,42 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         return targets.Select(target => target.Target).ToArray();
     }
 
-    public Task<SelectCurrencyStoreResult> SelectCurrencyAsync(
+    public async Task<SelectCurrencyStoreResult> SelectCurrencyAsync(
         PaymentSelectionDraft selection,
         PaymentEventDraft paymentEvent,
         WebhookOutboxEventDraft webhookEvent,
-        CancellationToken cancellationToken) =>
-        DiscardChangesOnFailureAsync(() => SelectCurrencyCoreAsync(
-            selection, paymentEvent, webhookEvent, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await DiscardChangesOnFailureAsync(() => SelectCurrencyCoreAsync(
+                selection, paymentEvent, webhookEvent, cancellationToken));
+        }
+        catch (DbUpdateException exception) when (
+            exception is DbUpdateConcurrencyException ||
+            exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // A concurrent selection for the same Payment committed first: the
+            // Payment's version moved, or its Rate Lock already exists. The
+            // Payer gets the selection that won.
+            var payment = await dbContext.Payments
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    candidate => candidate.Id == selection.PaymentId && candidate.ProjectId == selection.ProjectId,
+                    cancellationToken);
+            if (payment is null || StringComparer.Ordinal.Equals(payment.Status, "pending_currency_selection"))
+            {
+                throw;
+            }
+
+            return SelectCurrencyStoreResult.AlreadySelected(ToReadModel(
+                payment,
+                await CalculateObservedTotalAsync(payment.ProjectId, payment.Id, cancellationToken),
+                await LoadPaymentOptionsAsync(payment.ProjectId, payment.Id, cancellationToken),
+                await LoadRateLockAsync(payment.ProjectId, payment.Id, cancellationToken),
+                await LoadPaymentInstructionAsync(payment.ProjectId, payment.Id, cancellationToken)));
+        }
+    }
 
     private async Task<SelectCurrencyStoreResult> SelectCurrencyCoreAsync(
         PaymentSelectionDraft selection,

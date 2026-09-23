@@ -263,6 +263,16 @@ public sealed class PaymentApplicationService(
             cancellationToken);
         if (address is null)
         {
+            // A concurrent selection of another currency holds the Payment's
+            // address reservation; answer with that selection.
+            var current = await paymentStore.FindByPayerPageIdAsync(payment.PayerPageId, cancellationToken);
+            if (current?.SelectedCurrency is not null)
+            {
+                return StringComparer.Ordinal.Equals(current.SelectedCurrency, supportedCurrency)
+                    ? SelectPaymentCurrencyResult.AlreadySelected(ToResponse(current))
+                    : SelectPaymentCurrencyResult.CurrencyAlreadySelected(ToResponse(current));
+            }
+
             return SelectPaymentCurrencyResult.PaymentAddressUnavailable();
         }
 
@@ -299,14 +309,32 @@ public sealed class PaymentApplicationService(
         if (storeResult.Kind == SelectCurrencyStoreResultKind.Selected &&
             storeResult.Payment is not null)
         {
-            await blockchainObservationAdapter.StartWatchingAsync(
-                new BlockchainObservationTarget(
+            // The selection is committed and polling does not depend on this
+            // call, so a provider failure here must not turn it into an error.
+            try
+            {
+                await blockchainObservationAdapter.StartWatchingAsync(
+                    new BlockchainObservationTarget(
+                        payment.Id,
+                        supportedCurrency,
+                        address.PaymentAddress,
+                        quote.ExpectedCryptoAmount,
+                        payment.ProjectId),
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Blockchain Observation could not start watching Payment {PaymentId} in Project {ProjectId} ({SupportedCurrency}); polling will pick it up.",
                     payment.Id,
-                    supportedCurrency,
-                    address.PaymentAddress,
-                    quote.ExpectedCryptoAmount,
-                    payment.ProjectId),
-                cancellationToken);
+                    payment.ProjectId,
+                    supportedCurrency);
+            }
         }
 
         return storeResult.Kind switch

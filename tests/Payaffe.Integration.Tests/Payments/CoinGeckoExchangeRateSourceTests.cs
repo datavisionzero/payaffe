@@ -79,6 +79,41 @@ public sealed class CoinGeckoExchangeRateSourceTests
         Assert.Equal(1, handler.RequestCount);
     }
 
+    /// <summary>
+    /// An upstream that keeps answering with a frozen price is fetched fresh
+    /// but its rate is old. It must not become a Rate Lock, whether it comes
+    /// from the request itself or from a recently fetched cache entry.
+    /// </summary>
+    [Fact]
+    public async Task Does_not_lock_a_freshly_fetched_rate_whose_observation_is_older_than_the_maximum_stale_age()
+    {
+        var frozenAt = RequestedAt.AddHours(-2);
+        var cache = new InMemoryRateCacheStore();
+        var handler = new RecordingHandler(_ => JsonResponse(
+            """{"bitcoin":{"eur":50000,"last_updated_at":""" + frozenAt.ToUnixTimeSeconds() + "}}"));
+        var source = CreateSource(handler, cache);
+
+        var fromRequest = await source.GetRateLockQuoteAsync("EUR", 1999, "BTC", RequestedAt, CancellationToken.None);
+        var fromCache = await source.GetRateLockQuoteAsync("EUR", 1999, "BTC", RequestedAt.AddMinutes(1), CancellationToken.None);
+
+        Assert.Null(fromRequest);
+        Assert.Null(fromCache);
+        Assert.Equal(frozenAt, Assert.Single(cache.Values).ObservedAt);
+    }
+
+    [Fact]
+    public async Task Treats_a_rate_too_small_to_convert_as_unavailable()
+    {
+        var cache = new InMemoryRateCacheStore();
+        var handler = new RecordingHandler(_ => JsonResponse(
+            """{"ethereum":{"eur":0.0000001,"last_updated_at":""" + RequestedAt.ToUnixTimeSeconds() + "}}"));
+        var source = CreateSource(handler, cache);
+
+        var quote = await source.GetRateLockQuoteAsync("EUR", 100_000_000, "ETH", RequestedAt, CancellationToken.None);
+
+        Assert.Null(quote);
+    }
+
     [Fact]
     public async Task Rejects_cache_older_than_maximum_stale_age()
     {

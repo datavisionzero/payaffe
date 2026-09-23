@@ -315,6 +315,25 @@ public sealed class BlockchairBlockchainObservationAdapterTests
         Assert.Null(handler.RequestUri);
     }
 
+    /// <summary>
+    /// Readiness is checked before a Payment Address is assigned, so a
+    /// missing API key refuses the selection instead of failing after it.
+    /// </summary>
+    [Fact]
+    public async Task Observation_is_available_only_with_a_configured_api_key()
+    {
+        var handler = new CapturingHttpMessageHandler("{}");
+        var withoutKey = CreateAdapter(handler, new BlockchainObservationProviderOptions
+        {
+            BaseUrl = new Uri("https://blockchair.test"),
+            ApiKeyReference = null,
+            MaxTransactionsPerAddressPoll = 10,
+        });
+
+        Assert.False(await withoutKey.IsObservationAvailableAsync("BTC", CancellationToken.None));
+        Assert.True(await CreateAdapter(handler).IsObservationAvailableAsync("BTC", CancellationToken.None));
+    }
+
     private static BlockchairBlockchainObservationAdapter CreateAdapter(
         CapturingHttpMessageHandler handler,
         BlockchainObservationProviderOptions? blockchairOptions = null)
