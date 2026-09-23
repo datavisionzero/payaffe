@@ -617,6 +617,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
             DateTimeOffset observedUntil,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -654,6 +655,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
             DateTimeOffset expiresBefore,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -743,6 +745,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
             DateTimeOffset observedUntil,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -806,6 +809,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
             DateTimeOffset expiresBefore,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -879,6 +883,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
             DateTimeOffset observedUntil,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -951,6 +956,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
             DateTimeOffset expiresBefore,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -1011,6 +1017,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
             DateTimeOffset observedUntil,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -1048,6 +1055,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
             DateTimeOffset expiresBefore,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -1143,6 +1151,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
             DateTimeOffset observedUntil,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {
@@ -1182,6 +1191,7 @@ public sealed class PaymentApplicationServiceTests
 
         public Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
             DateTimeOffset expiresBefore,
+            TimeSpan observedConfirmationWait,
             int maxPayments,
             CancellationToken cancellationToken)
         {

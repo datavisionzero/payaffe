@@ -434,6 +434,7 @@ public sealed class PaymentApplicationService(
 
         var result = await paymentStore.ExpireDuePaymentsAsync(
             clock.UtcNow,
+            _options.ObservedConfirmationWait,
             maxPayments,
             cancellationToken);
         return new ExpireDuePaymentsResult(result.ExpiredCount);
@@ -452,6 +453,7 @@ public sealed class PaymentApplicationService(
 
         var targets = await paymentStore.ListBlockchainObservationTargetsAsync(
             clock.UtcNow,
+            _options.ObservedConfirmationWait,
             maxPayments,
             cancellationToken);
         var observationCount = 0;

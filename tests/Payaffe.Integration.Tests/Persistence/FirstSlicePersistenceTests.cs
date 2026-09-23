@@ -1184,6 +1184,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
             var setupDbContext = setupScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
             var payment = await setupDbContext.Payments.FindAsync(createResult.Payment!.PaymentId);
             Assert.NotNull(payment);
+            payment.ExpiresAt = DateTimeOffset.Parse("2026-07-04T11:58:00Z");
             payment.LateAcceptanceEndsAt = DateTimeOffset.Parse("2026-07-04T11:59:00Z");
             await setupDbContext.SaveChangesAsync();
         }

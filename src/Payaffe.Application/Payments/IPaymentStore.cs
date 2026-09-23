@@ -28,6 +28,7 @@ public interface IPaymentStore
     /// </summary>
     Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
         DateTimeOffset observedUntil,
+        TimeSpan observedConfirmationWait,
         int maxPayments,
         CancellationToken cancellationToken);
 
@@ -53,6 +54,7 @@ public interface IPaymentStore
 
     Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
         DateTimeOffset expiresBefore,
+        TimeSpan observedConfirmationWait,
         int maxPayments,
         CancellationToken cancellationToken);
 

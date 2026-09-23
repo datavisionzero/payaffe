@@ -298,6 +298,10 @@ public sealed class WebhookEventContractTests(PostgreSqlFixture postgres) : ICla
             options.PayerPageBaseUrl = "https://pay.example.test/pay";
             options.PaymentExpiration = TimeSpan.FromHours(1);
             options.LateAcceptanceWindow = TimeSpan.FromHours(24);
+            // The expiring Payment is observed but never confirmed. Without a
+            // Confirmation Wait it expires when the window ends, which keeps the
+            // accepted example timestamps stable (ADR 0034).
+            options.ObservedConfirmationWait = TimeSpan.Zero;
         });
 
         return services.BuildServiceProvider();

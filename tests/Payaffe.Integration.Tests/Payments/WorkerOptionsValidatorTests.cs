@@ -1,3 +1,4 @@
+using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Payments;
 using Payaffe.Infrastructure.Webhooks;
 
@@ -78,6 +79,21 @@ public sealed class WorkerOptionsValidatorTests
             .Validate(null, new ReorgMonitoringWorkerOptions()).Succeeded);
         Assert.True(new WebhookDeliveryOptionsValidator()
             .Validate(null, new WebhookDeliveryOptions()).Succeeded);
+        Assert.True(new PaymentApplicationOptionsValidator()
+            .Validate(null, new PaymentApplicationOptions()).Succeeded);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(24 * 31)]
+    public void Rejects_an_observed_confirmation_wait_outside_zero_to_thirty_days(int hours)
+    {
+        var result = new PaymentApplicationOptionsValidator().Validate(
+            null,
+            new PaymentApplicationOptions { ObservedConfirmationWait = TimeSpan.FromHours(hours) });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Payments:ObservedConfirmationWait must be between zero and 30 days.", result.Failures!);
     }
 
     [Fact]
