@@ -83,13 +83,19 @@ origin and appears in your own markup:
 ```csharp
 var qr = PayaffePaymentQrCode.Create(payment.PaymentInstruction!, new PayaffeQrCodeOptions
 {
-    DarkColor = "currentColor",
-    LightColor = null,
+    DarkColor = "#000000",
+    LightColor = "#ffffff",
     AccessibleLabel = $"Scan to pay order {order.Number}",
 });
 
 return Results.Content(qr.ToSvg(), "image/svg+xml");
 ```
+
+Served like this and shown through `<img>`, the SVG is a document of its own
+and inherits nothing from your page, so give it explicit colours: `currentColor`
+would render black even on a dark theme, and a transparent background would lose
+the quiet zone there. `DarkColor = "currentColor"` with `LightColor = null`
+follows the page's colours only when you inline the SVG into your own markup.
 
 The payload is `instruction.Uri`, byte for byte. The helper never assembles a
 URI from an address and an amount, because the amount belongs to a Rate Lock and
@@ -121,6 +127,14 @@ await foreach (var state in payaffe.PollPaymentAsync(paymentId, cancellationToke
     order.Apply(state.Status);
 }
 ```
+
+Polling is the reconciliation path, so a transient failure does not end it. A
+transport failure, a timeout, or a `429`, `502`, `503` or `504` that outlasts
+the read's own retries is skipped, and the next read waits the grown interval,
+or the server's `Retry-After` when that is longer. Any other API error, such as
+an authentication failure or `payment.not_found`, ends the loop with a
+`PayaffeApiException`, and so does your cancellation token. Treat the
+enumeration as running until the Payment is terminal or you stop it.
 
 Poll once per order, not once per open browser tab. `expired` is terminal but
 is not a failure: a late transfer may still be completed or manually settled,
@@ -242,6 +256,11 @@ that same instruction here. Neither surface can replace the other's selection.
 `RetryAfter` when the response carried it. It never contains the bearer token
 or the request body. Cancellation and caller-owned HTTP timeouts stay
 distinguishable from API errors.
+
+A single call retries a `429` or `503` up to `MaximumRetries` times, waiting at
+most `MaximumRetryDelay` between attempts. When the server asks for a longer
+`Retry-After`, the call does not sleep through it: it throws at once with
+`RetryAfter` set, and you decide whether to wait.
 
 Unknown future values of Payment Status, Supported Currency, option status, and
 error codes are preserved rather than rejected, because adding one is a

@@ -21,7 +21,7 @@
       server release that never happened. The two version lines meet only in
       the contract the baseline states: SDK 1.x speaks Integration API /api/v1.
     -->
-    <VersionPrefix>0.3.0</VersionPrefix>
+    <VersionPrefix>0.3.1</VersionPrefix>
     <VersionSuffix></VersionSuffix>
   </PropertyGroup>
 

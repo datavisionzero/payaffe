@@ -11,18 +11,25 @@ the one part every product already has.
 ## What it demonstrates
 
 - creating a Payment with the order identifier as both External Reference and
-  `Idempotency-Key`, so a retried creation returns the same Payment;
+  `Idempotency-Key`, so a retried creation returns the same Payment, and an
+  order whose creation timed out is resumed with that key rather than placed
+  again;
 - showing the Payment Options the Project can actually serve, with the stable
   reason code for an option it cannot;
 - Currency Selection, including the losing half of a race and a missing exchange
   rate;
 - the Payment Instruction: exact amount, address, wallet URI, and a QR code
-  rendered by this backend and served from this origin;
+  rendered by this backend and served from this origin, in explicit colours
+  because an `<img>` inherits none from the page;
 - expiry that does not close the order, because a late transfer can still settle;
 - Webhook Delivery that is verified against the raw bytes, deduplicated by event
-  identifier, and only then allowed to fulfil the order;
-- polling as the second channel, one loop per order, for the Delivery that never
-  arrives;
+  identifier, and only then allowed to fulfil the order — and only when it
+  describes the Payment the shop created for that order, for its amount and
+  currency, because the External Reference finds an order but authorizes
+  nothing;
+- polling as the second channel, one loop per order however often a currency is
+  chosen, for the Delivery that never arrives, which keeps going through
+  failures and stops only on a terminal status or a refusal;
 - two storefronts, each with its own Payaffe Project, credential, webhook secret
   and orders, which cannot see each other.
 
@@ -77,11 +84,12 @@ and pays, underpays, overpays and expires orders through it.
 ## How a frontend consumes this
 
 The page in `wwwroot/assets/checkout.js` is one frontend, not the frontend. It uses
-four endpoints of this shop and no Payaffe endpoint at all:
+these endpoints of this shop and no Payaffe endpoint at all:
 
 | Endpoint | Purpose |
 | --- | --- |
 | `POST /{storefront}/api/orders` | Place an order and create its Payment. |
+| `POST /{storefront}/api/orders/{orderId}/payment` | Retry the Payment creation of an order whose placement answered `retryable`. |
 | `GET /{storefront}/api/orders/{orderId}` | The order as this shop sees it, for progress. |
 | `POST /{storefront}/api/orders/{orderId}/currency` | Choose how to pay; returns the instruction. |
 | `GET /{storefront}/api/orders/{orderId}/payment-code.svg` | The QR code, served from this origin. |

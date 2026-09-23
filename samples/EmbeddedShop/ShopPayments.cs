@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Options;
 using Payaffe.Sdk;
 
@@ -33,24 +34,79 @@ internal sealed class ShopPayments(
             configuration.FiatCurrency,
             configuration.AcceptTestPayments);
 
+        return await CreatePaymentAsync(order, cancellationToken);
+    }
+
+    /// <summary>
+    /// Finishes an order whose Payment creation failed. Payaffe may have created the Payment and
+    /// lost only the answer, so this repeats the same request with the same idempotency key and
+    /// binds whichever Payment comes back, rather than placing a new order.
+    /// </summary>
+    public async Task<IResult> ResumePaymentAsync(
+        string storefront,
+        Guid orderId,
+        string customerId,
+        CancellationToken cancellationToken)
+    {
+        ShopOrder? order = orders.FindForCustomer(storefront, orderId, customerId);
+        if (order is null)
+        {
+            return Results.NotFound();
+        }
+
+        return order.PaymentId is null
+            ? await CreatePaymentAsync(order, cancellationToken)
+            : Results.Ok(OrderView.Of(order));
+    }
+
+    private async Task<IResult> CreatePaymentAsync(ShopOrder order, CancellationToken cancellationToken)
+    {
         // The order identifier is both the External Reference and the idempotency key. It is
         // stable, so a retried creation after a timeout returns the same Payment instead of
         // allocating a second one against the same order.
         string orderReference = order.OrderId.ToString("D");
         try
         {
-            Payment payment = await clients.CreateClient(storefront).CreatePaymentAsync(
-                new CreatePaymentRequest(configuration.FiatCurrency, item.PriceMinor, orderReference),
+            Payment payment = await clients.CreateClient(order.Storefront).CreatePaymentAsync(
+                new CreatePaymentRequest(order.FiatCurrency, order.Item.PriceMinor, orderReference),
                 orderReference,
                 cancellationToken);
-            order.Apply(payment, "created");
+            if (!order.AttachPayment(payment))
+            {
+                logger.LogError(
+                    "Payaffe returned Payment {PaymentId} for order {OrderId}, which is not for its amount.",
+                    payment.PaymentId,
+                    order.OrderId);
+                return CreationFailed(order, retryable: false);
+            }
+
             return Results.Ok(OrderView.Of(order));
         }
         catch (PayaffeApiException exception)
         {
-            return PaymentsUnavailable(exception, "creating a payment");
+            LogRefusal(exception, "creating a payment");
+            bool retryable = exception.StatusCode is HttpStatusCode.TooManyRequests ||
+                (int)exception.StatusCode >= 500;
+            return CreationFailed(order, retryable);
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException ||
+            (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            // Unreachable or timed out, after the SDK's own retries. The Payment may exist, so
+            // the order keeps its identifier and the customer's retry resumes it.
+            logger.LogWarning(
+                exception,
+                "Payaffe did not answer while creating the payment for order {OrderId}.",
+                order.OrderId);
+            return CreationFailed(order, retryable: true);
         }
     }
+
+    private static IResult CreationFailed(ShopOrder order, bool retryable) =>
+        Results.Json(
+            new { error = "payments_unavailable", retryable, orderId = order.OrderId },
+            statusCode: StatusCodes.Status502BadGateway);
 
     public async Task<IResult> SelectCurrencyAsync(
         string storefront,
@@ -226,6 +282,22 @@ internal sealed class ShopPayments(
             return Results.Ok(new { status = "ignored" });
         }
 
+        // The External Reference found the order, and it proves nothing more: any Payment in the
+        // Project can carry this order's identifier, which the customer has seen. Only the
+        // Payment the shop created for the order, for its amount and currency, may change it.
+        // Not claimed either, so a redelivery still counts once creation has bound the Payment.
+        PayaffeWebhookPayment described = webhookEvent.Payment;
+        if (!order.Describes(described.PaymentId, described.FiatCurrency, described.FiatAmountMinor))
+        {
+            logger.LogWarning(
+                "Webhook event {EventId} names order {OrderId} but describes Payment {PaymentId}, " +
+                "which is not the order's Payment for its amount.",
+                webhookEvent.EventId,
+                order.OrderId,
+                described.PaymentId);
+            return Results.Ok(new { status = "ignored" });
+        }
+
         // At-least-once means the same event will arrive again. Claiming it before acting is
         // what makes fulfilment happen once; in a product the claim and the fulfilment share one
         // database transaction.
@@ -257,14 +329,17 @@ internal sealed class ShopPayments(
     /// </summary>
     private IResult PaymentsUnavailable(PayaffeApiException exception, string activity)
     {
+        LogRefusal(exception, activity);
+        return Results.Json(
+            new { error = "payments_unavailable" },
+            statusCode: StatusCodes.Status502BadGateway);
+    }
+
+    private void LogRefusal(PayaffeApiException exception, string activity) =>
         logger.LogError(
             exception,
             "Payaffe refused while {Activity}: {Code}, correlation {CorrelationId}.",
             activity,
             exception.Code,
             exception.CorrelationId);
-        return Results.Json(
-            new { error = "payments_unavailable" },
-            statusCode: StatusCodes.Status502BadGateway);
-    }
 }

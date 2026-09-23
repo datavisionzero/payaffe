@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Microsoft.Extensions.Options;
 using Payaffe.Sdk;
@@ -14,12 +15,22 @@ internal sealed class OrderReconciler(
     IOptions<ShopOptions> options,
     ILogger<OrderReconciler> logger) : BackgroundService
 {
-    private readonly Channel<ShopOrder> _queue = Channel.CreateUnbounded<ShopOrder>();
+    private static readonly TimeSpan _initialRestartDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan _maximumRestartDelay = TimeSpan.FromMinutes(1);
 
+    private readonly Channel<ShopOrder> _queue = Channel.CreateUnbounded<ShopOrder>();
+    private readonly ConcurrentDictionary<Guid, byte> _tracked = new();
+
+    /// <summary>
+    /// Starts reconciling an order unless a loop for it is already running, so a repeated or
+    /// racing Currency Selection does not multiply the reads.
+    /// </summary>
     public void Track(ShopOrder order)
     {
         ArgumentNullException.ThrowIfNull(order);
-        if (options.Value.ReconcileByPolling && order.PaymentId is not null)
+        if (options.Value.ReconcileByPolling &&
+            order.PaymentId is not null &&
+            _tracked.TryAdd(order.OrderId, 0))
         {
             _queue.Writer.TryWrite(order);
         }
@@ -39,27 +50,62 @@ internal sealed class OrderReconciler(
     {
         try
         {
-            PayaffeClient client = clients.CreateClient(order.Storefront);
-            await foreach (Payment payment in client.PollPaymentAsync(
-                order.PaymentId!.Value,
-                cancellationToken: cancellationToken))
+            // The SDK already polls through transient failures. Whatever reaches this loop would
+            // otherwise end a fire-and-forget task silently, so every failure is logged, and only
+            // a refusal that repeating cannot change stops reconciling.
+            TimeSpan restartDelay = _initialRestartDelay;
+            while (true)
             {
-                order.Apply(payment, "polling");
+                try
+                {
+                    PayaffeClient client = clients.CreateClient(order.Storefront);
+                    await foreach (Payment payment in client.PollPaymentAsync(
+                        order.PaymentId!.Value,
+                        cancellationToken: cancellationToken))
+                    {
+                        order.Apply(payment, "polling");
+                    }
+
+                    return;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (PayaffeApiException exception) when ((int)exception.StatusCode is >= 400 and < 500)
+                {
+                    logger.LogError(
+                        exception,
+                        "Reconciling order {OrderId} stopped: {Code}, correlation {CorrelationId}.",
+                        order.OrderId,
+                        exception.Code,
+                        exception.CorrelationId);
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogWarning(
+                        exception,
+                        "Reconciling order {OrderId} failed; restarting in {Delay}.",
+                        order.OrderId,
+                        restartDelay);
+                }
+
+                await Task.Delay(restartDelay, cancellationToken);
+                restartDelay = restartDelay * 2 < _maximumRestartDelay
+                    ? restartDelay * 2
+                    : _maximumRestartDelay;
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // The application is shutting down. The order keeps its state and the next start
             // picks it up again from the order book.
         }
-        catch (PayaffeApiException exception)
+        finally
         {
-            logger.LogError(
-                exception,
-                "Reconciling order {OrderId} stopped: {Code}, correlation {CorrelationId}.",
-                order.OrderId,
-                exception.Code,
-                exception.CorrelationId);
+            // A stopped loop can be started again by the next selection.
+            _tracked.TryRemove(order.OrderId, out _);
         }
     }
 }

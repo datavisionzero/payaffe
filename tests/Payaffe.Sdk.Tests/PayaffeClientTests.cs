@@ -105,6 +105,33 @@ public sealed class PayaffeClientTests
     }
 
     [Fact]
+    public async Task A_retry_after_beyond_the_retry_delay_bound_is_returned_instead_of_slept()
+    {
+        int attempts = 0;
+        using HttpClient httpClient = new(new DelegateHandler((_, _) =>
+        {
+            attempts++;
+            HttpResponseMessage response = ProblemResponse(
+                HttpStatusCode.ServiceUnavailable,
+                "unexpected_error",
+                "correlation-503");
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromHours(1));
+            return Task.FromResult(response);
+        }));
+        PayaffeClient client = CreateClient(httpClient);
+
+        PayaffeApiException exception = await Assert.ThrowsAsync<PayaffeApiException>(() =>
+            client.CreatePaymentAsync(
+                    new CreatePaymentRequest("EUR", 1999, "order-123"),
+                    "stable-key")
+                .WaitAsync(TimeSpan.FromSeconds(10)));
+
+        Assert.Equal(1, attempts);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, exception.StatusCode);
+        Assert.Equal(TimeSpan.FromHours(1), exception.RetryAfter);
+    }
+
+    [Fact]
     public async Task Safe_selection_retry_reuses_the_same_request()
     {
         int attempts = 0;
@@ -275,6 +302,113 @@ public sealed class PayaffeClientTests
     }
 
     [Fact]
+    public async Task Polling_continues_through_transient_failures_that_outlast_request_retries()
+    {
+        // Each read makes three attempts; every failure below exhausts one read.
+        Queue<Func<HttpResponseMessage>> responses = new(
+        [
+            .. Enumerable.Repeat<Func<HttpResponseMessage>>(
+                () => throw new HttpRequestException("connection refused"), 3),
+            () => JsonResponse(PaymentJson(Guid.NewGuid(), status: "waiting_for_payment")),
+            .. Enumerable.Repeat<Func<HttpResponseMessage>>(
+                () => throw new TaskCanceledException("The request timed out."), 3),
+            .. Enumerable.Repeat<Func<HttpResponseMessage>>(
+                () => ProblemResponse(HttpStatusCode.ServiceUnavailable, "unexpected_error", "c"), 3),
+            () => ProblemResponse(HttpStatusCode.BadGateway, "unexpected_error", "c"),
+            () => JsonResponse(PaymentJson(Guid.NewGuid(), status: "completed")),
+        ]);
+        using HttpClient httpClient = new(new DelegateHandler((_, _) =>
+            Task.FromResult(responses.Dequeue()())));
+        PayaffeClient client = CreateClient(httpClient);
+        List<PaymentStatus> observed = [];
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+
+        await foreach (Payment payment in client.PollPaymentAsync(
+            Guid.NewGuid(),
+            FastPolling(),
+            timeout.Token))
+        {
+            observed.Add(payment.Status);
+        }
+
+        Assert.Equal([PaymentStatus.WaitingForPayment, PaymentStatus.Completed], observed);
+        Assert.Empty(responses);
+    }
+
+    [Fact]
+    public async Task Polling_waits_the_retry_after_of_a_skipped_read()
+    {
+        int attempts = 0;
+        using HttpClient httpClient = new(new DelegateHandler((_, _) =>
+        {
+            attempts++;
+            if (attempts == 1)
+            {
+                HttpResponseMessage limited = ProblemResponse(
+                    HttpStatusCode.TooManyRequests,
+                    "rate_limited",
+                    "c");
+                limited.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromMilliseconds(300));
+                return Task.FromResult(limited);
+            }
+
+            return Task.FromResult(JsonResponse(PaymentJson(Guid.NewGuid(), status: "completed")));
+        }));
+        PayaffeClient client = CreateClient(httpClient, maximumRetries: 0);
+        System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        await foreach (Payment _ in client.PollPaymentAsync(Guid.NewGuid(), FastPolling()))
+        {
+        }
+
+        Assert.Equal(2, attempts);
+        Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(250), $"Waited {stopwatch.Elapsed}.");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "authentication.failed")]
+    [InlineData(HttpStatusCode.NotFound, "payment.not_found")]
+    public async Task Polling_ends_on_a_permanent_api_error(HttpStatusCode statusCode, string code)
+    {
+        int attempts = 0;
+        using HttpClient httpClient = new(new DelegateHandler((_, _) =>
+        {
+            attempts++;
+            return Task.FromResult(ProblemResponse(statusCode, code, "c"));
+        }));
+        PayaffeClient client = CreateClient(httpClient);
+
+        PayaffeApiException exception = await Assert.ThrowsAsync<PayaffeApiException>(async () =>
+        {
+            await foreach (Payment _ in client.PollPaymentAsync(Guid.NewGuid(), FastPolling()))
+            {
+            }
+        });
+
+        Assert.Equal(code, exception.Code.Value);
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task Polling_stops_when_the_caller_cancels_during_transient_failures()
+    {
+        using CancellationTokenSource cancellation = new(TimeSpan.FromMilliseconds(200));
+        using HttpClient httpClient = new(new DelegateHandler((_, _) =>
+            throw new HttpRequestException("connection refused")));
+        PayaffeClient client = CreateClient(httpClient);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (Payment _ in client.PollPaymentAsync(
+                Guid.NewGuid(),
+                FastPolling(),
+                cancellation.Token))
+            {
+            }
+        });
+    }
+
+    [Fact]
     public async Task Named_clients_keep_project_credentials_and_addresses_separate()
     {
         List<(string Host, string Token)> requests = [];
@@ -406,6 +540,55 @@ public sealed class PayaffeClientTests
 
         Assert.Equal(expectedAttempts, attempts);
     }
+
+    [Fact]
+    public async Task A_simulation_without_an_idempotency_key_is_retried_after_an_unprocessed_503()
+    {
+        int attempts = 0;
+        Guid paymentId = Guid.NewGuid();
+        using HttpClient httpClient = new(new DelegateHandler((request, _) =>
+        {
+            attempts++;
+            Assert.False(request.Headers.Contains("Idempotency-Key"));
+            if (attempts == 1)
+            {
+                return Task.FromResult(ProblemResponse(
+                    HttpStatusCode.ServiceUnavailable,
+                    "unexpected_error",
+                    "retry-simulation"));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = new StringContent(
+                    $$"""
+                    {
+                      "paymentId": "{{paymentId}}",
+                      "supportedCurrency": "BTC",
+                      "paymentAddress": "tb1qsimulated",
+                      "transactionHash": "{{new string('b', 64)}}",
+                      "amount": "0.0002",
+                      "recordedAt": "2026-09-23T12:00:00+00:00"
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        }));
+        PayaffeClient client = CreateClient(httpClient, maximumRetries: 2);
+
+        SimulatedTransaction transaction = await client.SimulatePaymentAsync(paymentId);
+
+        Assert.Equal(paymentId, transaction.PaymentId);
+        Assert.Equal(2, attempts);
+    }
+
+    private static PaymentPollingOptions FastPolling() => new()
+    {
+        InitialInterval = TimeSpan.FromMilliseconds(1),
+        MaximumInterval = TimeSpan.FromMilliseconds(2),
+        JitterRatio = 0,
+    };
 
     private static PayaffeClient CreateClient(HttpClient httpClient, int maximumRetries = 2)
     {

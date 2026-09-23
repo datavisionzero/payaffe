@@ -88,8 +88,8 @@ button:disabled {
 .qr img {
   width: 12rem;
   height: 12rem;
-  color: var(--ink);
-  background: var(--paper);
+  /* The code carries its own white quiet zone; an <img> inherits no colour from the page. */
+  background: #ffffff;
   padding: 0.25rem;
   border: 1px solid var(--line);
   border-radius: 0.4rem;

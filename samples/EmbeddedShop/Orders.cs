@@ -76,13 +76,53 @@ public sealed class ShopOrder
     public string? LastSignal { get; private set; }
 
     /// <summary>
-    /// Folds the Payment as the shop just read it into the order.
+    /// Binds the Payment Payaffe created for this order. The first binding is the only one: a
+    /// retried creation with the order's idempotency key returns the same Payment and binds
+    /// again harmlessly, while a Payment for another amount or currency, or a second Payment,
+    /// is refused and changes nothing.
     /// </summary>
-    public void Apply(Payment payment, string signal)
+    public bool AttachPayment(Payment payment)
     {
         ArgumentNullException.ThrowIfNull(payment);
-        ApplyCore(
+        lock (_gate)
+        {
+            if (!IsForThisOrder(payment.FiatCurrency, payment.FiatAmountMinor) ||
+                (PaymentId is not null && PaymentId != payment.PaymentId))
+            {
+                return false;
+            }
+
+            PaymentId = payment.PaymentId;
+        }
+
+        return Apply(payment, "created");
+    }
+
+    /// <summary>
+    /// Whether a Payment is the one this order is paid by. The External Reference only says
+    /// which order a Payment claims to be for, and anything in the Project can claim that; the
+    /// Payment identifier the shop stored at creation, the amount and the currency are what make
+    /// it this order's Payment.
+    /// </summary>
+    public bool Describes(Guid paymentId, string fiatCurrency, long fiatAmountMinor)
+    {
+        lock (_gate)
+        {
+            return PaymentId == paymentId && IsForThisOrder(fiatCurrency, fiatAmountMinor);
+        }
+    }
+
+    /// <summary>
+    /// Folds the Payment as the shop just read it into the order. Returns false, changing
+    /// nothing, when it is not this order's Payment.
+    /// </summary>
+    public bool Apply(Payment payment, string signal)
+    {
+        ArgumentNullException.ThrowIfNull(payment);
+        return ApplyCore(
             payment.PaymentId,
+            payment.FiatCurrency,
+            payment.FiatAmountMinor,
             payment.Status,
             payment.SelectedCurrency,
             payment.ExpiresAt,
@@ -94,13 +134,16 @@ public sealed class ShopOrder
 
     /// <summary>
     /// Folds the Payment a verified Webhook Event describes into the order. The Delivery carries
-    /// no Payment Instruction and no options, so what the order already has is kept.
+    /// no Payment Instruction and no options, so what the order already has is kept. Returns
+    /// false, changing nothing, when it is not this order's Payment.
     /// </summary>
-    public void Apply(PayaffeWebhookPayment payment, bool testMode, string signal)
+    public bool Apply(PayaffeWebhookPayment payment, bool testMode, string signal)
     {
         ArgumentNullException.ThrowIfNull(payment);
-        ApplyCore(
+        return ApplyCore(
             payment.PaymentId,
+            payment.FiatCurrency,
+            payment.FiatAmountMinor,
             payment.Status,
             payment.SelectedCurrency,
             payment.ExpiresAt,
@@ -110,6 +153,10 @@ public sealed class ShopOrder
             signal);
     }
 
+    private bool IsForThisOrder(string fiatCurrency, long fiatAmountMinor) =>
+        string.Equals(fiatCurrency, FiatCurrency, StringComparison.Ordinal) &&
+        fiatAmountMinor == Item.PriceMinor;
+
     /// <summary>
     /// The one place an authoritative Payment state reaches the order. The Webhook endpoint and
     /// the reconciling poller both land here, because they carry the same statement and the
@@ -117,8 +164,10 @@ public sealed class ShopOrder
     /// acting on them again, so an out-of-order or repeated Delivery cannot fulfil it twice or
     /// take a fulfilment back.
     /// </summary>
-    private void ApplyCore(
+    private bool ApplyCore(
         Guid paymentId,
+        string fiatCurrency,
+        long fiatAmountMinor,
         PaymentStatus status,
         SupportedCurrency? selectedCurrency,
         DateTimeOffset expiresAt,
@@ -129,9 +178,13 @@ public sealed class ShopOrder
     {
         lock (_gate)
         {
+            if (PaymentId != paymentId || !IsForThisOrder(fiatCurrency, fiatAmountMinor))
+            {
+                return false;
+            }
+
             LastSignal = signal;
             TestMode = testMode;
-            PaymentId ??= paymentId;
             ExpiresAt = expiresAt;
             if (options is not null)
             {
@@ -150,7 +203,7 @@ public sealed class ShopOrder
 
             if (Fulfillment == FulfillmentState.Fulfilled)
             {
-                return;
+                return true;
             }
 
             Status = status;
@@ -160,7 +213,7 @@ public sealed class ShopOrder
             if (testMode && !AcceptsTestPayments)
             {
                 LastSignal = $"{signal}, ignored: simulated payment";
-                return;
+                return true;
             }
 
             if (status == PaymentStatus.Completed || status == PaymentStatus.Settled)
@@ -168,13 +221,15 @@ public sealed class ShopOrder
                 Fulfillment = FulfillmentState.Fulfilled;
                 FulfilledAt = DateTimeOffset.UtcNow;
                 FulfillmentCount++;
-                return;
+                return true;
             }
 
             if (status == PaymentStatus.Expired)
             {
                 Fulfillment = FulfillmentState.Expired;
             }
+
+            return true;
         }
     }
 }
