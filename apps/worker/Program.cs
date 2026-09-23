@@ -62,6 +62,7 @@ builder.Services.AddOptions<WorkerHealthOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddPayaffeInstallationMode(builder.Configuration);
 builder.Services.AddPayaffeApplication();
 builder.Services.AddPayaffeInfrastructure(connectionString!, applySchemaOnStartup: true);
 

@@ -164,6 +164,7 @@ them:
 - `PAYAFFE_PAYER_PAGE_BASE_URL`
 - `PAYAFFE_DEPLOYMENT_ENVIRONMENT`
 - `PAYAFFE_RELEASE`
+- `PAYAFFE_INSTALLATION_MODE`
 - `PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE`
 - `PAYAFFE_BLOCKCHAIN_OBSERVATION_BLOCKCHAIR_BASE_URL`
 - `PAYAFFE_BLOCKCHAIN_OBSERVATION_BLOCKCHAIR_API_KEY_REFERENCE`
@@ -212,6 +213,15 @@ Production secrets must not be committed. The static browser application
 carries no installation-specific API URL. Browser errors are posted to this
 installation's own API and scrubbed there
 ([ADR 0026](../adr/0026-an-error-is-an-entry-and-there-is-no-error-tracker.md)).
+`PAYAFFE_INSTALLATION_MODE` is `live` by default and `test` for an
+installation that simulates its payments
+([ADR 0033](../adr/0033-a-test-installation-simulates-its-external-truth.md)).
+The first host to start against an empty database records the mode, and every
+host after that, including the Admin MCP host, refuses to start when it is
+configured for the other one; a database that already held Payments before the
+setting existed is recorded as `live`. Switching modes means starting against a
+new database, so real and simulated Payments never share one.
+
 Blockchain Observation mode configuration uses
 `PAYAFFE_BLOCKCHAIN_OBSERVATION_MODE`. The accepted values are `none`,
 `blockchair`, and `nownodes`. The default `none` mode keeps provider polling

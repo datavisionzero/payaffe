@@ -260,6 +260,7 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 });
+builder.Services.AddPayaffeInstallationMode(builder.Configuration);
 builder.Services.AddPayaffeApplication();
 
 // A deployment that runs the dedicated worker host sets this to false so the

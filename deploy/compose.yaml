@@ -30,6 +30,9 @@ name: payaffe
 # The API and the worker read the same settings; only the process topology
 # differs.
 x-backend-environment: &backend-environment
+  # `live` or `test`, recorded in the database on first start and never
+  # changed after that (ADR 0033).
+  Installation__Mode: ${PAYAFFE_INSTALLATION_MODE:-live}
   ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
   # One public address for the whole installation. The API host serves both the
   # browser application and its API, so generated payer links cannot disagree

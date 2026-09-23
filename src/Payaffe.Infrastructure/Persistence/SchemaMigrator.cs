@@ -59,6 +59,7 @@ public static class SchemaMigrator
                 }
 
                 await DefaultProjectUpgrade.ApplyAsync(scope.ServiceProvider, cancellationToken);
+                await InstallationModeRecord.EnsureAsync(scope.ServiceProvider, cancellationToken);
 
                 return pending;
             }

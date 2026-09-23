@@ -31,6 +31,7 @@ public static class DependencyInjection
         bool registerHostedWorkers = true,
         bool applySchemaOnStartup = false)
     {
+        var installationMode = services.ResolveInstallationMode();
         services.AddDbContext<PayaffeDbContext>(options => options.UseNpgsql(connectionString));
         services.AddOptions<PaymentApplicationOptions>();
 
