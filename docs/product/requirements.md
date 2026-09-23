@@ -146,6 +146,8 @@ Payments have a configurable Payment Expiration.
 - Admins can configure the Payment Expiration for each Project.
 - If the Payer does not complete the Payment before the configured expiration time, the Payment leaves the regular payment window.
 - A Blockchain Transaction with an Observed Payment Time before Payment Expiration may still complete the Payment automatically even when it is confirmed after Payment Expiration.
+- A Payment whose Payer has not selected a Supported Currency expires at Payment Expiration.
+- An Observed Payment whose Matching Blockchain Transaction was observed inside Payment Expiration or the Late Acceptance Window does not expire when the Late Acceptance Window ends. It waits for the Confirmation Requirement for up to the installation-wide Confirmation Wait, 72 hours by default, and expires when the Confirmation Wait ends.
 
 ## Late Payments
 

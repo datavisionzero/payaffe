@@ -35,6 +35,7 @@ builder.Services.AddOptions<AdminMcpOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddSingleton<AdminMcpRateLimiter>();
+builder.Services.AddHostedService<AdminMcpAccountVerificationHostedService>();
 
 builder.Services
     .AddMcpServer(options => options.ServerInfo = new() { Name = "payaffe-admin", Version = ProductVersion.Value })
@@ -49,6 +50,11 @@ catch (OptionsValidationException exception)
 {
     // The stdio transport keeps a reader alive, so a failed start would
     // otherwise leave the process hanging instead of reporting a clear exit.
+    await Console.Error.WriteLineAsync($"Admin MCP host configuration is invalid: {exception.Message}");
+    Environment.Exit(78);
+}
+catch (AdminMcpAccountUnavailableException exception)
+{
     await Console.Error.WriteLineAsync($"Admin MCP host configuration is invalid: {exception.Message}");
     Environment.Exit(78);
 }

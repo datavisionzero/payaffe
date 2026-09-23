@@ -286,6 +286,9 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(account => account.FailedPasswordAttemptCount).HasColumnName("failed_password_attempt_count").HasColumnType("integer");
             entity.Property(account => account.LockedUntil).HasColumnName("locked_until").HasColumnType("timestamp with time zone");
             entity.Property(account => account.LastPasswordVerifiedAt).HasColumnName("last_password_verified_at").HasColumnType("timestamp with time zone");
+            entity.Property(account => account.LastTotpTimeStep).HasColumnName("last_totp_time_step").HasColumnType("bigint");
+            entity.Property(account => account.FailedSecondFactorAttemptCount).HasColumnName("failed_second_factor_attempt_count").HasColumnType("integer").HasDefaultValue(0);
+            entity.Property(account => account.SecondFactorLockedUntil).HasColumnName("second_factor_locked_until").HasColumnType("timestamp with time zone");
             entity.Property(account => account.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
             entity.Property(account => account.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
             entity.Property(account => account.Version)
@@ -305,6 +308,9 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 table.HasCheckConstraint(
                     "ck_admin_accounts_failed_password_attempt_count",
                     "failed_password_attempt_count >= 0");
+                table.HasCheckConstraint(
+                    "ck_admin_accounts_failed_second_factor_attempt_count",
+                    "failed_second_factor_attempt_count >= 0");
             });
         });
     }
@@ -463,6 +469,7 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.Property(payment => payment.ConfirmedEligibleTotal).HasColumnName("confirmed_eligible_total").HasColumnType("text");
             entity.Property(payment => payment.CompletedAt).HasColumnName("completed_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.SettledAt).HasColumnName("settled_at").HasColumnType("timestamp with time zone");
+            entity.Property(payment => payment.LastPolledAt).HasColumnName("last_polled_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
             entity.Property(payment => payment.Version)
@@ -486,6 +493,9 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
             entity.HasIndex(payment => payment.PayerPageId)
                 .IsUnique()
                 .HasDatabaseName("uq_payments_payer_page_id");
+            entity.HasIndex(payment => new { payment.LastPolledAt, payment.Id })
+                .HasFilter("status in ('waiting_for_payment', 'observed')")
+                .HasDatabaseName("ix_payments_observation_rotation");
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint(

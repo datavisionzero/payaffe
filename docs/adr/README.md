@@ -64,4 +64,5 @@ material value to understanding the decision.
 - [0031 – Embedded payments use the Integration API](./0031-embedded-payments-use-the-integration-api.md)
 - [0032 – The client address is the connection, until a proxy is named](./0032-the-client-address-is-the-connection-until-a-proxy-is-named.md)
 - [0033 – A test installation simulates its external truth](./0033-a-test-installation-simulates-its-external-truth.md)
+- [0034 – An Observed Payment waits for the confirmations of a transaction it saw in time](./0034-an-observed-payment-waits-for-the-confirmations-of-a-transaction-it-saw-in-time.md)
 - [0036 – Webhook Delivery reaches only public addresses](./0036-webhook-delivery-reaches-only-public-addresses.md)

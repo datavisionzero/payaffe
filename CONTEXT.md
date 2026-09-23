@@ -135,12 +135,16 @@ A managed set of pre-provisioned Payment Addresses that `payaffe` may assign to 
 _Avoid_: Wallet, account list
 
 **Payment Expiration**:
-The configured time limit after which an unpaid Payment leaves the regular payment window.
+The configured time limit after which an unpaid Payment leaves the regular payment window. A Payment still in Pending Currency Selection expires at Payment Expiration, because without a Payment Address it cannot be paid late.
 _Avoid_: Timeout, cancellation
 
 **Late Acceptance Window**:
 The configured time after Payment Expiration during which a matching late Blockchain Transaction may still complete a Payment automatically.
 _Avoid_: Grace period, timeout extension
+
+**Confirmation Wait**:
+The configured time after the Late Acceptance Window during which an Observed Payment whose Matching Blockchain Transaction was observed inside Payment Expiration or the Late Acceptance Window keeps waiting for its Confirmation Requirement before it expires.
+_Avoid_: Grace period, confirmation timeout
 
 **Supported Currency**:
 A cryptocurrency that the system can accept for payments.

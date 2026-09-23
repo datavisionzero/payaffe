@@ -295,6 +295,22 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
         return adminAccountId;
     }
 
+    /// <summary>
+    /// Enrolls a TOTP factor on an existing account the way the operator
+    /// procedure does: the secret becomes resolvable and the account references it.
+    /// </summary>
+    public async Task EnrollTotpAsync(Guid adminAccountId, string totpSecretReference, byte[] totpSecret)
+    {
+        _totpSecrets[totpSecretReference] = totpSecret;
+
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        var account = await dbContext.AdminAccounts.SingleAsync(candidate => candidate.Id == adminAccountId);
+        account.TotpSecretReference = totpSecretReference;
+        account.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync();
+    }
+
     private sealed class FixedExchangeRateSource(IReadOnlySet<string> unavailableCurrencies)
         : IExchangeRateSource
     {
@@ -395,7 +411,8 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
     private sealed class FixedWebhookSecretResolver(
         IReadOnlyDictionary<string, string> secrets) : IWebhookSecretResolver
     {
-        public Task<string?> ResolveAsync(
+        public Task<string?> ResolveForProjectAsync(
+            Guid projectId,
             string secretReference,
             CancellationToken cancellationToken)
         {

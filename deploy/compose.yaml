@@ -46,6 +46,7 @@ x-backend-environment: &backend-environment
   # browser application and its API, so generated payer links cannot disagree
   # with the application origin.
   Payments__PayerPageBaseUrl: ${PAYAFFE_PUBLIC_URL:?Set PAYAFFE_PUBLIC_URL in .env}/pay
+  Payments__ObservedConfirmationWait: ${PAYAFFE_OBSERVED_CONFIRMATION_WAIT:-3.00:00:00}
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}
   Webhooks__EndpointSecrets__partner-v2: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2:-}
   # Webhook Delivery reaches public addresses only, unless the target is named

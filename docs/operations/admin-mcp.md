@@ -14,9 +14,13 @@ on every test run.
 ## Identity And Audit Attribution
 
 The host acts as one configured Admin Account. `Mcp:Admin:AdminAccountId` must
-name an existing account in `auth.admin_accounts`; startup fails when it is
-missing or empty. Native ETH Address Pool imports reference that account as the
-importing Admin.
+name an existing, active account in `auth.admin_accounts`; startup fails when it
+is empty, unknown, or disabled. A database that cannot be reached at startup is
+not a refusal, because every tool call checks the account again before it acts:
+once the account is disabled or removed, reads and writes alike are rejected
+with `authentication.required`, and the refusal is audited with reason
+`admin_account.disabled` or `admin_account.not_found`. Native ETH Address Pool
+imports reference that account as the importing Admin.
 
 Audit Log entries record the acting account as usual and set the source service
 to `mcp`, which is what distinguishes MCP activity from Admin API activity.

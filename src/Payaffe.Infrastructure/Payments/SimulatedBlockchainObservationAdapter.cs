@@ -41,7 +41,7 @@ public sealed class SimulatedBlockchainObservationAdapter(
         var transactions = await dbContext.SimulatedTransactions
             .Where(transaction =>
                 transaction.PaymentId == target.PaymentId &&
-                (target.ProjectId == Guid.Empty || transaction.ProjectId == target.ProjectId) &&
+                transaction.ProjectId == target.ProjectId &&
                 transaction.SupportedCurrency == target.SupportedCurrency &&
                 transaction.PaymentAddress == target.PaymentAddress)
             .OrderBy(transaction => transaction.CreatedAt)
@@ -54,7 +54,7 @@ public sealed class SimulatedBlockchainObservationAdapter(
 
         var requirements = await dbContext.Payments
             .AsNoTracking()
-            .Where(payment => payment.Id == target.PaymentId)
+            .Where(payment => payment.Id == target.PaymentId && payment.ProjectId == target.ProjectId)
             .Select(payment => new { payment.ConfirmationRequirement, payment.ReorgMonitoringDepth })
             .SingleOrDefaultAsync(cancellationToken);
         var confirmed = requirements?.ConfirmationRequirement is { } required
@@ -76,7 +76,18 @@ public sealed class SimulatedBlockchainObservationAdapter(
                 transaction.Id.ToString("D")));
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // The worker run shares this context; a stale change would fail
+            // every later write of the run.
+            dbContext.ChangeTracker.Clear();
+            throw;
+        }
+
         return observations;
     }
 

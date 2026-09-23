@@ -977,7 +977,8 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
 
     private sealed class FixedWebhookSecretResolver : IWebhookSecretResolver
     {
-        public Task<string?> ResolveAsync(
+        public Task<string?> ResolveForProjectAsync(
+            Guid projectId,
             string secretReference,
             CancellationToken cancellationToken)
         {

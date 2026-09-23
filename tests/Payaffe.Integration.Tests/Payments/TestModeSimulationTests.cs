@@ -363,7 +363,7 @@ public sealed class TestModeSimulationTests(PostgreSqlFixture postgres) : IClass
 
     private sealed class FixedWebhookSecretResolver : IWebhookSecretResolver
     {
-        public Task<string?> ResolveAsync(string secretReference, CancellationToken cancellationToken) =>
+        public Task<string?> ResolveForProjectAsync(Guid projectId, string secretReference, CancellationToken cancellationToken) =>
             Task.FromResult<string?>("test-webhook-secret");
     }
 

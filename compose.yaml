@@ -15,6 +15,7 @@ x-backend-environment: &backend-environment
   Installation__Mode: ${PAYAFFE_INSTALLATION_MODE:-live}
   ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
   Payments__PayerPageBaseUrl: ${PAYAFFE_PAYER_PAGE_BASE_URL:-http://localhost:8080/pay}
+  Payments__ObservedConfirmationWait: ${PAYAFFE_OBSERVED_CONFIRMATION_WAIT:-3.00:00:00}
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}
   Webhooks__EndpointSecrets__partner-v2: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2:-}
   # Webhook Delivery reaches public addresses only, unless the target is named

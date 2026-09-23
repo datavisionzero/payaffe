@@ -94,6 +94,43 @@ public sealed class AdminMcpBehaviorTests
         Assert.Contains("limit", payments.Fields);
     }
 
+    /// <summary>
+    /// The host acts as the configured account. An account that was deleted
+    /// or disabled after the host started must stop it acting, for reads as
+    /// well as writes, and the refusal must be on record.
+    /// </summary>
+    [Theory]
+    [InlineData(null, "admin_account.not_found")]
+    [InlineData("disabled", "admin_account.disabled")]
+    public async Task Tools_refuse_an_Admin_Account_that_is_missing_or_disabled(string? status, string reasonCode)
+    {
+        var context = CreateContext(accountStatus: status);
+
+        var search = await AdminMcpTools.SearchPaymentsAsync(context.Services, ProjectId);
+        var settle = await AdminMcpTools.SettlePaymentAsync(
+            context.Services, ProjectId, Guid.NewGuid(), 1, "operator reason", confirmed: true);
+
+        Assert.Equal("rejected", search.Status);
+        Assert.Equal("authentication.required", search.Code);
+        Assert.Equal("authentication.required", settle.Code);
+        await context.SecurityStore.Received(1).RecordSecurityAuditAsync(
+            Arg.Is<AdminAuditEntry>(entry =>
+                entry.EventType == "mcp.payment.search" &&
+                entry.Outcome == "denied" &&
+                entry.ReasonCode == reasonCode &&
+                entry.CorrelationId == search.CorrelationId),
+            Arg.Any<CancellationToken>());
+        await context.SecurityStore.Received(1).RecordSecurityAuditAsync(
+            Arg.Is<AdminAuditEntry>(entry =>
+                entry.EventType == "mcp.payment.settle" &&
+                entry.Outcome == "denied" &&
+                entry.ReasonCode == reasonCode),
+            Arg.Any<CancellationToken>());
+
+        // Refused before the rate limit, so a disabled account cannot spend it.
+        Assert.True(context.RateLimiter.TryAcquire(DateTimeOffset.UtcNow));
+    }
+
     [Fact]
     public void Rate_limiter_opens_a_new_window_after_the_configured_period()
     {
@@ -129,9 +166,11 @@ public sealed class AdminMcpBehaviorTests
     /// guard ever stopped short and let a tool reach the database, resolving
     /// the missing service would fail the test instead of silently passing.
     /// </summary>
-    private static ToolContext CreateContext()
+    private static ToolContext CreateContext(string? accountStatus = "active")
     {
         var securityStore = Substitute.For<IAdminSecurityStore>();
+        securityStore.FindAccountStatusAsync(AdminAccountId, Arg.Any<CancellationToken>())
+            .Returns(accountStatus);
         var options = Options.Create(new AdminMcpOptions
         {
             AdminAccountId = AdminAccountId,

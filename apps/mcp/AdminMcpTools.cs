@@ -20,6 +20,10 @@ namespace Payaffe.Mcp;
 /// transaction. Webhook Delivery resend has no transactional audit, so the
 /// tool records both its success and its failure, exactly as the Admin API
 /// endpoint does for the same operation.
+///
+/// Every tool first checks that the configured Admin Account still exists and
+/// is active. The host acts as that account, so a disabled or deleted Admin
+/// must not keep operating through it; the refusal is audited.
 /// </summary>
 [McpServerToolType]
 public sealed class AdminMcpTools
@@ -33,10 +37,17 @@ public sealed class AdminMcpTools
         IServiceProvider services,
         CancellationToken cancellationToken = default)
     {
+        var correlationId = NewCorrelationId();
+        var refusal = await GuardAccountAsync(services, correlationId, "mcp.project.list", "project", "all", projectId: null, cancellationToken);
+        if (refusal is not null)
+        {
+            return ProjectListToolResult.Rejected(refusal, correlationId);
+        }
+
         await using var scope = services.CreateAsyncScope();
         var projects = await scope.ServiceProvider.GetRequiredService<AdminProjectService>()
             .ListAsync(cancellationToken);
-        return ProjectListToolResult.Resolved(projects, NewCorrelationId());
+        return ProjectListToolResult.Resolved(projects, correlationId);
     }
 
     [McpServerTool(
@@ -55,10 +66,17 @@ public sealed class AdminMcpTools
             return PaymentSearchToolResult.Rejected("validation.failed", ["limit"]);
         }
 
+        var correlationId = NewCorrelationId();
+        var refusal = await GuardAccountAsync(services, correlationId, "mcp.payment.search", "payment", "recent", projectId, cancellationToken);
+        if (refusal is not null)
+        {
+            return PaymentSearchToolResult.Rejected(refusal, [], correlationId);
+        }
+
         await using var scope = services.CreateAsyncScope();
         var payments = await scope.ServiceProvider.GetRequiredService<AdminPaymentQueryService>()
             .ListRecentPaymentsAsync(projectId, limit, cancellationToken);
-        return PaymentSearchToolResult.Resolved(payments, NewCorrelationId());
+        return PaymentSearchToolResult.Resolved(payments, correlationId);
     }
 
     [McpServerTool(
@@ -73,6 +91,12 @@ public sealed class AdminMcpTools
         CancellationToken cancellationToken = default)
     {
         var correlationId = NewCorrelationId();
+        var refusal = await GuardAccountAsync(services, correlationId, "mcp.payment.inspect", "payment", paymentId.ToString("D"), projectId, cancellationToken);
+        if (refusal is not null)
+        {
+            return PaymentInspectToolResult.Rejected(refusal, correlationId);
+        }
+
         await using var scope = services.CreateAsyncScope();
         var payment = await scope.ServiceProvider.GetRequiredService<AdminPaymentQueryService>()
             .FindPaymentAsync(projectId, paymentId, cancellationToken);
@@ -91,17 +115,24 @@ public sealed class AdminMcpTools
         Guid projectId,
         CancellationToken cancellationToken = default)
     {
+        var correlationId = NewCorrelationId();
+        var refusal = await GuardAccountAsync(services, correlationId, "mcp.configuration.summarize", "configuration", projectId.ToString("D"), projectId, cancellationToken);
+        if (refusal is not null)
+        {
+            return ConfigurationSummaryToolResult.Rejected(projectId, correlationId, refusal);
+        }
+
         var observation = services.GetRequiredService<IOptions<BlockchainObservationOptions>>().Value;
         await using var scope = services.CreateAsyncScope();
         var payments = await scope.ServiceProvider.GetRequiredService<IProjectPaymentConfigurationStore>()
             .FindByProjectAsync(projectId, cancellationToken);
         return payments is null
-            ? ConfigurationSummaryToolResult.Rejected(projectId, NewCorrelationId())
+            ? ConfigurationSummaryToolResult.Rejected(projectId, correlationId)
             : ConfigurationSummaryToolResult.Resolved(
                 projectId,
                 payments,
                 observation.Mode,
-                NewCorrelationId());
+                correlationId);
     }
 
     [McpServerTool(
@@ -120,10 +151,17 @@ public sealed class AdminMcpTools
             return WebhookSearchToolResult.Rejected("validation.failed", ["limit"]);
         }
 
+        var correlationId = NewCorrelationId();
+        var refusal = await GuardAccountAsync(services, correlationId, "mcp.webhook_delivery.search", "webhook_delivery", "recent", projectId, cancellationToken);
+        if (refusal is not null)
+        {
+            return WebhookSearchToolResult.Rejected(refusal, [], correlationId);
+        }
+
         await using var scope = services.CreateAsyncScope();
         var deliveries = await scope.ServiceProvider.GetRequiredService<AdminWebhookDeliveryQueryService>()
             .ListResendableDeliveriesAsync(projectId, limit, cancellationToken);
-        return WebhookSearchToolResult.Resolved(deliveries, NewCorrelationId());
+        return WebhookSearchToolResult.Resolved(deliveries, correlationId);
     }
 
     [McpServerTool(
@@ -143,6 +181,12 @@ public sealed class AdminMcpTools
         }
 
         var correlationId = NewCorrelationId();
+        var refusal = await GuardAccountAsync(services, correlationId, "mcp.audit_log.search", "audit_log", "recent", projectId, cancellationToken);
+        if (refusal is not null)
+        {
+            return AuditLogSearchToolResult.Rejected(refusal, [], correlationId);
+        }
+
         await using var scope = services.CreateAsyncScope();
         var entries = await scope.ServiceProvider.GetRequiredService<AdminAuditLogQueryService>()
             .ListRecentEntriesAndRecordAccessAsync(
@@ -163,15 +207,17 @@ public sealed class AdminMcpTools
         Guid projectId,
         CancellationToken cancellationToken = default)
     {
+        var correlationId = NewCorrelationId();
+        var refusal = await GuardAccountAsync(services, correlationId, "mcp.address_pool.summarize", "address_pool", "ETH", projectId, cancellationToken);
+        if (refusal is not null)
+        {
+            return AddressPoolSummaryToolResult.Rejected(refusal, correlationId);
+        }
+
         await using var scope = services.CreateAsyncScope();
         var summary = await scope.ServiceProvider.GetRequiredService<AdminNativeEthAddressPoolService>()
             .GetSummaryAsync(projectId, LowCapacityThreshold(services), cancellationToken);
-        return new AddressPoolSummaryToolResult(
-            "resolved",
-            "address_pool.summarized",
-            summary,
-            NewCorrelationId(),
-            "Native ETH Address Pool summarized.");
+        return AddressPoolSummaryToolResult.Resolved(summary, correlationId);
     }
 
     [McpServerTool(
@@ -308,8 +354,51 @@ public sealed class AdminMcpTools
     }
 
     /// <summary>
-    /// Applies the two checks every risky tool shares. Returns the rejection
-    /// code when the call must not proceed, or <c>null</c> when it may.
+    /// Refuses the call when the configured Admin Account is missing or not
+    /// active, and audits the refusal. Returns the rejection code, or
+    /// <c>null</c> when the call may proceed.
+    /// </summary>
+    private static async Task<string?> GuardAccountAsync(
+        IServiceProvider services,
+        string correlationId,
+        string eventType,
+        string subjectType,
+        string subjectId,
+        Guid? projectId,
+        CancellationToken cancellationToken)
+    {
+        var accountId = services.GetRequiredService<IOptions<AdminMcpOptions>>().Value.AdminAccountId;
+        string? status;
+        await using (var scope = services.CreateAsyncScope())
+        {
+            status = await scope.ServiceProvider.GetRequiredService<IAdminSecurityStore>()
+                .FindAccountStatusAsync(accountId, cancellationToken);
+        }
+
+        if (status == "active")
+        {
+            return null;
+        }
+
+        await RecordAsync(
+            services,
+            Audit(
+                services,
+                correlationId,
+                eventType,
+                "denied",
+                status is null ? "admin_account.not_found" : "admin_account.disabled",
+                subjectType,
+                subjectId,
+                projectId),
+            cancellationToken);
+        return "authentication.required";
+    }
+
+    /// <summary>
+    /// Applies the checks every risky tool shares: the acting account, then
+    /// confirmation, then the rate limit. Returns the rejection code when the
+    /// call must not proceed, or <c>null</c> when it may.
     /// </summary>
     private static async Task<string?> GuardRiskyToolAsync(
         IServiceProvider services,
@@ -321,6 +410,12 @@ public sealed class AdminMcpTools
         Guid projectId,
         CancellationToken cancellationToken)
     {
+        var refusal = await GuardAccountAsync(services, correlationId, eventType, subjectType, subjectId, projectId, cancellationToken);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
         if (!confirmed)
         {
             await RecordAsync(

@@ -50,6 +50,8 @@ public sealed class PaymentRecord
 
     public DateTimeOffset? SettledAt { get; set; }
 
+    public DateTimeOffset? LastPolledAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

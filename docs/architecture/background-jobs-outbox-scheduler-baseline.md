@@ -30,7 +30,7 @@ Expected durable work includes:
 | `blockchain_observation_poll` | Poll active Payment Addresses for the selected Blockchain Observation Mode. |
 | `confirmation_update` | Refresh confirmation counts for observed Matching Blockchain Transactions. |
 | `reorg_monitoring` | Continue post-completion monitoring up to Reorg Monitoring Depth. |
-| `payment_expiration` | Mark unpaid Payments expired when the regular payment window has elapsed. |
+| `payment_expiration` | Mark Payments expired: Pending Currency Selection at Payment Expiration, Waiting For Payment when the Late Acceptance Window ends, and an Observed Payment when its Confirmation Wait ends ([ADR 0034](../adr/0034-an-observed-payment-waits-for-the-confirmations-of-a-transaction-it-saw-in-time.md)). |
 | `late_acceptance_check` | Process late Matching Blockchain Transactions inside the Late Acceptance Window. |
 | `rate_refresh` | Refresh Rate Cache entries for Supported Currencies. |
 | `webhook_delivery` | Deliver outgoing Webhook Events to Webhook Endpoints. |

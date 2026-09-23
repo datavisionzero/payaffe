@@ -8,12 +8,14 @@ public sealed class AdminTotpVerifier : IAdminTotpVerifier
     private const long UnixEpochTicks = 621355968000000000L;
     private const long TicksPerTimeStep = TimeSpan.TicksPerSecond * 30;
 
-    public bool VerifyCode(
+    public bool TryVerifyCode(
         byte[] secret,
         string code,
         DateTimeOffset now,
-        int allowedTimeStepSkew)
+        int allowedTimeStepSkew,
+        out long timeStep)
     {
+        timeStep = 0;
         var normalizedCode = code.Trim();
         if (normalizedCode.Length != 6 || normalizedCode.Any(character => !char.IsDigit(character)))
         {
@@ -28,6 +30,7 @@ public sealed class AdminTotpVerifier : IAdminTotpVerifier
                 System.Text.Encoding.ASCII.GetBytes(normalizedCode),
                 System.Text.Encoding.ASCII.GetBytes(candidate)))
             {
+                timeStep = currentTimeStep + offset;
                 return true;
             }
         }

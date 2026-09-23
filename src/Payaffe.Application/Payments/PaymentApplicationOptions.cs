@@ -6,6 +6,13 @@ public sealed class PaymentApplicationOptions
 
     public TimeSpan LateAcceptanceWindow { get; set; } = TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// How long after the Late Acceptance Window an Observed Payment keeps
+    /// waiting for the confirmations of a transaction it saw in time before it
+    /// expires (ADR 0034).
+    /// </summary>
+    public TimeSpan ObservedConfirmationWait { get; set; } = TimeSpan.FromHours(72);
+
     public string PayerPageBaseUrl { get; set; } = "http://localhost/pay";
 
     public int BtcConfirmationRequirement { get; set; } = 1;

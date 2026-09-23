@@ -7,4 +7,5 @@ public sealed record AdminLoginChallengeReadModel(
     string AdminAccountStatus,
     DateTimeOffset ExpiresAt,
     int FailedAttemptCount,
-    DateTimeOffset? ConsumedAt);
+    DateTimeOffset? ConsumedAt,
+    DateTimeOffset? SecondFactorLockedUntil);

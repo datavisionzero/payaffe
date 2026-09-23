@@ -20,7 +20,8 @@ public sealed class AdminMcpOptions : IValidatableObject
     {
         // [Required] is satisfied by default(Guid), so an unset account would
         // otherwise start the host and only fail at the Address Pool import
-        // foreign key.
+        // foreign key. Whether the account exists and is active is checked
+        // against the database at start and before every tool call.
         if (AdminAccountId == Guid.Empty)
         {
             yield return new ValidationResult(

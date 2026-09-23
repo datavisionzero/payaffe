@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Globalization;
 using Payaffe.Application.Installation;
 using Payaffe.Domain.Payments;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Payaffe.Application.Payments;
@@ -17,11 +19,14 @@ public sealed class PaymentApplicationService(
     IBlockchainObservationAdapter blockchainObservationAdapter,
     IClock clock,
     IOptions<PaymentApplicationOptions> options,
-    ConfiguredInstallationMode? installationMode = null)
+    ConfiguredInstallationMode? installationMode = null,
+    ILogger<PaymentApplicationService>? logger = null)
 {
     private static readonly string[] SupportedCurrencies = ["BTC", "LTC", "ETH"];
 
     private readonly PaymentApplicationOptions _options = options.Value;
+
+    private readonly ILogger _logger = logger ?? NullLogger<PaymentApplicationService>.Instance;
 
     public async Task<CreatePaymentResult> CreateAsync(
         Guid integrationApiCredentialId,
@@ -274,7 +279,8 @@ public sealed class PaymentApplicationService(
             currencyConfiguration.ConfirmationRequirement,
             projectConfiguration!.PaymentTolerancePercent,
             currencyConfiguration.ReorgMonitoringDepth,
-            selectedAt);
+            selectedAt,
+            payment.ProjectId);
         var storeResult = await paymentStore.SelectCurrencyAsync(
             selection,
             new PaymentEventDraft(
@@ -327,6 +333,8 @@ public sealed class PaymentApplicationService(
         {
             throw new DomainRuleException("Payment identifier is required.", "payment_id.required");
         }
+
+        RequireProjectId(command.ProjectId);
 
         var supportedCurrency = NormalizeSupportedCurrency(command.SupportedCurrency);
         var paymentAddress = NormalizeRequiredText(
@@ -429,6 +437,7 @@ public sealed class PaymentApplicationService(
 
         var result = await paymentStore.ExpireDuePaymentsAsync(
             clock.UtcNow,
+            _options.ObservedConfirmationWait,
             maxPayments,
             cancellationToken);
         return new ExpireDuePaymentsResult(result.ExpiredCount);
@@ -447,6 +456,7 @@ public sealed class PaymentApplicationService(
 
         var targets = await paymentStore.ListBlockchainObservationTargetsAsync(
             clock.UtcNow,
+            _options.ObservedConfirmationWait,
             maxPayments,
             cancellationToken);
         var observationCount = 0;
@@ -467,9 +477,10 @@ public sealed class PaymentApplicationService(
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception exception)
             {
                 failedCount++;
+                LogTargetFailure(exception, "poll", target.PaymentId, target.ProjectId, target.SupportedCurrency);
                 continue;
             }
             observationCount += observations.Count;
@@ -496,9 +507,10 @@ public sealed class PaymentApplicationService(
                 {
                     throw;
                 }
-                catch (Exception)
+                catch (Exception exception)
                 {
                     failedCount++;
+                    LogTargetFailure(exception, "record", target.PaymentId, target.ProjectId, target.SupportedCurrency);
                     continue;
                 }
 
@@ -575,11 +587,30 @@ public sealed class PaymentApplicationService(
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            LogTargetFailure(exception, "confirmation update", target.PaymentId, target.ProjectId, target.SupportedCurrency);
             return null;
         }
     }
+
+    /// <summary>
+    /// A failure is isolated to its Payment so the rest of the batch goes on,
+    /// and it is logged because a count alone cannot be diagnosed (ADR 0026).
+    /// </summary>
+    private void LogTargetFailure(
+        Exception exception,
+        string step,
+        Guid paymentId,
+        Guid projectId,
+        string supportedCurrency) =>
+        _logger.LogError(
+            exception,
+            "Blockchain Observation {Step} failed for Payment {PaymentId} in Project {ProjectId} ({SupportedCurrency}).",
+            step,
+            paymentId,
+            projectId,
+            supportedCurrency);
 
     public async Task<MonitorBlockchainReorgsResult> MonitorBlockchainReorgsAsync(
         int maxTransactions,
@@ -626,9 +657,10 @@ public sealed class PaymentApplicationService(
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception exception)
             {
                 failedCount++;
+                LogTargetFailure(exception, "reorg poll", target.PaymentId, target.ProjectId, target.SupportedCurrency);
                 continue;
             }
             checkedCount++;
@@ -641,16 +673,30 @@ public sealed class PaymentApplicationService(
                 continue;
             }
 
-            var updateResult = await UpdateBlockchainTransactionConfirmationsAsync(
-                new UpdateBlockchainTransactionConfirmationsCommand(
-                    target.PaymentId,
-                    target.SupportedCurrency,
-                    target.TransactionHash,
-                    observation.Confirmations,
-                    BlockHash: null,
-                    BlockHeight: null,
-                    target.ProjectId),
-                cancellationToken);
+            UpdateBlockchainTransactionConfirmationsResult updateResult;
+            try
+            {
+                updateResult = await UpdateBlockchainTransactionConfirmationsAsync(
+                    new UpdateBlockchainTransactionConfirmationsCommand(
+                        target.PaymentId,
+                        target.SupportedCurrency,
+                        target.TransactionHash,
+                        observation.Confirmations,
+                        BlockHash: null,
+                        BlockHeight: null,
+                        target.ProjectId),
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                failedCount++;
+                LogTargetFailure(exception, "reorg update", target.PaymentId, target.ProjectId, target.SupportedCurrency);
+                continue;
+            }
 
             switch (updateResult.Kind)
             {
@@ -688,6 +734,8 @@ public sealed class PaymentApplicationService(
         {
             throw new DomainRuleException("Payment identifier is required.", "payment_id.required");
         }
+
+        RequireProjectId(command.ProjectId);
 
         var supportedCurrency = NormalizeSupportedCurrency(command.SupportedCurrency);
         var transactionHash = NormalizeRequiredText(
@@ -750,6 +798,18 @@ public sealed class PaymentApplicationService(
                 UpdateBlockchainTransactionConfirmationsResult.TransactionNotFound(),
             _ => throw new InvalidOperationException($"Unsupported confirmation update result {storeResult.Kind}."),
         };
+    }
+
+    /// <summary>
+    /// Every lookup of a Payment is scoped to its Project; an empty Project
+    /// would otherwise have to mean "any Project".
+    /// </summary>
+    private static void RequireProjectId(Guid projectId)
+    {
+        if (projectId == Guid.Empty)
+        {
+            throw new DomainRuleException("Project identifier is required.", "project_id.required");
+        }
     }
 
     private static string NormalizeIdempotencyKey(string? value)

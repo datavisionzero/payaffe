@@ -14,6 +14,9 @@ public sealed record ProjectListToolResult(
         IReadOnlyList<AdminProjectReadModel> projects,
         string correlationId) =>
         new("resolved", "projects.listed", projects, correlationId, $"Found {projects.Count} Projects.");
+
+    public static ProjectListToolResult Rejected(string code, string correlationId) =>
+        new("rejected", code, [], correlationId, "Project listing was rejected.");
 }
 
 public sealed record PaymentSearchToolResult(
@@ -27,8 +30,8 @@ public sealed record PaymentSearchToolResult(
     public static PaymentSearchToolResult Resolved(IReadOnlyList<AdminPaymentSummaryReadModel> payments, string correlationId) =>
         new("resolved", "payments.listed", payments, [], correlationId, $"Found {payments.Count} Payments.");
 
-    public static PaymentSearchToolResult Rejected(string code, IReadOnlyList<string> fields) =>
-        new("rejected", code, [], fields, Guid.NewGuid().ToString("N"), "Payment search was rejected.");
+    public static PaymentSearchToolResult Rejected(string code, IReadOnlyList<string> fields, string? correlationId = null) =>
+        new("rejected", code, [], fields, correlationId ?? Guid.NewGuid().ToString("N"), "Payment search was rejected.");
 }
 
 public sealed record PaymentInspectToolResult(
@@ -70,9 +73,13 @@ public sealed record ConfigurationSummaryToolResult(
             configuration.PaymentTolerancePercent, configuration.Btc, configuration.Ltc, configuration.Eth,
             correlationId, "Safe Project configuration summary returned.");
 
-    public static ConfigurationSummaryToolResult Rejected(Guid projectId, string correlationId) => new(
-        "rejected", "project.not_found", projectId, null, string.Empty, null, null, null,
-        null, null, null, correlationId, "Project configuration was not found.");
+    public static ConfigurationSummaryToolResult Rejected(
+        Guid projectId,
+        string correlationId,
+        string code = "project.not_found") => new(
+        "rejected", code, projectId, null, string.Empty, null, null, null,
+        null, null, null, correlationId,
+        code == "project.not_found" ? "Project configuration was not found." : "Configuration summary was rejected.");
 }
 
 public sealed record WebhookSearchToolResult(
@@ -87,8 +94,8 @@ public sealed record WebhookSearchToolResult(
         new("resolved", "webhook_deliveries.listed", deliveries, [], correlationId,
             $"Found {deliveries.Count} resendable Webhook Deliveries.");
 
-    public static WebhookSearchToolResult Rejected(string code, IReadOnlyList<string> fields) =>
-        new("rejected", code, [], fields, Guid.NewGuid().ToString("N"), "Webhook Delivery search was rejected.");
+    public static WebhookSearchToolResult Rejected(string code, IReadOnlyList<string> fields, string? correlationId = null) =>
+        new("rejected", code, [], fields, correlationId ?? Guid.NewGuid().ToString("N"), "Webhook Delivery search was rejected.");
 }
 
 public sealed record AuditLogSearchToolResult(
@@ -102,16 +109,23 @@ public sealed record AuditLogSearchToolResult(
     public static AuditLogSearchToolResult Resolved(IReadOnlyList<AdminAuditLogEntryReadModel> entries, string correlationId) =>
         new("resolved", "audit_log.listed", entries, [], correlationId, $"Found {entries.Count} Audit Log entries.");
 
-    public static AuditLogSearchToolResult Rejected(string code, IReadOnlyList<string> fields) =>
-        new("rejected", code, [], fields, Guid.NewGuid().ToString("N"), "Audit Log search was rejected.");
+    public static AuditLogSearchToolResult Rejected(string code, IReadOnlyList<string> fields, string? correlationId = null) =>
+        new("rejected", code, [], fields, correlationId ?? Guid.NewGuid().ToString("N"), "Audit Log search was rejected.");
 }
 
 public sealed record AddressPoolSummaryToolResult(
     string Status,
     string Code,
-    AdminNativeEthAddressPoolSummary Pool,
+    AdminNativeEthAddressPoolSummary? Pool,
     string CorrelationId,
-    string Summary);
+    string Summary)
+{
+    public static AddressPoolSummaryToolResult Resolved(AdminNativeEthAddressPoolSummary pool, string correlationId) =>
+        new("resolved", "address_pool.summarized", pool, correlationId, "Native ETH Address Pool summarized.");
+
+    public static AddressPoolSummaryToolResult Rejected(string code, string correlationId) =>
+        new("rejected", code, null, correlationId, "Native ETH Address Pool summary was rejected.");
+}
 
 public sealed record PaymentSettlementToolResult(
     string Status,

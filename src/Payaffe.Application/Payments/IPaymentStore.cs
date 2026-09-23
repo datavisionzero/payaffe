@@ -21,8 +21,14 @@ public interface IPaymentStore
         string payerPageId,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Returns the least recently polled active Payments and records them as
+    /// polled at <paramref name="observedUntil"/>, so consecutive calls rotate
+    /// through every active Payment.
+    /// </summary>
     Task<IReadOnlyList<BlockchainObservationTarget>> ListBlockchainObservationTargetsAsync(
         DateTimeOffset observedUntil,
+        TimeSpan observedConfirmationWait,
         int maxPayments,
         CancellationToken cancellationToken);
 
@@ -48,6 +54,7 @@ public interface IPaymentStore
 
     Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
         DateTimeOffset expiresBefore,
+        TimeSpan observedConfirmationWait,
         int maxPayments,
         CancellationToken cancellationToken);
 
@@ -222,7 +229,8 @@ public sealed record PaymentSelectionDraft(
     int ConfirmationRequirement,
     decimal PaymentTolerancePercent,
     int ReorgMonitoringDepth,
-    DateTimeOffset SelectedAt);
+    DateTimeOffset SelectedAt,
+    Guid ProjectId);
 
 public sealed record BlockchainObservationDraft(
     Guid Id,
@@ -238,7 +246,7 @@ public sealed record BlockchainObservationDraft(
     string? ProviderObservationId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    Guid ProjectId = default);
+    Guid ProjectId);
 
 public sealed record PaymentCompletionPolicyDraft(
     int RequiredConfirmations,
@@ -252,7 +260,7 @@ public sealed record BlockchainTransactionConfirmationUpdateDraft(
     string? BlockHash,
     long? BlockHeight,
     DateTimeOffset CheckedAt,
-    Guid ProjectId = default);
+    Guid ProjectId);
 
 public sealed record PaymentOptionDraft(
     Guid PaymentId,

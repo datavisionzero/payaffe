@@ -319,7 +319,8 @@ public sealed class PayaffeSdkConsumerScenarioTests
                 DateTimeOffset.UtcNow,
                 Confirmations: 1,
                 "controlled-test-provider",
-                $"observation-{transactionSuffix}"),
+                $"observation-{transactionSuffix}",
+                ProjectId: ProjectDefaults.DefaultProjectId),
             CancellationToken.None);
         Assert.NotEqual(RecordBlockchainObservationResultKind.PaymentNotReady, result.Kind);
         Assert.NotEqual(RecordBlockchainObservationResultKind.PaymentNotFound, result.Kind);
