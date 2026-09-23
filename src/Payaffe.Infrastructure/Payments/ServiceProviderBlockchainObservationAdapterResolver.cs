@@ -13,6 +13,8 @@ public sealed class ServiceProviderBlockchainObservationAdapterResolver(IService
             "none" => serviceProvider.GetRequiredService<NoOpBlockchainObservationAdapter>(),
             "blockchair" => serviceProvider.GetRequiredService<BlockchairBlockchainObservationAdapter>(),
             "nownodes" => serviceProvider.GetRequiredService<NownodesBlockchainObservationAdapter>(),
+            BlockchainObservationOptions.SimulatedMode =>
+                serviceProvider.GetRequiredService<SimulatedBlockchainObservationAdapter>(),
             _ => throw new InvalidOperationException(
                 $"No Blockchain Observation adapter is registered for mode '{mode}'."),
         };

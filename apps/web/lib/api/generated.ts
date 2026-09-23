@@ -36,6 +36,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/payer/payments/{payerPageId}/simulated-transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RecordPayerSimulatedTransaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/projects": {
         parameters: {
             query?: never;
@@ -764,6 +780,8 @@ export interface components {
             expiresAt: string;
             /** Format: date-time */
             idleExpiresAt: string;
+            /** @default false */
+            testMode: boolean;
         };
         AdminStepUpHttpRequest: {
             totpCode: null | string;
@@ -931,6 +949,8 @@ export interface components {
             observedAmountState: null | string;
             rateLock: null | components["schemas"]["RateLockResponse"];
             paymentInstruction: null | components["schemas"]["PaymentInstructionResponse"];
+            /** @default false */
+            testMode: boolean;
         };
         RateLockResponse: {
             fiatCurrency: string;
@@ -948,8 +968,21 @@ export interface components {
             /** Format: date-time */
             validUntil: string;
         };
+        RecordSimulatedTransactionHttpRequest: {
+            amount: null | string;
+        };
         SelectPayerPaymentCurrencyHttpRequest: {
             supportedCurrency: null | string;
+        };
+        SimulatedTransactionResponse: {
+            /** Format: uuid */
+            paymentId: string;
+            supportedCurrency: string;
+            paymentAddress: string;
+            transactionHash: string;
+            amount: string;
+            /** Format: date-time */
+            recordedAt: string;
         };
     };
     responses: never;
@@ -1035,6 +1068,68 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+        };
+    };
+    RecordPayerSimulatedTransaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payerPageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordSimulatedTransactionHttpRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulatedTransactionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["IntegrationApiProblemResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

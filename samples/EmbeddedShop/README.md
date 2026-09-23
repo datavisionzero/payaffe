@@ -54,6 +54,26 @@ Run the tests, which need no Payaffe installation, with:
 dotnet test samples/EmbeddedShop.Tests/EmbeddedShop.Tests.csproj
 ```
 
+### Against a Test Mode installation
+
+The quickest way to see the whole flow is a payaffe installation in Test Mode
+([docs/operations/test-mode.md](../../docs/operations/test-mode.md)), which needs
+no wallet and no provider. Point a storefront at it and let that storefront
+accept simulated payments:
+
+```bash
+dotnet user-secrets set "Shop:Storefronts:teahouse:AcceptTestPayments" "true"
+```
+
+The checkout then says it is in test mode and offers "Simulate the payment" once
+an instruction is shown; the shop calls `SimulatePaymentAsync`, and the order is
+fulfilled by the same verified webhook or reconciling read as a real one. A
+storefront without that setting shows a simulated payment for what it is and
+never hands goods over for it, which is what keeps a test installation pointed
+at a production shop harmless. `EmbeddedShopTestModeTests` in
+`tests/Payaffe.Api.Tests` runs this sample against a real Test Mode installation
+and pays, underpays, overpays and expires orders through it.
+
 ## How a frontend consumes this
 
 The page in `wwwroot/assets/checkout.js` is one frontend, not the frontend. It uses

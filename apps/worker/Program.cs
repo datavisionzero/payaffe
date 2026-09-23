@@ -36,6 +36,9 @@ builder.Services.Configure<PaymentApplicationOptions>(builder.Configuration.GetS
 builder.Services.AddOptions<ExchangeRateOptions>()
     .Bind(builder.Configuration.GetSection("ExchangeRates"))
     .ValidateOnStart();
+builder.Services.AddOptions<SimulatedExchangeRateOptions>()
+    .Bind(builder.Configuration.GetSection(SimulatedExchangeRateOptions.SectionName))
+    .ValidateOnStart();
 builder.Services.AddOptions<RateCacheRefreshWorkerOptions>()
     .Bind(builder.Configuration.GetSection("ExchangeRates:RefreshWorker"))
     .ValidateOnStart();
@@ -62,6 +65,7 @@ builder.Services.AddOptions<WorkerHealthOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddPayaffeInstallationMode(builder.Configuration);
 builder.Services.AddPayaffeApplication();
 builder.Services.AddPayaffeInfrastructure(connectionString!, applySchemaOnStartup: true);
 

@@ -46,6 +46,33 @@ describe("AdminShell", () => {
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
 
+  it("says on every page when the installation is in test mode", async () => {
+    state.authenticated = true;
+    state.testMode = true;
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    expect(await screen.findByText("Protected content")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Test mode" })).toHaveTextContent(
+      "Payments in this installation are simulated"
+    );
+  });
+
+  it("shows no test mode banner in a live installation", async () => {
+    state.authenticated = true;
+    renderAdmin(
+      <AdminShell>
+        <p>Protected content</p>
+      </AdminShell>
+    );
+
+    expect(await screen.findByText("Protected content")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Test mode" })).not.toBeInTheDocument();
+  });
+
   it("frames the page with the section navigation once signed in", async () => {
     state.authenticated = true;
     renderAdmin(

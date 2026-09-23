@@ -8,6 +8,7 @@ General deployment and operations rules are recorded in
 ## Guides
 
 - [Docker Compose deployment](docker-compose.md)
+- [Test Mode: an installation for testing integrations](test-mode.md)
 - [Observability](observability.md)
 - [PostgreSQL backup and restore](postgresql-backup-restore.md)
 - [Incident response](incident-response.md)

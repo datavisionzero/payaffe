@@ -2,6 +2,9 @@
 # The API and the worker host read the same settings; only the process topology
 # differs.
 x-backend-environment: &backend-environment
+  # `live` or `test`, recorded in the database on first start and never
+  # changed after that (ADR 0033).
+  Installation__Mode: ${PAYAFFE_INSTALLATION_MODE:-live}
   ConnectionStrings__Payaffe: Host=db;Port=5432;Database=${PAYAFFE_DB_NAME:-payaffe};Username=${PAYAFFE_DB_USER:-payaffe};Password=${PAYAFFE_DB_PASSWORD:?Set PAYAFFE_DB_PASSWORD in .env}
   Payments__PayerPageBaseUrl: ${PAYAFFE_PAYER_PAGE_BASE_URL:-http://localhost:8080/pay}
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}

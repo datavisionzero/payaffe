@@ -255,7 +255,7 @@ public sealed class CoinGeckoExchangeRateSource(
             rate.ObservedAt);
     }
 
-    private static decimal RoundUp(decimal value, int decimalPlaces)
+    internal static decimal RoundUp(decimal value, int decimalPlaces)
     {
         var factor = decimalPlaces == 18
             ? 1_000_000_000_000_000_000m
@@ -279,6 +279,6 @@ public sealed class CoinGeckoExchangeRateSource(
         return parsed && value > 0;
     }
 
-    private static string FormatDecimal(decimal value) =>
+    internal static string FormatDecimal(decimal value) =>
         value.ToString("0.############################", CultureInfo.InvariantCulture);
 }

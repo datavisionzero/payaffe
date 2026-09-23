@@ -60,6 +60,8 @@ Each payload includes:
 - `event_version`: string version, initially `1`,
 - `occurred_at`: UTC instant for the Payment lifecycle event,
 - `correlation_id`: technical correlation identifier,
+- `test_mode`: `true` when the installation is in Test Mode and the event
+  describes a simulated Payment, otherwise `false`,
 - `resource`: resource reference with `type` and `id`,
 - `payment`: data-minimized Payment snapshot for the event.
 
@@ -94,6 +96,13 @@ Payloads must not include:
 - full internal database rows,
 - arbitrary unbounded Payment Context Field dumps beyond the documented
 contract.
+
+`test_mode` is the one field a receiver needs to tell a simulated completion
+from a real one ([ADR 0033](../adr/0033-a-test-installation-simulates-its-external-truth.md)).
+It is always present. A production receiver must reject, or at least never
+fulfil against, an event whose `test_mode` is `true`: a test installation can
+be configured with the same Webhook Endpoint and a valid secret, so the
+signature alone does not prove the money was real.
 
 The v1 envelope does not require `project_id`. Project context is implicit in
 the Project-owned Webhook Endpoint, which preserves the existing payload and

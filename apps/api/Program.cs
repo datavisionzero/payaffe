@@ -13,6 +13,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Payaffe.Application;
 using Payaffe.Application.Admin;
+using Payaffe.Application.Installation;
 using Payaffe.Application.Payments;
 using Payaffe.Domain.Payments;
 using Payaffe.Infrastructure;
@@ -109,6 +110,9 @@ builder.Services.AddOpenApi("web", options =>
 builder.Services.Configure<PaymentApplicationOptions>(builder.Configuration.GetSection("Payments"));
 builder.Services.AddOptions<ExchangeRateOptions>()
     .Bind(builder.Configuration.GetSection("ExchangeRates"))
+    .ValidateOnStart();
+builder.Services.AddOptions<SimulatedExchangeRateOptions>()
+    .Bind(builder.Configuration.GetSection(SimulatedExchangeRateOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddOptions<RateCacheRefreshWorkerOptions>()
     .Bind(builder.Configuration.GetSection("ExchangeRates:RefreshWorker"))
@@ -241,6 +245,16 @@ builder.Services.AddRateLimiter(options =>
     // source address and deliberately small: a browser that is failing reports
     // once, and a caller that wants to write a thousand lines into the
     // operator's log store is the case this bounds.
+    options.AddPolicy("PayerSimulation", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true,
+            }));
     options.AddPolicy("ClientErrors", httpContext =>
     {
         var clientErrorOptions = httpContext.RequestServices
@@ -260,6 +274,7 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 });
+var installationMode = builder.Services.AddPayaffeInstallationMode(builder.Configuration);
 builder.Services.AddPayaffeApplication();
 
 // A deployment that runs the dedicated worker host sets this to false so the
@@ -398,6 +413,72 @@ integrationApi.MapPut("/payments/{paymentId:guid}/currency-selection", SelectPay
         return Task.CompletedTask;
     });
 
+// Test Mode only (ADR 0033): the route does not exist in a live installation,
+// so there is nothing there to reach, misconfigure or leave enabled by mistake.
+if (installationMode.IsTest)
+{
+    integrationApi.MapPost("/payments/{paymentId:guid}/simulated-transactions", RecordSimulatedTransactionAsync)
+        .WithName("RecordSimulatedTransaction")
+        .WithTags("Test Mode")
+        .WithSummary("Simulate a payment (Test Mode only).")
+        .WithDescription(
+            "Records a Simulated Transaction for a Payment that is waiting for its money. The simulated " +
+            "Blockchain Observation reports it on its next poll, unconfirmed, and fully confirmed on the " +
+            "poll after that; the Payment then follows the same lifecycle and webhooks as a real one. " +
+            "Leave amount out to pay exactly the expected amount. This route exists only in a Test Mode installation.")
+        .Produces<SimulatedTransactionResponse>(StatusCodes.Status201Created, "application/json")
+        .Produces<SimulatedTransactionResponse>(StatusCodes.Status200OK, "application/json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status400BadRequest, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status429TooManyRequests, "application/problem+json")
+        .AddOpenApiOperationTransformer((operation, _, _) =>
+        {
+            // Described here rather than with Accepts<T>, which would make the
+            // route require a JSON content type and turn the empty POST that
+            // pays the expected amount into a 404.
+            operation.RequestBody = new OpenApiRequestBody
+            {
+                Required = false,
+                Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
+                {
+                    ["application/json"] = new OpenApiMediaType
+                    {
+                        Schema = new OpenApiSchema
+                        {
+                            Type = JsonSchemaType.Object,
+                            Properties = new Dictionary<string, IOpenApiSchema>(StringComparer.Ordinal)
+                            {
+                                ["amount"] = new OpenApiSchema
+                                {
+                                    Type = JsonSchemaType.String | JsonSchemaType.Null,
+                                    Description = "The amount the simulated payer sends, as a decimal in the selected currency. Absent means exactly the expected amount.",
+                                },
+                            },
+                        },
+                    },
+                },
+            };
+
+            operation.Parameters ??= [];
+            operation.Parameters.Add(new OpenApiParameter
+            {
+                Name = "Idempotency-Key",
+                In = ParameterLocation.Header,
+                Required = false,
+                Description = "Makes a retry return the transaction the first attempt recorded instead of recording another.",
+                Schema = new OpenApiSchema
+                {
+                    Type = JsonSchemaType.String,
+                    MaxLength = 255,
+                },
+            });
+
+            return Task.CompletedTask;
+        });
+}
+
 // Errors the browser could not handle, reported by the payer page and the Admin
 // UI so that they reach the same log the backend writes to. An installation
 // that does not want a publicly postable endpoint sets
@@ -427,6 +508,24 @@ payerApi.MapPost("/payments/{payerPageId}/currency-selection", SelectPayerPaymen
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status400BadRequest, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json");
+
+// The Payer Page's "I have paid" in a Test Mode installation (ADR 0033). Like
+// the Integration API route, it is not mapped at all in a live installation.
+// The Payer holds only the Payer Page link, as for currency selection; the
+// limit per address keeps an open link from being used to fill the table.
+if (installationMode.IsTest)
+{
+    payerApi.MapPost("/payments/{payerPageId}/simulated-transactions", RecordPayerSimulatedTransactionAsync)
+        .WithName("RecordPayerSimulatedTransaction")
+        .WithTags("Payer")
+        .RequireRateLimiting("PayerSimulation")
+        .Accepts<RecordSimulatedTransactionHttpRequest>("application/json")
+        .Produces<SimulatedTransactionResponse>(StatusCodes.Status201Created)
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status400BadRequest, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status429TooManyRequests, "application/problem+json");
+}
 
 var adminApi = app.MapGroup("/api/admin");
 
@@ -867,6 +966,129 @@ static async Task<IResult> SelectPaymentCurrencyAsync(
     }
 }
 
+static async Task<IResult> RecordSimulatedTransactionAsync(
+    HttpContext httpContext,
+    Guid paymentId,
+    PaymentSimulationService simulation,
+    IIntegrationApiCredentialAuthenticator authenticator,
+    CancellationToken cancellationToken)
+{
+    var credential = await AuthenticateAsync(httpContext, authenticator, cancellationToken);
+    if (credential.Result is not null)
+    {
+        return credential.Result;
+    }
+
+    // Read by hand because the body is optional: a bound body parameter makes
+    // the route require a JSON content type, and "pay exactly what is expected"
+    // is a POST with nothing in it.
+    RecordSimulatedTransactionHttpRequest? request = null;
+    if (httpContext.Request.ContentLength is > 0 || httpContext.Request.ContentType is not null)
+    {
+        try
+        {
+            request = await httpContext.Request.ReadFromJsonAsync<RecordSimulatedTransactionHttpRequest>(cancellationToken);
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException)
+        {
+            return IntegrationApiProblem.Validation(
+                httpContext,
+                new Dictionary<string, string[]>
+                {
+                    ["request"] = ["request.invalid_json"],
+                });
+        }
+    }
+
+    try
+    {
+        var result = await simulation.RecordSimulatedTransactionAsync(
+            new RecordSimulatedTransactionCommand(
+                credential.Principal!.ProjectId,
+                paymentId,
+                request?.Amount,
+                httpContext.Request.Headers["Idempotency-Key"].ToString()),
+            cancellationToken);
+
+        return result.Kind switch
+        {
+            RecordSimulatedTransactionResultKind.Recorded => Results.Created(
+                $"/api/v1/payments/{paymentId}",
+                result.Transaction),
+            RecordSimulatedTransactionResultKind.AlreadyRecorded => Results.Ok(result.Transaction),
+            RecordSimulatedTransactionResultKind.IdempotencyConflict =>
+                IntegrationApiProblem.Create(
+                    httpContext,
+                    StatusCodes.Status409Conflict,
+                    "Idempotency conflict.",
+                    "idempotency.conflict"),
+            RecordSimulatedTransactionResultKind.PaymentNotFound =>
+                IntegrationApiProblem.Create(
+                    httpContext,
+                    StatusCodes.Status404NotFound,
+                    "Payment was not found.",
+                    "payment.not_found"),
+            RecordSimulatedTransactionResultKind.PaymentNotReady =>
+                IntegrationApiProblem.Create(
+                    httpContext,
+                    StatusCodes.Status409Conflict,
+                    "Payment is not waiting for a payment.",
+                    "payment.not_waiting_for_payment"),
+            _ => throw new InvalidOperationException($"Unsupported simulation result {result.Kind}."),
+        };
+    }
+    catch (DomainRuleException exception)
+    {
+        return IntegrationApiProblem.Validation(
+            httpContext,
+            new Dictionary<string, string[]>
+            {
+                [exception.Code.StartsWith("amount.", StringComparison.Ordinal) ? "amount" : "request"] = [exception.Code],
+            });
+    }
+}
+
+static async Task<IResult> RecordPayerSimulatedTransactionAsync(
+    HttpContext httpContext,
+    string payerPageId,
+    RecordSimulatedTransactionHttpRequest request,
+    PaymentSimulationService simulation,
+    CancellationToken cancellationToken)
+{
+    try
+    {
+        var result = await simulation.RecordForPayerPageAsync(payerPageId, request.Amount, cancellationToken);
+        return result.Kind switch
+        {
+            RecordSimulatedTransactionResultKind.Recorded => Results.Json(
+                result.Transaction,
+                statusCode: StatusCodes.Status201Created),
+            RecordSimulatedTransactionResultKind.PaymentNotFound =>
+                IntegrationApiProblem.Create(
+                    httpContext,
+                    StatusCodes.Status404NotFound,
+                    "Payment was not found.",
+                    "payment.not_found"),
+            RecordSimulatedTransactionResultKind.PaymentNotReady =>
+                IntegrationApiProblem.Create(
+                    httpContext,
+                    StatusCodes.Status409Conflict,
+                    "Payment is not waiting for a payment.",
+                    "payment.not_waiting_for_payment"),
+            _ => throw new InvalidOperationException($"Unsupported simulation result {result.Kind}."),
+        };
+    }
+    catch (DomainRuleException exception)
+    {
+        return IntegrationApiProblem.Validation(
+            httpContext,
+            new Dictionary<string, string[]>
+            {
+                [exception.Code.StartsWith("amount.", StringComparison.Ordinal) ? "amount" : "request"] = [exception.Code],
+            });
+    }
+}
+
 static async Task<IResult> GetPayerPaymentAsync(
     HttpContext httpContext,
     string payerPageId,
@@ -1038,6 +1260,7 @@ static async Task<IResult> StartAdminLoginAsync(
 static async Task<IResult> GetAdminSessionAsync(
     HttpContext httpContext,
     AdminAuthenticationService adminAuthentication,
+    ConfiguredInstallationMode installationMode,
     CancellationToken cancellationToken)
 {
     var result = await adminAuthentication.AuthenticateSessionAsync(
@@ -1054,7 +1277,8 @@ static async Task<IResult> GetAdminSessionAsync(
                 result.Principal.MfaAuthenticatedAt,
                 result.Principal.StepUpAuthenticatedAt,
                 result.Principal.ExpiresAt,
-                result.Principal.IdleExpiresAt)),
+                result.Principal.IdleExpiresAt,
+                installationMode.IsTest)),
         AdminSessionAuthenticationResultKind.Invalid =>
             IntegrationApiProblem.Create(
                 httpContext,
@@ -1816,7 +2040,7 @@ static async Task<IResult> GetAdminObservationHealthAsync(
         StringComparer.Ordinal);
     var providerName = BlockchainObservationOptions.NormalizeMode(
         observationOptions.Value.Mode);
-    var configuredAvailable = providerName is "blockchair" or "nownodes";
+    var configuredAvailable = BlockchainObservationOptions.IsObserving(providerName);
     var health = new[] { "BTC", "LTC", "ETH" }
         .Select(currency => byCurrency.GetValueOrDefault(currency) ??
             new ObservationHealthReadModel(
@@ -3137,6 +3361,12 @@ public sealed record AdminCsrfHttpResponse(string CsrfToken);
 
 public sealed record AdminLogoutHttpResponse(string Status);
 
+/// <param name="Amount">
+/// The amount the simulated payer sends, as a decimal in the selected currency.
+/// Absent means exactly the expected amount.
+/// </param>
+public sealed record RecordSimulatedTransactionHttpRequest(string? Amount);
+
 public sealed record AdminSessionHttpResponse(
     string Status,
     Guid AdminAccountId,
@@ -3144,7 +3374,8 @@ public sealed record AdminSessionHttpResponse(
     DateTimeOffset? MfaAuthenticatedAt,
     DateTimeOffset? StepUpAuthenticatedAt,
     DateTimeOffset ExpiresAt,
-    DateTimeOffset IdleExpiresAt);
+    DateTimeOffset IdleExpiresAt,
+    bool TestMode = false);
 
 public sealed record AdminPaymentsHttpResponse(IReadOnlyList<AdminPaymentSummaryReadModel> Payments);
 

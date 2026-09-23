@@ -41,6 +41,22 @@ const selectedPayment = {
   paymentAddress: "btc-test-address"
 };
 
+const testPayment = {
+  ...selectedPayment,
+  testMode: true,
+  paymentAddress: "tb1qsimulated",
+  paymentInstruction: {
+    supportedCurrency: "BTC",
+    network: "testnet",
+    chainId: null,
+    amount: "0.0003998",
+    amountAtomic: "39980",
+    paymentAddress: "tb1qsimulated",
+    uri: "bitcoin:?tb=tb1qsimulated&amount=0.0003998",
+    expiresAt: "2026-07-04T13:00:00Z"
+  }
+};
+
 const server = setupServer(
   http.get("/api/payer/payments/fixed-payer-page-id", () => HttpResponse.json(pendingPayment)),
   http.post("/api/payer/payments/fixed-payer-page-id/currency-selection", () =>
@@ -183,6 +199,115 @@ describe("PayerPage", () => {
     expect(await screen.findByText("Payment details could not be loaded.")).toBeInTheDocument();
     expect(screen.getByText("Correlation ID: correlation-123")).toBeInTheDocument();
     expect(screen.queryByText("Provider details that should not be rendered.")).not.toBeInTheDocument();
+  });
+
+  it("uses the server-authored instruction URI for the wallet link", async () => {
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
+        HttpResponse.json({
+          ...selectedPayment,
+          selectedCurrency: "ETH",
+          paymentInstruction: {
+            supportedCurrency: "ETH",
+            network: "testnet",
+            chainId: 11155111,
+            amount: "0.01",
+            amountAtomic: "10000000000000000",
+            paymentAddress: "0x0000000000000000000000000000000000000001",
+            uri: "ethereum:0x0000000000000000000000000000000000000001@11155111?value=10000000000000000",
+            expiresAt: "2026-07-04T13:00:00Z"
+          }
+        })
+      )
+    );
+    renderPayerPage();
+
+    expect(
+      await screen.findByRole("link", { name: "Open payment instruction in a compatible wallet" })
+    ).toHaveAttribute(
+      "href",
+      "ethereum:0x0000000000000000000000000000000000000001@11155111?value=10000000000000000"
+    );
+  });
+
+  it("offers no simulation and no test mode notice in a live installation", async () => {
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
+        HttpResponse.json({ ...selectedPayment, testMode: false })
+      )
+    );
+    renderPayerPage();
+
+    expect(await screen.findByText("Waiting for payment")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Test mode" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "I have paid" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["I have paid", null],
+    ["Simulate an underpayment", "0.0001999"],
+    ["Simulate an overpayment", "0.0005997"]
+  ])("lets the payer of a test payment press %s", async (label, expectedAmount) => {
+    let requestedAmount: unknown = "not requested";
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
+        HttpResponse.json(testPayment)
+      ),
+      http.post(
+        "/api/payer/payments/fixed-payer-page-id/simulated-transactions",
+        async ({ request }) => {
+          requestedAmount = ((await request.json()) as { amount: unknown }).amount;
+          return HttpResponse.json(
+            {
+              paymentId: testPayment.paymentId,
+              supportedCurrency: "BTC",
+              paymentAddress: testPayment.paymentAddress,
+              transactionHash: "a".repeat(64),
+              amount: expectedAmount ?? "0.0003998",
+              recordedAt: "2026-07-04T12:10:00Z"
+            },
+            { status: 201 }
+          );
+        }
+      )
+    );
+    renderPayerPage();
+
+    expect(await screen.findByRole("region", { name: "Test mode" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: label }));
+
+    expect(
+      await screen.findByText(
+        `Simulated transfer of ${expectedAmount ?? "0.0003998"} BTC sent. The status updates once it is observed.`
+      )
+    ).toBeInTheDocument();
+    expect(requestedAmount).toBe(expectedAmount);
+  });
+
+  it("stops offering the simulation once the test payment is complete", async () => {
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () =>
+        HttpResponse.json({ ...testPayment, status: "completed", completedAt: "2026-07-04T12:30:00Z" })
+      )
+    );
+    renderPayerPage();
+
+    expect(await screen.findByText("Payment completed")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Test mode" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "I have paid" })).not.toBeInTheDocument();
+  });
+
+  it("has no automated accessibility violations in the test mode payment state", async () => {
+    server.use(
+      http.get("/api/payer/payments/fixed-payer-page-id", () => HttpResponse.json(testPayment))
+    );
+    const rendered = renderPayerPage();
+    await screen.findByRole("button", { name: "I have paid" });
+
+    const result = await axe.run(rendered.container, {
+      rules: { "color-contrast": { enabled: false } }
+    });
+    expect(result.violations).toEqual([]);
   });
 
   it("has no automated accessibility violations in the selection state", async () => {

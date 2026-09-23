@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Payaffe.Api.Tests.Contracts;
@@ -8,10 +9,20 @@ public sealed class WebOpenApiContractTests
 {
     private const string SnapshotPathFromRepositoryRoot = "docs/contracts/web/openapi.json";
 
+    private const string PayerSimulationPath = "/api/payer/payments/{payerPageId}/simulated-transactions";
+
+    /// <summary>
+    /// The browser API is taken from a Test Mode installation, which serves
+    /// everything a live one does plus the Payer Page's simulation route
+    /// (ADR 0033). The web application is typed from this snapshot and has to
+    /// know that route; it only ever calls it when a Payment says it is in
+    /// Test Mode.
+    /// </summary>
     [Fact]
     public async Task Web_OpenApi_document_matches_accepted_contract_snapshot()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseSetting("Installation:Mode", "test"));
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/openapi/web.json");
@@ -28,6 +39,22 @@ public sealed class WebOpenApiContractTests
         Assert.True(File.Exists(snapshotPath), $"Accepted Web OpenAPI snapshot is missing at {snapshotPath}.");
         var accepted = NormalizeJson(await File.ReadAllTextAsync(snapshotPath));
         Assert.Equal(accepted, generated);
+    }
+
+    [Fact]
+    public async Task The_live_web_OpenApi_document_is_the_test_mode_one_without_the_simulation_route()
+    {
+        await using var live = new WebApplicationFactory<Program>();
+        await using var test = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseSetting("Installation:Mode", "test"));
+
+        using var liveDocument = JsonDocument.Parse(await live.CreateClient().GetStringAsync("/openapi/web.json"));
+        using var testDocument = JsonDocument.Parse(await test.CreateClient().GetStringAsync("/openapi/web.json"));
+
+        var livePaths = liveDocument.RootElement.GetProperty("paths").EnumerateObject().Select(path => path.Name).ToArray();
+        var testPaths = testDocument.RootElement.GetProperty("paths").EnumerateObject().Select(path => path.Name).ToArray();
+        Assert.DoesNotContain(PayerSimulationPath, livePaths);
+        Assert.Equal(testPaths.Except([PayerSimulationPath]).Order(StringComparer.Ordinal), livePaths.Order(StringComparer.Ordinal));
     }
 
     [Fact]

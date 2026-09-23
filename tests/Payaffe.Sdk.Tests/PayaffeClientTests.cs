@@ -316,6 +316,97 @@ public sealed class PayaffeClientTests
             new PayaffeClient(httpClient, new Uri(value, UriKind.RelativeOrAbsolute), "token"));
     }
 
+    [Fact]
+    public async Task Simulating_a_payment_posts_the_amount_and_idempotency_key()
+    {
+        Guid paymentId = Guid.NewGuid();
+        HttpRequestMessage? capturedRequest = null;
+        string? capturedBody = null;
+        using HttpClient httpClient = new(new DelegateHandler(async (request, cancellationToken) =>
+        {
+            capturedRequest = request;
+            capturedBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = new StringContent(
+                    $$"""
+                    {
+                      "paymentId": "{{paymentId}}",
+                      "supportedCurrency": "BTC",
+                      "paymentAddress": "tb1qsimulated",
+                      "transactionHash": "{{new string('a', 64)}}",
+                      "amount": "0.0002",
+                      "recordedAt": "2026-09-23T12:00:00+00:00"
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        }));
+        PayaffeClient client = CreateClient(httpClient);
+
+        SimulatedTransaction transaction = await client.SimulatePaymentAsync(paymentId, "0.0002", "attempt-1");
+
+        Assert.Equal(paymentId, transaction.PaymentId);
+        Assert.Equal(SupportedCurrency.Btc, transaction.SupportedCurrency);
+        Assert.Equal("0.0002", transaction.Amount);
+        Assert.Equal(HttpMethod.Post, capturedRequest!.Method);
+        Assert.Equal(
+            $"https://payaffe.example.test/root/api/v1/payments/{paymentId}/simulated-transactions",
+            capturedRequest.RequestUri!.AbsoluteUri);
+        Assert.Equal("attempt-1", capturedRequest.Headers.GetValues("Idempotency-Key").Single());
+        using JsonDocument body = JsonDocument.Parse(capturedBody!);
+        Assert.Equal("0.0002", body.RootElement.GetProperty("amount").GetString());
+    }
+
+    [Fact]
+    public async Task Simulating_against_a_live_installation_says_so()
+    {
+        using HttpClient httpClient = new(new DelegateHandler((_, _) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound))));
+        PayaffeClient client = CreateClient(httpClient);
+
+        PayaffeApiException exception = await Assert.ThrowsAsync<PayaffeApiException>(
+            () => client.SimulatePaymentAsync(Guid.NewGuid()));
+
+        Assert.Equal(PayaffeErrorCode.TestModeUnavailable, exception.Code);
+        Assert.Contains("not in Test Mode", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_missing_payment_in_a_test_installation_is_not_mistaken_for_a_live_one()
+    {
+        using HttpClient httpClient = new(new DelegateHandler((_, _) => Task.FromResult(
+            ProblemResponse(HttpStatusCode.NotFound, "payment.not_found", "correlation-1"))));
+        PayaffeClient client = CreateClient(httpClient);
+
+        PayaffeApiException exception = await Assert.ThrowsAsync<PayaffeApiException>(
+            () => client.SimulatePaymentAsync(Guid.NewGuid()));
+
+        Assert.Equal("payment.not_found", exception.Code.Value);
+    }
+
+    [Theory]
+    [InlineData(null, 1)]
+    [InlineData("attempt-1", 3)]
+    public async Task A_simulation_is_retried_after_a_lost_answer_only_with_an_idempotency_key(
+        string? idempotencyKey,
+        int expectedAttempts)
+    {
+        int attempts = 0;
+        using HttpClient httpClient = new(new DelegateHandler((_, _) =>
+        {
+            attempts++;
+            throw new HttpRequestException("connection reset");
+        }));
+        PayaffeClient client = CreateClient(httpClient, maximumRetries: 2);
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.SimulatePaymentAsync(Guid.NewGuid(), idempotencyKey: idempotencyKey));
+
+        Assert.Equal(expectedAttempts, attempts);
+    }
+
     private static PayaffeClient CreateClient(HttpClient httpClient, int maximumRetries = 2)
     {
         return new PayaffeClient(

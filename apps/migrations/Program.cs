@@ -13,6 +13,7 @@ var connectionString = builder.Configuration.GetConnectionString("Payaffe")
 
 builder.Services.Configure<PaymentApplicationOptions>(builder.Configuration.GetSection("Payments"));
 builder.Services.Configure<PaymentAddressOptions>(builder.Configuration.GetSection("PaymentAddresses"));
+builder.Services.AddPayaffeInstallationMode(builder.Configuration);
 builder.Services.AddPayaffeApplication();
 builder.Services.AddPayaffeInfrastructure(connectionString);
 builder.Services.AddScoped<AdminBootstrapService>();

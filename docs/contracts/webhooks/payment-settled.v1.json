@@ -4,6 +4,7 @@
   "event_version": "1",
   "occurred_at": "2026-07-05T13:30:00+00:00",
   "correlation_id": "00000000-0000-0000-0000-000000000000",
+  "test_mode": false,
   "resource": {
     "type": "payment",
     "id": "00000000-0000-0000-0000-000000000000"

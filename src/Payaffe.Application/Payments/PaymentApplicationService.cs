@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Globalization;
+using Payaffe.Application.Installation;
 using Payaffe.Domain.Payments;
 using Microsoft.Extensions.Options;
 
@@ -15,7 +16,8 @@ public sealed class PaymentApplicationService(
     IProjectPaymentConfigurationStore projectConfigurationStore,
     IBlockchainObservationAdapter blockchainObservationAdapter,
     IClock clock,
-    IOptions<PaymentApplicationOptions> options)
+    IOptions<PaymentApplicationOptions> options,
+    ConfiguredInstallationMode? installationMode = null)
 {
     private static readonly string[] SupportedCurrencies = ["BTC", "LTC", "ETH"];
 
@@ -511,6 +513,23 @@ public sealed class PaymentApplicationService(
                         break;
                     case RecordBlockchainObservationResultKind.AlreadyRecorded:
                         alreadyRecordedCount++;
+                        // A transaction first seen short of its Confirmation
+                        // Requirement only completes the Payment through a
+                        // later poll that reports it deeper in the chain.
+                        // Reorg monitoring takes over once it has completed.
+                        if (result.Payment?.Status is "observed" or "waiting_for_payment")
+                        {
+                            var update = await UpdatePolledConfirmationsAsync(target, observation, cancellationToken);
+                            if (update is UpdateBlockchainTransactionConfirmationsResultKind.Completed)
+                            {
+                                completedCount++;
+                            }
+                            else if (update is null)
+                            {
+                                failedCount++;
+                            }
+                        }
+
                         break;
                     case RecordBlockchainObservationResultKind.PaymentNotFound:
                     case RecordBlockchainObservationResultKind.PaymentNotReady:
@@ -531,6 +550,35 @@ public sealed class PaymentApplicationService(
             alreadyRecordedCount,
             rejectedCount,
             failedCount);
+    }
+
+    private async Task<UpdateBlockchainTransactionConfirmationsResultKind?> UpdatePolledConfirmationsAsync(
+        BlockchainObservationTarget target,
+        BlockchainObservation observation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await UpdateBlockchainTransactionConfirmationsAsync(
+                new UpdateBlockchainTransactionConfirmationsCommand(
+                    target.PaymentId,
+                    target.SupportedCurrency,
+                    observation.TransactionHash,
+                    observation.Confirmations,
+                    BlockHash: null,
+                    BlockHeight: null,
+                    target.ProjectId),
+                cancellationToken);
+            return result.Kind;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public async Task<MonitorBlockchainReorgsResult> MonitorBlockchainReorgsAsync(
@@ -961,7 +1009,8 @@ public sealed class PaymentApplicationService(
                 payment.ExpectedCryptoAmount,
                 payment.ObservedTotal),
             rateLock,
-            instruction);
+            instruction,
+            TestMode: installationMode?.IsTest ?? false);
     }
 
     private string BuildPayerPageUrl(string payerPageId)

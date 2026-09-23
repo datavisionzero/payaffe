@@ -2,6 +2,7 @@ using Payaffe.Application;
 using Payaffe.Application.Admin;
 using Payaffe.Infrastructure;
 using Payaffe.Infrastructure.Payments;
+using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Telemetry;
 using Payaffe.Mcp;
 using Microsoft.Extensions.Configuration;
@@ -18,7 +19,11 @@ var connectionString = builder.Configuration.GetConnectionString("Payaffe")
 builder.AddPayaffeTelemetry("payaffe-mcp", logToStandardError: true);
 
 builder.Services.AddPayaffeApplication();
+builder.Services.AddPayaffeInstallationMode(builder.Configuration);
 builder.Services.AddPayaffeInfrastructure(connectionString, registerHostedWorkers: false);
+
+// This host does not apply the schema, so it checks the recorded mode itself.
+builder.Services.AddHostedService<InstallationModeVerificationHostedService>();
 builder.Services.Configure<PaymentAddressOptions>(builder.Configuration.GetSection("PaymentAddresses"));
 builder.Services.Configure<AdminProjectDefaultsOptions>(builder.Configuration.GetSection("PaymentAddresses"));
 builder.Services.AddOptions<AdminMcpOptions>()

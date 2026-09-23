@@ -24,6 +24,9 @@
       <section id="checkout" hidden aria-labelledby="checkout-heading">
         <h2 id="checkout-heading">Checkout</h2>
         <p id="order-line"></p>
+        <p id="test-mode" class="notice" hidden>
+          Test mode: this payment is simulated, and no real money can be sent or received.
+        </p>
 
         <div id="currency-choice">
           <h3>Pay with</h3>
@@ -47,6 +50,7 @@
             <button id="copy-address" type="button">Copy address</button>
             <button id="copy-amount" type="button">Copy amount</button>
             <a id="wallet-link" class="button" href="#">Open in wallet</a>
+            <button id="simulate-payment" type="button" hidden>Simulate the payment</button>
           </p>
         </div>
 

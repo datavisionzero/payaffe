@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Payaffe.Api.Tests.Contracts;
@@ -7,6 +8,16 @@ namespace Payaffe.Api.Tests.Contracts;
 public sealed class IntegrationApiOpenApiContractTests
 {
     private const string SnapshotPathFromRepositoryRoot = "docs/contracts/integration-api/openapi.v1.json";
+
+    /// <summary>
+    /// The same v1 document as a Test Mode installation serves it: the live
+    /// contract plus the routes that exist only there (ADR 0033). Kept apart
+    /// so the live snapshot stays exactly what a production integration can
+    /// call.
+    /// </summary>
+    private const string TestModeSnapshotPathFromRepositoryRoot = "docs/contracts/integration-api/openapi.v1.test-mode.json";
+
+    private const string SimulatedTransactionsPath = "/api/v1/payments/{paymentId}/simulated-transactions";
 
     [Fact]
     public async Task OpenApi_document_matches_accepted_contract_snapshot()
@@ -30,6 +41,46 @@ public sealed class IntegrationApiOpenApiContractTests
             $"Accepted OpenAPI snapshot is missing at {snapshotPath}.");
         var accepted = NormalizeJson(await File.ReadAllTextAsync(snapshotPath));
         Assert.Equal(accepted, generated);
+    }
+
+    [Fact]
+    public async Task Test_mode_OpenApi_document_matches_its_accepted_contract_snapshot()
+    {
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseSetting("Installation:Mode", "test"));
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/openapi/v1.json");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var generated = NormalizeJson(await response.Content.ReadAsStringAsync());
+        var snapshotPath = Path.Combine(FindRepositoryRoot(), TestModeSnapshotPathFromRepositoryRoot);
+        if (ShouldUpdateSnapshot())
+        {
+            await File.WriteAllTextAsync(snapshotPath, generated);
+        }
+
+        Assert.True(File.Exists(snapshotPath), $"Accepted OpenAPI snapshot is missing at {snapshotPath}.");
+        Assert.Equal(NormalizeJson(await File.ReadAllTextAsync(snapshotPath)), generated);
+
+        using var document = JsonDocument.Parse(generated);
+        var simulate = document.RootElement.GetProperty("paths").GetProperty(SimulatedTransactionsPath).GetProperty("post");
+        Assert.Equal("RecordSimulatedTransaction", simulate.GetProperty("operationId").GetString());
+        AssertHasBearerSecurity(simulate);
+        AssertHasResponse(simulate, "201");
+        AssertHasResponse(simulate, "404");
+        AssertHasResponse(simulate, "409");
+    }
+
+    [Fact]
+    public async Task The_live_OpenApi_document_has_no_test_mode_route()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
+
+        Assert.False(document.RootElement.GetProperty("paths").TryGetProperty(SimulatedTransactionsPath, out _));
     }
 
     [Fact]

@@ -26,7 +26,12 @@ internal sealed class ShopPayments(
             return Results.NotFound();
         }
 
-        ShopOrder order = orders.Create(storefront, customerId, item, configuration.FiatCurrency);
+        ShopOrder order = orders.Create(
+            storefront,
+            customerId,
+            item,
+            configuration.FiatCurrency,
+            configuration.AcceptTestPayments);
 
         // The order identifier is both the External Reference and the idempotency key. It is
         // stable, so a retried creation after a timeout returns the same Payment instead of
@@ -117,6 +122,59 @@ internal sealed class ShopPayments(
     }
 
     /// <summary>
+    /// Pretends the customer paid, against a Test Mode installation. The endpoint exists for a
+    /// storefront a developer runs against a test installation and answers not found everywhere
+    /// else, so a production storefront has no such button to press.
+    /// </summary>
+    public async Task<IResult> SimulatePaymentAsync(
+        string storefront,
+        Guid orderId,
+        string customerId,
+        string? amount,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetStorefront(storefront, out StorefrontOptions? configuration) ||
+            !configuration.AcceptTestPayments)
+        {
+            return Results.NotFound();
+        }
+
+        ShopOrder? order = orders.FindForCustomer(storefront, orderId, customerId);
+        if (order?.PaymentId is null)
+        {
+            return Results.NotFound();
+        }
+
+        try
+        {
+            // Returns at once. The order changes when the installation reports the transfer,
+            // through the same webhook and polling paths a real transfer takes.
+            await clients.CreateClient(storefront).SimulatePaymentAsync(
+                order.PaymentId.Value,
+                amount,
+                cancellationToken: cancellationToken);
+            return Results.Ok(OrderView.Of(order));
+        }
+        catch (PayaffeApiException exception) when (exception.Code == PayaffeErrorCode.TestModeUnavailable)
+        {
+            return Results.Json(
+                new { error = "payaffe_not_in_test_mode", retryable = false },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (PayaffeApiException exception) when (
+            exception.Code.Value is "payment.not_waiting_for_payment")
+        {
+            return Results.Json(
+                new { error = "payment_not_waiting", retryable = false },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (PayaffeApiException exception)
+        {
+            return PaymentsUnavailable(exception, "simulating a payment");
+        }
+    }
+
+    /// <summary>
     /// One Webhook Delivery. Nothing in the request is believed until the signature over the raw
     /// bytes verifies against this storefront's secret, and nothing is acted on twice.
     /// </summary>
@@ -176,7 +234,7 @@ internal sealed class ShopPayments(
             return Results.Ok(new { status = "duplicate" });
         }
 
-        order.Apply(webhookEvent.Payment, $"webhook {webhookEvent.EventType}");
+        order.Apply(webhookEvent.Payment, webhookEvent.TestMode, $"webhook {webhookEvent.EventType}");
         return Results.Ok(new { status = "accepted" });
     }
 

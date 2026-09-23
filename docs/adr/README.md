@@ -33,8 +33,8 @@ material value to understanding the decision.
 
 - [0001 – Deployment is Compose, and the service count is the budget](./0001-deployment-is-compose-and-the-service-count-is-the-budget.md) — service roster amended by 0030
 - [0002 – The hosts are thin and the core is shared](./0002-the-hosts-are-thin-and-the-core-is-shared.md) — frontend topology amended by 0030
-- [0003 – Blockchain truth comes from a hosted API, not a node we run](./0003-blockchain-truth-comes-from-a-hosted-api-not-a-node-we-run.md)
-- [0004 – One observation provider is selected, and never mixed](./0004-one-observation-provider-is-selected-and-never-mixed.md)
+- [0003 – Blockchain truth comes from a hosted API, not a node we run](./0003-blockchain-truth-comes-from-a-hosted-api-not-a-node-we-run.md) — amended for Test Mode by 0033
+- [0004 – One observation provider is selected, and never mixed](./0004-one-observation-provider-is-selected-and-never-mixed.md) — amended for Test Mode by 0033
 - [0005 – payaffe never holds a key that can spend](./0005-payaffe-never-holds-a-key-that-can-spend.md)
 - [0006 – Native ETH addresses are imported, not derived](./0006-native-eth-addresses-are-imported-not-derived.md)
 - [0007 – A payment is created in fiat, and payaffe converts](./0007-a-payment-is-created-in-fiat-and-payaffe-converts.md)
@@ -63,3 +63,4 @@ material value to understanding the decision.
 - [0030 – The web application is a Vite SPA served by the API](./0030-the-web-application-is-a-vite-spa-served-by-the-api.md)
 - [0031 – Embedded payments use the Integration API](./0031-embedded-payments-use-the-integration-api.md)
 - [0032 – The client address is the connection, until a proxy is named](./0032-the-client-address-is-the-connection-until-a-proxy-is-named.md)
+- [0033 – A test installation simulates its external truth](./0033-a-test-installation-simulates-its-external-truth.md)

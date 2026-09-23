@@ -22,7 +22,8 @@ public sealed record PaymentResponse(
     string? ConfirmedEligibleTotal,
     string? ObservedAmountState,
     RateLockResponse? RateLock,
-    PaymentInstructionResponse? PaymentInstruction);
+    PaymentInstructionResponse? PaymentInstruction,
+    bool TestMode = false);
 
 public sealed record PaymentOptionResponse(
     string SupportedCurrency,

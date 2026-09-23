@@ -95,6 +95,70 @@ public sealed class PayaffeClient
             cancellationToken);
     }
 
+    /// <summary>
+    /// Simulates the Payer paying a Payment of a Test Mode installation, for
+    /// testing an integration end to end without real funds.
+    /// </summary>
+    /// <param name="amount">
+    /// The amount sent, as a decimal in the selected currency; <c>null</c> pays
+    /// exactly the expected amount. Less exercises an underpayment, more an
+    /// overpayment, and a second call tops up.
+    /// </param>
+    /// <param name="idempotencyKey">
+    /// Makes a retry return the first simulated transaction instead of sending
+    /// another. Without one, the SDK does not retry a request whose outcome it
+    /// cannot know, because a second transaction would be an overpayment.
+    /// </param>
+    /// <exception cref="PayaffeApiException">
+    /// With <see cref="PayaffeErrorCode.TestModeUnavailable"/> when the
+    /// installation is live and has no such route.
+    /// </exception>
+    public async Task<SimulatedTransaction> SimulatePaymentAsync(
+        Guid paymentId,
+        string? amount = null,
+        string? idempotencyKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (paymentId == Guid.Empty)
+        {
+            throw new ArgumentException("A Payment identifier is required.", nameof(paymentId));
+        }
+
+        try
+        {
+            return await SendAsync<SimulatedTransaction>(
+                () =>
+                {
+                    HttpRequestMessage message = CreateRequest(
+                        HttpMethod.Post,
+                        $"payments/{paymentId:D}/simulated-transactions");
+                    if (!string.IsNullOrWhiteSpace(idempotencyKey))
+                    {
+                        message.Headers.Add("Idempotency-Key", idempotencyKey);
+                    }
+
+                    message.Content = JsonContent.Create(new SimulatePaymentRequest(amount), options: _jsonOptions);
+                    return message;
+                },
+                retryAmbiguousFailures: !string.IsNullOrWhiteSpace(idempotencyKey),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (PayaffeApiException exception) when (
+            exception.StatusCode == HttpStatusCode.NotFound &&
+            exception.Code == PayaffeErrorCode.UnexpectedError)
+        {
+            // A live installation answers an unknown route with a bare 404, not
+            // with the problem body a missing Payment gets.
+            throw new PayaffeApiException(
+                HttpStatusCode.NotFound,
+                PayaffeErrorCode.TestModeUnavailable,
+                exception.CorrelationId,
+                exception.ValidationErrors,
+                retryAfter: null,
+                "This installation is not in Test Mode, so a payment cannot be simulated.");
+        }
+    }
+
     public async IAsyncEnumerable<Payment> PollPaymentAsync(
         Guid paymentId,
         PaymentPollingOptions? options = null,
@@ -149,10 +213,23 @@ public sealed class PayaffeClient
         return apiToken;
     }
 
-    private async Task<Payment> SendPaymentAsync(
+    private Task<Payment> SendPaymentAsync(
         Func<HttpRequestMessage> requestFactory,
+        CancellationToken cancellationToken) =>
+        SendAsync<Payment>(requestFactory, retryAmbiguousFailures: true, cancellationToken);
+
+    /// <param name="retryAmbiguousFailures">
+    /// Whether a transport failure or timeout may be retried. Those leave the
+    /// outcome unknown, so only a request the server deduplicates may repeat.
+    /// A 429 or 503 is always retried: the request was not processed.
+    /// </param>
+    private async Task<T> SendAsync<T>(
+        Func<HttpRequestMessage> requestFactory,
+        bool retryAmbiguousFailures,
         CancellationToken cancellationToken)
+        where T : class
     {
+        int maximumAmbiguousRetries = retryAmbiguousFailures ? _options.MaximumRetries : 0;
         for (int attempt = 0; ; attempt++)
         {
             try
@@ -177,18 +254,18 @@ public sealed class PayaffeClient
                         .ConfigureAwait(false);
                 }
 
-                Payment? payment = await response.Content.ReadFromJsonAsync<Payment>(
+                T? result = await response.Content.ReadFromJsonAsync<T>(
                     _jsonOptions,
                     cancellationToken).ConfigureAwait(false);
-                return payment ?? throw new JsonException("Payaffe returned an empty Payment response.");
+                return result ?? throw new JsonException($"Payaffe returned an empty {typeof(T).Name} response.");
             }
-            catch (HttpRequestException) when (attempt < _options.MaximumRetries)
+            catch (HttpRequestException) when (attempt < maximumAmbiguousRetries)
             {
                 await DelayBeforeRetryAsync(attempt, null, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (
                 !cancellationToken.IsCancellationRequested &&
-                attempt < _options.MaximumRetries)
+                attempt < maximumAmbiguousRetries)
             {
                 await DelayBeforeRetryAsync(attempt, null, cancellationToken).ConfigureAwait(false);
             }
@@ -297,6 +374,8 @@ public sealed class PayaffeClient
     }
 
     private sealed record SelectCurrencyRequest(SupportedCurrency SupportedCurrency);
+
+    private sealed record SimulatePaymentRequest(string? Amount);
 
     private sealed class IntegrationApiProblem
     {

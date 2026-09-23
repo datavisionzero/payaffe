@@ -42,6 +42,15 @@ public sealed class ShopOrder
 
     public required string FiatCurrency { get; init; }
 
+    /// <summary>
+    /// Whether this order's storefront lets a Test Mode Payment fulfil it. See
+    /// <see cref="StorefrontOptions.AcceptTestPayments"/>.
+    /// </summary>
+    public bool AcceptsTestPayments { get; init; }
+
+    /// <summary>Whether the Payment behind this order is a simulated one.</summary>
+    public bool TestMode { get; private set; }
+
     public Guid? PaymentId { get; private set; }
 
     public PaymentStatus? Status { get; private set; }
@@ -79,6 +88,7 @@ public sealed class ShopOrder
             payment.ExpiresAt,
             payment.PaymentInstruction,
             payment.PaymentOptions,
+            payment.TestMode,
             signal);
     }
 
@@ -86,7 +96,7 @@ public sealed class ShopOrder
     /// Folds the Payment a verified Webhook Event describes into the order. The Delivery carries
     /// no Payment Instruction and no options, so what the order already has is kept.
     /// </summary>
-    public void Apply(PayaffeWebhookPayment payment, string signal)
+    public void Apply(PayaffeWebhookPayment payment, bool testMode, string signal)
     {
         ArgumentNullException.ThrowIfNull(payment);
         ApplyCore(
@@ -96,6 +106,7 @@ public sealed class ShopOrder
             payment.ExpiresAt,
             instruction: null,
             options: null,
+            testMode,
             signal);
     }
 
@@ -113,11 +124,13 @@ public sealed class ShopOrder
         DateTimeOffset expiresAt,
         PaymentInstruction? instruction,
         IReadOnlyList<PaymentOption>? options,
+        bool testMode,
         string signal)
     {
         lock (_gate)
         {
             LastSignal = signal;
+            TestMode = testMode;
             PaymentId ??= paymentId;
             ExpiresAt = expiresAt;
             if (options is not null)
@@ -141,6 +154,15 @@ public sealed class ShopOrder
             }
 
             Status = status;
+
+            // A simulated Payment is shown for what it is and never hands goods over, unless
+            // this storefront was set up to be tested against a Test Mode installation.
+            if (testMode && !AcceptsTestPayments)
+            {
+                LastSignal = $"{signal}, ignored: simulated payment";
+                return;
+            }
+
             if (status == PaymentStatus.Completed || status == PaymentStatus.Settled)
             {
                 Fulfillment = FulfillmentState.Fulfilled;
@@ -167,7 +189,12 @@ public sealed class OrderStore
     private readonly ConcurrentDictionary<Guid, ShopOrder> _orders = new();
     private readonly ConcurrentDictionary<(string Storefront, Guid EventId), byte> _handledEvents = new();
 
-    public ShopOrder Create(string storefront, string customerId, ShopItem item, string fiatCurrency)
+    public ShopOrder Create(
+        string storefront,
+        string customerId,
+        ShopItem item,
+        string fiatCurrency,
+        bool acceptsTestPayments = false)
     {
         ShopOrder order = new()
         {
@@ -176,6 +203,7 @@ public sealed class OrderStore
             CustomerId = customerId,
             Item = item,
             FiatCurrency = fiatCurrency,
+            AcceptsTestPayments = acceptsTestPayments,
         };
 
         _orders[order.OrderId] = order;

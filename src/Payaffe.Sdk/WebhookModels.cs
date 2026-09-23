@@ -111,7 +111,8 @@ public sealed record PayaffeWebhookEvent(
     DateTimeOffset OccurredAt,
     string? CorrelationId,
     PayaffeWebhookResource? Resource,
-    PayaffeWebhookPayment Payment);
+    PayaffeWebhookPayment Payment,
+    bool TestMode = false);
 
 public sealed record PayaffeWebhookResource(string Type, Guid Id);
 

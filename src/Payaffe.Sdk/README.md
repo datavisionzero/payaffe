@@ -159,6 +159,45 @@ verified event rather than on the event-type header, which is routing
 information only. The verifier does not host an endpoint, choose a web framework,
 persist deduplication state, or dispatch handlers.
 
+## Testing against a Test Mode installation
+
+A payaffe installation started with `PAYAFFE_INSTALLATION_MODE=test` needs no
+wallet, no blockchain provider and no exchange-rate key, and it cannot receive
+real money: its Payment Addresses are testnet addresses, its native ETH
+instructions name the Sepolia chain, and its rates are fixed. Point the client
+at it like any other installation and drive the whole flow from your tests:
+
+```csharp
+var payment = await payaffe.CreatePaymentAsync(request, idempotencyKey, cancellationToken);
+payment = await payaffe.SelectCurrencyAsync(payment.PaymentId, SupportedCurrency.Btc, cancellationToken);
+
+// Exactly the expected amount; pass an amount to underpay or overpay.
+await payaffe.SimulatePaymentAsync(payment.PaymentId, cancellationToken: cancellationToken);
+```
+
+`SimulatePaymentAsync` records a simulated transfer and returns at once. The
+Payment then goes through `observed` and `completed` on the installation's own
+schedule, with the same webhooks and the same polling results a real transfer
+produces, so your handlers are the code under test rather than a special test
+path. A second call tops up an underpayment; a call after `ExpiresAt` exercises
+late acceptance. Pass an `idempotencyKey` if the call may be retried: without
+one the client does not repeat a request whose outcome it cannot know, because a
+second transfer would be an overpayment. Against a live installation the method
+throws `PayaffeApiException` with `PayaffeErrorCode.TestModeUnavailable`.
+
+Every Payment and every webhook event says where it came from: `Payment.TestMode`
+and `PayaffeWebhookEvent.TestMode` are `true` only in a Test Mode installation.
+A test installation can be configured with your production webhook URL and a
+valid secret, so a correct signature does not prove the money was real. In
+production, refuse to fulfil anything whose `TestMode` is `true`:
+
+```csharp
+if (result.Event!.TestMode && !_environment.IsDevelopment())
+{
+    return Results.BadRequest();
+}
+```
+
 ## Versions and upgrading
 
 The package and the installation are versioned separately on purpose. SDK `1.x`
@@ -173,7 +212,7 @@ sides, which is why the string-backed value types keep values they have never
 heard of instead of throwing. Pin the major version and take minors freely:
 
 ```xml
-<PackageReference Include="Payaffe.Sdk" Version="[0.2.0,1.0.0)" />
+<PackageReference Include="Payaffe.Sdk" Version="[0.3.0,1.0.0)" />
 ```
 
 Coming from a hand-written HTTP client, the migration is mechanical and needs no

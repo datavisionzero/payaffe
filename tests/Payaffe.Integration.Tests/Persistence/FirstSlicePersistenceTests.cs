@@ -33,6 +33,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
         Assert.Equal(
             [
                 "app.background_worker_leases",
+                "app.installation",
                 "app.matching_blockchain_transactions",
                 "app.native_eth_address_pool_imports",
                 "app.native_eth_addresses",
@@ -48,6 +49,7 @@ public sealed class FirstSlicePersistenceTests(PostgreSqlFixture postgres) : ICl
                 "app.rate_cache",
                 "app.rate_locks",
                 "app.reorg_alerts",
+                "app.simulated_transactions",
                 "app.watch_only_wallet_cursors",
                 "app.webhook_endpoints",
                 "audit.audit_log_entries",

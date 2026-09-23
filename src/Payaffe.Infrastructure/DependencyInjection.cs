@@ -31,6 +31,7 @@ public static class DependencyInjection
         bool registerHostedWorkers = true,
         bool applySchemaOnStartup = false)
     {
+        var installationMode = services.ResolveInstallationMode();
         services.AddDbContext<PayaffeDbContext>(options => options.UseNpgsql(connectionString));
         services.AddOptions<PaymentApplicationOptions>();
 
@@ -61,7 +62,15 @@ public static class DependencyInjection
         services.AddScoped<IAdminNativeEthAddressPoolStore, EfAdminNativeEthAddressPoolStore>();
         services.AddScoped<IPaymentStore, EfPaymentStore>();
         services.AddScoped<IProjectPaymentConfigurationStore, EfProjectPaymentConfigurationStore>();
-        services.AddScoped<IPaymentAddressProvider, EfPaymentAddressProvider>();
+        if (installationMode.IsTest)
+        {
+            services.AddScoped<IPaymentAddressProvider, SimulatedPaymentAddressProvider>();
+        }
+        else
+        {
+            services.AddScoped<IPaymentAddressProvider, EfPaymentAddressProvider>();
+        }
+
         services.AddScoped<IRateCacheStore, EfRateCacheStore>();
         services.AddScoped<IObservationHealthStore, EfObservationHealthStore>();
         services.AddScoped<BackgroundWorkerLeaseManager>();
@@ -69,11 +78,25 @@ public static class DependencyInjection
         services.AddScoped<IExchangeRateSecretResolver, ConfigurationExchangeRateSecretResolver>();
         services.AddSingleton<IValidateOptions<ExchangeRateOptions>, ExchangeRateOptionsValidator>();
         services.AddOptions<ExchangeRateOptions>();
-        services.AddHttpClient<CoinGeckoExchangeRateSource>(IdentifyProduct);
-        services.AddScoped<IExchangeRateSource>(
-            serviceProvider => serviceProvider.GetRequiredService<CoinGeckoExchangeRateSource>());
-        services.AddScoped<IRateCacheRefresher>(
-            serviceProvider => serviceProvider.GetRequiredService<CoinGeckoExchangeRateSource>());
+        if (installationMode.IsTest)
+        {
+            services.AddSingleton<IValidateOptions<SimulatedExchangeRateOptions>, SimulatedExchangeRateOptionsValidator>();
+            services.AddOptions<SimulatedExchangeRateOptions>();
+            services.AddScoped<SimulatedExchangeRateSource>();
+            services.AddScoped<IExchangeRateSource>(
+                serviceProvider => serviceProvider.GetRequiredService<SimulatedExchangeRateSource>());
+            services.AddScoped<IRateCacheRefresher>(
+                serviceProvider => serviceProvider.GetRequiredService<SimulatedExchangeRateSource>());
+        }
+        else
+        {
+            services.AddHttpClient<CoinGeckoExchangeRateSource>(IdentifyProduct);
+            services.AddScoped<IExchangeRateSource>(
+                serviceProvider => serviceProvider.GetRequiredService<CoinGeckoExchangeRateSource>());
+            services.AddScoped<IRateCacheRefresher>(
+                serviceProvider => serviceProvider.GetRequiredService<CoinGeckoExchangeRateSource>());
+        }
+
         services.AddSingleton<IValidateOptions<RateCacheRefreshWorkerOptions>, RateCacheRefreshWorkerOptionsValidator>();
         services.AddOptions<RateCacheRefreshWorkerOptions>();
         if (registerHostedWorkers)
@@ -91,6 +114,23 @@ public static class DependencyInjection
         services.AddScoped<ConfiguredBlockchainObservationAdapter>();
         services.AddScoped<IBlockchainObservationAdapter, ObservationHealthTrackingAdapter>();
         services.AddSingleton<IValidateOptions<BlockchainObservationOptions>, BlockchainObservationOptionsValidator>();
+        if (installationMode.IsTest)
+        {
+            // Unset means simulated here, so a Test Mode installation needs no
+            // observation setting at all. Anything else is refused by the
+            // validator above.
+            services.PostConfigure<BlockchainObservationOptions>(options =>
+            {
+                if (BlockchainObservationOptions.NormalizeMode(options.Mode) == "none")
+                {
+                    options.Mode = BlockchainObservationOptions.SimulatedMode;
+                }
+            });
+            services.AddScoped<SimulatedBlockchainObservationAdapter>();
+            services.AddScoped<ISimulatedTransactionStore, EfSimulatedTransactionStore>();
+            services.AddScoped<PaymentSimulationService>();
+        }
+
         services.AddScoped<IWebhookSecretResolver, ConfigurationWebhookSecretResolver>();
         services.AddOptions<PaymentLifecycleWorkerOptions>();
         services.AddSingleton<IValidateOptions<PaymentLifecycleWorkerOptions>, PaymentLifecycleWorkerOptionsValidator>();

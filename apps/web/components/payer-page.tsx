@@ -10,6 +10,8 @@ import {
   getPayerPayment,
   PayerApiError,
   PayerPayment,
+  recordPayerSimulatedTransaction,
+  scaleInstructionAmount,
   selectPayerPaymentCurrency
 } from "../lib/payer-api";
 
@@ -60,7 +62,18 @@ const t = createText({
   "statuses.observed": "Payment observed",
   "statuses.completed": "Payment completed",
   "statuses.expired": "Payment expired",
-  "statuses.settled": "Payment settled"
+  "statuses.settled": "Payment settled",
+  testModeTitle: "Test mode",
+  testModeDescription:
+    "This payment is simulated. Nothing sent to this address reaches anyone, and no real money changes hands.",
+  simulateTitle: "Simulate the payment",
+  simulateDescription:
+    "This installation runs in test mode, so no wallet is needed. Pretend to pay and watch the status change as it would for a real transfer.",
+  simulateExact: "I have paid",
+  simulateUnderpayment: "Simulate an underpayment",
+  simulateOverpayment: "Simulate an overpayment",
+  simulating: "Sending",
+  simulated: "Simulated transfer of {amount} {currency} sent. The status updates once it is observed."
 });
 
 export function PayerPage({ payerPageId }: { payerPageId: string }) {
@@ -92,6 +105,8 @@ export function PayerPage({ payerPageId }: { payerPageId: string }) {
         </div>
         <ThemeSelect compact />
       </header>
+
+      {query.data?.testMode ? <TestModeNotice /> : null}
 
       {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
       {query.isError ? <ErrorMessage error={query.error} /> : null}
@@ -186,6 +201,10 @@ function PaymentContent({
 
         {selected ? <PaymentInstruction payment={payment} /> : null}
 
+        {selected && payment.testMode && (payment.status === "waiting_for_payment" || payment.status === "observed") ? (
+          <SimulatePayment payment={payment} />
+        ) : null}
+
         {returnUrl && (payment.status === "completed" || payment.status === "settled") ? (
           <div className="mt-6 border-t border-[var(--border)] pt-5">
             <a
@@ -208,6 +227,71 @@ function PaymentContent({
   );
 }
 
+function TestModeNotice() {
+  return (
+    <section
+      aria-labelledby="test-mode-title"
+      className="mb-6 rounded-md border-2 border-dashed border-[var(--danger)] bg-[var(--surface-strong)] p-4"
+    >
+      <h2 className="font-semibold uppercase tracking-wide" id="test-mode-title">
+        {t("testModeTitle")}
+      </h2>
+      <p className="mt-1 text-sm">{t("testModeDescription")}</p>
+    </section>
+  );
+}
+
+function SimulatePayment({ payment }: { payment: PayerPayment }) {
+  const queryClient = useQueryClient();
+  const payerPageId = payment.payerPageUrl.slice(payment.payerPageUrl.lastIndexOf("/") + 1);
+  const instruction = payment.paymentInstruction;
+  const mutation = useMutation({
+    mutationFn: (amount: string | null) => recordPayerSimulatedTransaction(payerPageId, amount),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["payer-payment", payerPageId] })
+  });
+  const choices: { label: string; amount: string | null }[] = [
+    { label: t("simulateExact"), amount: null },
+    ...(instruction
+      ? [
+          { label: t("simulateUnderpayment"), amount: scaleInstructionAmount(instruction, 50) },
+          { label: t("simulateOverpayment"), amount: scaleInstructionAmount(instruction, 150) }
+        ]
+      : [])
+  ];
+
+  return (
+    <section aria-labelledby="simulate-title" className="mt-8 border-t border-[var(--border)] pt-6">
+      <h2 className="text-lg font-semibold" id="simulate-title">
+        {t("simulateTitle")}
+      </h2>
+      <p className="mt-1 text-sm text-[var(--muted-foreground)]">{t("simulateDescription")}</p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        {choices.map((choice, index) => (
+          <button
+            className={
+              index === 0
+                ? "rounded-md bg-[var(--brand)] px-4 py-3 font-semibold text-[var(--brand-foreground)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                : "rounded-md border border-[var(--border)] px-4 py-3 font-semibold hover:ring-2 hover:ring-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-60"
+            }
+            disabled={mutation.isPending}
+            key={choice.label}
+            onClick={() => mutation.mutate(choice.amount)}
+            type="button"
+          >
+            {mutation.isPending && mutation.variables === choice.amount ? t("simulating") : choice.label}
+          </button>
+        ))}
+      </div>
+      <div aria-live="polite" className="mt-3 text-sm" role="status">
+        {mutation.isSuccess
+          ? t("simulated", { amount: mutation.data.amount, currency: mutation.data.supportedCurrency })
+          : null}
+      </div>
+      {mutation.isError ? <ErrorMessage error={mutation.error} /> : null}
+    </section>
+  );
+}
+
 function StatusMessage({ payment }: { payment: PayerPayment }) {
   const key = statusLabels[payment.status] ? payment.status : "unknown";
   return (
@@ -218,7 +302,7 @@ function StatusMessage({ payment }: { payment: PayerPayment }) {
     >
       <p className="font-medium">{t(`statusDescriptions.${key}`)}</p>
       {payment.status === "waiting_for_payment" || payment.status === "observed" ? (
-        <p className="mt-2 text-sm text-[var(--muted-foreground)]">{t("observationDelay")}</p>
+        <p className="mt-2 text-sm">{t("observationDelay")}</p>
       ) : null}
     </div>
   );
