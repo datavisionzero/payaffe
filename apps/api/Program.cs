@@ -13,6 +13,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Payaffe.Application;
 using Payaffe.Application.Admin;
+using Payaffe.Application.Installation;
 using Payaffe.Application.Payments;
 using Payaffe.Domain.Payments;
 using Payaffe.Infrastructure;
@@ -1042,6 +1043,7 @@ static async Task<IResult> StartAdminLoginAsync(
 static async Task<IResult> GetAdminSessionAsync(
     HttpContext httpContext,
     AdminAuthenticationService adminAuthentication,
+    ConfiguredInstallationMode installationMode,
     CancellationToken cancellationToken)
 {
     var result = await adminAuthentication.AuthenticateSessionAsync(
@@ -1058,7 +1060,8 @@ static async Task<IResult> GetAdminSessionAsync(
                 result.Principal.MfaAuthenticatedAt,
                 result.Principal.StepUpAuthenticatedAt,
                 result.Principal.ExpiresAt,
-                result.Principal.IdleExpiresAt)),
+                result.Principal.IdleExpiresAt,
+                installationMode.IsTest)),
         AdminSessionAuthenticationResultKind.Invalid =>
             IntegrationApiProblem.Create(
                 httpContext,
@@ -3148,7 +3151,8 @@ public sealed record AdminSessionHttpResponse(
     DateTimeOffset? MfaAuthenticatedAt,
     DateTimeOffset? StepUpAuthenticatedAt,
     DateTimeOffset ExpiresAt,
-    DateTimeOffset IdleExpiresAt);
+    DateTimeOffset IdleExpiresAt,
+    bool TestMode = false);
 
 public sealed record AdminPaymentsHttpResponse(IReadOnlyList<AdminPaymentSummaryReadModel> Payments);
 

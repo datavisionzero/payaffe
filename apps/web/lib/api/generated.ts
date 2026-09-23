@@ -764,6 +764,8 @@ export interface components {
             expiresAt: string;
             /** Format: date-time */
             idleExpiresAt: string;
+            /** @default false */
+            testMode: boolean;
         };
         AdminStepUpHttpRequest: {
             totpCode: null | string;
@@ -931,6 +933,8 @@ export interface components {
             observedAmountState: null | string;
             rateLock: null | components["schemas"]["RateLockResponse"];
             paymentInstruction: null | components["schemas"]["PaymentInstructionResponse"];
+            /** @default false */
+            testMode: boolean;
         };
         RateLockResponse: {
             fiatCurrency: string;

@@ -1,11 +1,14 @@
 using Payaffe.Application;
+using System.Text.Json;
 using Payaffe.Application.Payments;
+using Payaffe.Application.Webhooks;
 using Payaffe.Domain.Payments;
 using Payaffe.Infrastructure;
 using Payaffe.Infrastructure.Auth;
 using Payaffe.Infrastructure.Payments;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
+using Payaffe.Infrastructure.Webhooks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -158,6 +161,25 @@ public sealed class TestModeSimulationTests(PostgreSqlFixture postgres) : IClass
     }
 
     [Fact]
+    public async Task Every_delivered_webhook_says_it_comes_from_a_test_installation()
+    {
+        await using var context = await CreateContextAsync();
+        await context.AddWebhookEndpointAsync();
+        var payment = await context.CreateSelectedPaymentAsync("BTC");
+        await context.RecordAsync(payment.PaymentId, amount: null);
+        await context.PollAsync();
+        await context.PollAsync();
+
+        var bodies = await context.DeliverAllWebhooksAsync();
+
+        Assert.Equal(
+            ["payment.completed", "payment.created", "payment.currency_selected", "payment.observed"],
+            bodies.Select(body => body.RootElement.GetProperty("event_type").GetString()).Order(StringComparer.Ordinal));
+        Assert.All(bodies, body => Assert.True(body.RootElement.GetProperty("test_mode").GetBoolean()));
+        Assert.True(payment.TestMode);
+    }
+
+    [Fact]
     public async Task A_live_installation_has_no_simulation()
     {
         var services = new ServiceCollection();
@@ -189,6 +211,11 @@ public sealed class TestModeSimulationTests(PostgreSqlFixture postgres) : IClass
         services.AddPayaffeInfrastructure(connectionString);
         services.AddSingleton(clock);
         services.AddSingleton<IClock>(clock);
+        var webhookReceiver = new CapturingHttpMessageHandler();
+        services.AddSingleton(webhookReceiver);
+        services.AddHttpClient<WebhookDeliveryProcessor>()
+            .ConfigurePrimaryHttpMessageHandler(() => webhookReceiver);
+        services.AddScoped<IWebhookSecretResolver, FixedWebhookSecretResolver>();
         services.Configure<PaymentApplicationOptions>(options =>
         {
             options.PaymentExpiration = TimeSpan.FromMinutes(30);
@@ -245,6 +272,35 @@ public sealed class TestModeSimulationTests(PostgreSqlFixture postgres) : IClass
             return selected.Payment!;
         }
 
+        public async Task AddWebhookEndpointAsync()
+        {
+            DbContext.WebhookEndpoints.Add(new WebhookEndpointRecord
+            {
+                Id = Guid.NewGuid(),
+                IntegrationApiCredentialId = CredentialId,
+                Url = "https://receiver.example.test/webhooks/payaffe",
+                SecretReference = "secret://webhooks/test-endpoint",
+                Status = "active",
+                EventTypes = null,
+                CreatedAt = Start,
+                UpdatedAt = Start,
+            });
+            await DbContext.SaveChangesAsync();
+        }
+
+        public async Task<IReadOnlyList<JsonDocument>> DeliverAllWebhooksAsync()
+        {
+            await using var deliveryScope = provider.CreateAsyncScope();
+            var processor = deliveryScope.ServiceProvider.GetRequiredService<WebhookDeliveryProcessor>();
+            while (await processor.ProcessNextAsync(CancellationToken.None))
+            {
+            }
+
+            return provider.GetRequiredService<CapturingHttpMessageHandler>().Bodies
+                .Select(body => JsonDocument.Parse(body))
+                .ToArray();
+        }
+
         public Task<RecordSimulatedTransactionResult> RecordAsync(Guid paymentId, string? amount) =>
             Simulation.RecordSimulatedTransactionAsync(
                 new RecordSimulatedTransactionCommand(ProjectDefaults.DefaultProjectId, paymentId, amount),
@@ -290,6 +346,25 @@ public sealed class TestModeSimulationTests(PostgreSqlFixture postgres) : IClass
             await scope.DisposeAsync();
             await provider.DisposeAsync();
         }
+    }
+
+    private sealed class CapturingHttpMessageHandler : HttpMessageHandler
+    {
+        public List<string> Bodies { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Bodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+            return new HttpResponseMessage(System.Net.HttpStatusCode.NoContent);
+        }
+    }
+
+    private sealed class FixedWebhookSecretResolver : IWebhookSecretResolver
+    {
+        public Task<string?> ResolveAsync(string secretReference, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>("test-webhook-secret");
     }
 
     private sealed class MutableClock : IClock

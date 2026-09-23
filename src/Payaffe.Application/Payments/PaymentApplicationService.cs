@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Globalization;
+using Payaffe.Application.Installation;
 using Payaffe.Domain.Payments;
 using Microsoft.Extensions.Options;
 
@@ -15,7 +16,8 @@ public sealed class PaymentApplicationService(
     IProjectPaymentConfigurationStore projectConfigurationStore,
     IBlockchainObservationAdapter blockchainObservationAdapter,
     IClock clock,
-    IOptions<PaymentApplicationOptions> options)
+    IOptions<PaymentApplicationOptions> options,
+    ConfiguredInstallationMode? installationMode = null)
 {
     private static readonly string[] SupportedCurrencies = ["BTC", "LTC", "ETH"];
 
@@ -1007,7 +1009,8 @@ public sealed class PaymentApplicationService(
                 payment.ExpectedCryptoAmount,
                 payment.ObservedTotal),
             rateLock,
-            instruction);
+            instruction,
+            TestMode: installationMode?.IsTest ?? false);
     }
 
     private string BuildPayerPageUrl(string payerPageId)

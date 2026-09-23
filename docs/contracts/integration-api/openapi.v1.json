@@ -656,6 +656,10 @@
                 "$ref": "#/components/schemas/PaymentInstructionResponse"
               }
             ]
+          },
+          "testMode": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

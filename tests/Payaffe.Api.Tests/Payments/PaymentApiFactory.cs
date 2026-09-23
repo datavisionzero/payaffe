@@ -30,6 +30,12 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
 
     public string? StaticWebRootPath { get; set; }
 
+    /// <summary>
+    /// Runs the API as a Test Mode installation, with the simulated address,
+    /// rate and observation sources in place of the fixed test doubles.
+    /// </summary>
+    public bool TestMode { get; set; }
+
     public HashSet<string> UnavailableRateCurrencies { get; } = new(StringComparer.Ordinal);
 
     public HashSet<string> UnavailableAddressCurrencies { get; } = new(StringComparer.Ordinal);
@@ -39,6 +45,7 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("Installation:Mode", TestMode ? "test" : "live");
         if (StaticWebRootPath is not null)
         {
             builder.UseWebRoot(StaticWebRootPath);
@@ -82,17 +89,21 @@ public sealed class PaymentApiFactory : WebApplicationFactory<Program>
                     options.Window = IntegrationApiRateLimitWindow.Value;
                 }
             });
-            services.RemoveAll<IExchangeRateSource>();
-            services.RemoveAll<IPaymentAddressProvider>();
-            services.RemoveAll<IBlockchainObservationAdapter>();
+            if (!TestMode)
+            {
+                services.RemoveAll<IExchangeRateSource>();
+                services.RemoveAll<IPaymentAddressProvider>();
+                services.RemoveAll<IBlockchainObservationAdapter>();
+                services.AddScoped<IExchangeRateSource>(_ =>
+                    new FixedExchangeRateSource(UnavailableRateCurrencies));
+                services.AddScoped<IPaymentAddressProvider>(_ =>
+                    new FixedPaymentAddressProvider(UnavailableAddressCurrencies));
+                services.AddScoped<IBlockchainObservationAdapter>(_ =>
+                    new FixedBlockchainObservationAdapter(UnavailableObservationCurrencies));
+            }
+
             services.RemoveAll<IAdminTotpSecretResolver>();
             services.RemoveAll<IWebhookSecretResolver>();
-            services.AddScoped<IExchangeRateSource>(_ =>
-                new FixedExchangeRateSource(UnavailableRateCurrencies));
-            services.AddScoped<IPaymentAddressProvider>(_ =>
-                new FixedPaymentAddressProvider(UnavailableAddressCurrencies));
-            services.AddScoped<IBlockchainObservationAdapter>(_ =>
-                new FixedBlockchainObservationAdapter(UnavailableObservationCurrencies));
             services.AddSingleton<IAdminTotpSecretResolver>(new FixedAdminTotpSecretResolver(_totpSecrets));
             services.AddSingleton<IWebhookSecretResolver>(new FixedWebhookSecretResolver(_webhookSecrets));
         });

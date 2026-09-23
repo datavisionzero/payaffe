@@ -35,7 +35,8 @@ public sealed record Payment(
     string? ConfirmedEligibleTotal,
     string? ObservedAmountState,
     RateLock? RateLock,
-    PaymentInstruction? PaymentInstruction);
+    PaymentInstruction? PaymentInstruction,
+    bool TestMode = false);
 
 public sealed record PaymentOption(
     SupportedCurrency SupportedCurrency,

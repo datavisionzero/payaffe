@@ -133,6 +133,11 @@ representation includes:
   `rateLock`, and `paymentInstruction` before Currency Selection;
 - nullable `observedTotal`, `confirmedEligibleTotal`, `observedAmountState`,
   `completedAt`, and `settledAt` as the Payment progresses.
+- `testMode`, `true` when the installation is in Test Mode and the Payment is
+  simulated
+  ([ADR 0033](../adr/0033-a-test-installation-simulates-its-external-truth.md)).
+  A production integration must not fulfil a Payment whose `testMode` is
+  `true`.
 
 Payment Status values are:
 

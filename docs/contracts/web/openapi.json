@@ -3150,6 +3150,10 @@
           "idleExpiresAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "testMode": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -3863,6 +3867,10 @@
                 "$ref": "#/components/schemas/PaymentInstructionResponse"
               }
             ]
+          },
+          "testMode": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

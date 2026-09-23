@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Payaffe.Application.Installation;
 using Payaffe.Application.Payments;
 using Payaffe.Application.Webhooks;
 using Payaffe.Infrastructure.Persistence;
@@ -19,7 +20,8 @@ public sealed class WebhookDeliveryProcessor(
     HttpClient httpClient,
     IWebhookSecretResolver secretResolver,
     IClock clock,
-    IOptions<WebhookDeliveryOptions> options)
+    IOptions<WebhookDeliveryOptions> options,
+    ConfiguredInstallationMode? installationMode = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -415,6 +417,7 @@ public sealed class WebhookDeliveryProcessor(
             webhookEvent.EventVersion,
             webhookEvent.OccurredAt,
             webhookEvent.CorrelationId,
+            installationMode?.IsTest ?? false,
             new WebhookResource(webhookEvent.ResourceType, webhookEvent.ResourceId),
             new WebhookPaymentSnapshot(
                 payment.Id,
@@ -443,6 +446,7 @@ public sealed class WebhookDeliveryProcessor(
         string EventVersion,
         DateTimeOffset OccurredAt,
         string CorrelationId,
+        bool TestMode,
         WebhookResource Resource,
         WebhookPaymentSnapshot Payment);
 
