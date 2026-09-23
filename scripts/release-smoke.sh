@@ -122,7 +122,7 @@ fi
 section "Seeding a smoke Integration API Credential"
 
 # Creating a Credential through the product requires an authenticated Admin
-# session with MFA and Step-up, which needs an interactive terminal. The smoke
+# session and Step-up, and the first Admin needs an interactive terminal. The smoke
 # check therefore seeds one verifier directly, the same way an operator with
 # database authority could. Everything after this point uses the public API.
 compose exec -T db psql --quiet --username "$(grep -m1 '^PAYAFFE_DB_USER=' "$ENV_FILE" | cut -d= -f2)" \
@@ -359,8 +359,9 @@ cat <<'MANUAL'
   terminal or an authenticator app and cannot be scripted:
 
     1. Bootstrap the first Admin Account and store the Recovery Codes once.
-    2. Sign in with password and TOTP, then exercise one Step-up-protected
-       write, such as manual Settlement or Webhook Endpoint rotation.
+    2. Sign in with the password, enrol TOTP, then exercise one
+       Step-up-protected write, such as manual Settlement or Webhook Endpoint
+       rotation.
     3. Import native ETH Address Pool entries and confirm capacity reporting.
     4. Complete Currency Selection against a real configured address source and
        confirm the derived address in the external watch-only wallet.

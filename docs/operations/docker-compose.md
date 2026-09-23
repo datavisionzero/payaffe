@@ -27,13 +27,17 @@ The API container serves the built Payer/Admin SPA, browser APIs, Integration
 API, and health endpoints from one address. A reverse proxy therefore forwards
 every path to one upstream:
 
-Caddy, as a whole configuration:
+Caddy, as a whole configuration, when it runs on the host and reaches the
+published loopback port:
 
 ```caddyfile
 pay.example.com {
-    reverse_proxy api:8080
+    reverse_proxy 127.0.0.1:8080
 }
 ```
+
+A Caddy container attached to the `payaffe_default` network names the service
+instead, `reverse_proxy api:8080`.
 
 nginx uses the same one upstream, with `proxy_set_header Host $host` and
 `X-Forwarded-Proto $scheme` so that the API sees the public scheme.
@@ -67,6 +71,11 @@ address. A CDN in front of the proxy is another hop and belongs in the same
 list; the forwarded chain is read from the connection outwards and ends at the
 first address that was not named. Do not list a range wide enough to contain
 real callers: an address in the list may name itself.
+
+The network exists only once the installation has started, so this setting is
+filled in after the first `docker compose up -d` and takes effect with a second
+one. Docker picks the subnet when it creates the network; a `docker compose
+down` followed by `up` may pick another, and the value is checked again then.
 
 Caddy and nginx both send `X-Forwarded-For` with no extra configuration. The
 host says which of the two modes it is in with one line at startup, so
@@ -153,8 +162,13 @@ An installation copies [deploy/.env.example](../../deploy/.env.example) to
 [.env.example](../../.env.example) instead. Either way, replace the placeholder
 database password before starting services.
 
-Both files draw on the same set of variables, and the root example lists all of
-them:
+Both files draw on the same set of variables, with three differences. The
+deployment file takes one `PAYAFFE_PUBLIC_URL` and derives the Payer Page
+address from it, where the root file takes `PAYAFFE_PAYER_PAGE_BASE_URL`; it
+has no `PAYAFFE_DB_PORT`, because it publishes no database; and it names its
+images with `PAYAFFE_VERSION` and binds with `PAYAFFE_BIND_ADDRESS`, where the
+root file builds its own and reports `PAYAFFE_RELEASE`. The root example lists
+the rest:
 
 - `PAYAFFE_DB_NAME`
 - `PAYAFFE_DB_USER`
@@ -582,7 +596,7 @@ records the Installation Mode and seeds the default Project's settings: a run
 against a fresh Test Mode database records `test`, not `live`.
 
 It is also what creates the first admin; see
-[credential-rotation.md](credential-rotation.md).
+[First Admin Account](#first-admin-account).
 
 ## Start
 
@@ -638,9 +652,10 @@ reverse proxy that terminates TLS belongs in front of them. An installation
 that really is reached directly sets `PAYAFFE_BIND_ADDRESS=0.0.0.0` and accepts
 that admin sign-in then travels in the clear.
 
-Override `PAYAFFE_API_PORT` or `PAYAFFE_DB_PORT` in `.env` when a local port is
-already in use. Keep `PAYAFFE_PAYER_PAGE_BASE_URL` aligned with the public
-origin so newly created Payment links remain reachable.
+Override `PAYAFFE_API_PORT`, or in the root file `PAYAFFE_DB_PORT`, in `.env`
+when a local port is already in use. Keep `PAYAFFE_PUBLIC_URL` (in the root
+file `PAYAFFE_PAYER_PAGE_BASE_URL`) aligned with the public origin so newly
+created Payment links remain reachable.
 
 ## Health
 
@@ -673,8 +688,9 @@ The heartbeat is per process on purpose. Lease rows in
 would keep them fresh and make a wedged instance look alive. Whether scheduled
 work is actually progressing is an alerting question, not a liveness question.
 
-The Compose `api`, `worker`, and `web` services all define container
-healthchecks.
+The Compose `db`, `api`, and `worker` services all define container
+healthchecks, so `docker compose up -d --wait` returns once the installation is
+ready.
 
 ## Backups
 
