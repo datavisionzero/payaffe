@@ -221,6 +221,17 @@ public sealed class WebhookDeliveryProcessor(
             using var response = await httpClient.SendAsync(request, cancellationToken);
             await ApplyHttpResultAsync(webhookEvent, endpoint, response.StatusCode, cancellationToken);
         }
+        catch (HttpRequestException exception) when (exception.InnerException is WebhookTargetRefusedException)
+        {
+            // Retrying cannot change where the name points often enough to be
+            // worth it, and an Admin needs to see the reason, not a retry.
+            await ApplyTerminalFailureAsync(
+                webhookEvent,
+                endpoint,
+                WebhookTargetPolicy.RefusedErrorCode,
+                httpStatusCode: null,
+                cancellationToken);
+        }
         catch (HttpRequestException)
         {
             await ApplyRetryableFailureAsync(webhookEvent, endpoint, "http.request_failed", cancellationToken);
@@ -261,17 +272,32 @@ public sealed class WebhookDeliveryProcessor(
             return;
         }
 
+        await ApplyTerminalFailureAsync(
+            webhookEvent,
+            endpoint,
+            $"http.{(int)statusCode}",
+            (int)statusCode,
+            cancellationToken);
+    }
+
+    private async Task ApplyTerminalFailureAsync(
+        WebhookOutboxEventRecord webhookEvent,
+        WebhookEndpointRecord endpoint,
+        string safeErrorCode,
+        int? httpStatusCode,
+        CancellationToken cancellationToken)
+    {
         await RecordAttemptAsync(
             webhookEvent,
             endpoint,
             "terminal_failed",
-            (int)statusCode,
-            $"http.{(int)statusCode}",
+            httpStatusCode,
+            safeErrorCode,
             nextRetryAt: null,
             cancellationToken);
         webhookEvent.AttemptCount++;
         webhookEvent.Status = "terminal_failed";
-        webhookEvent.LastErrorCode = $"http.{(int)statusCode}";
+        webhookEvent.LastErrorCode = safeErrorCode;
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 

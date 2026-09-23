@@ -1,3 +1,4 @@
+using Payaffe.Application.Webhooks;
 using Payaffe.Infrastructure.Webhooks;
 using Microsoft.Extensions.Options;
 
@@ -112,6 +113,7 @@ public sealed class WebhookDeliveryOptionsValidator : IValidateOptions<WebhookDe
         failures.AddRange(PaymentLifecycleWorkerOptionsValidator.ValidateLeaseDuration(
             options.LeaseDuration,
             "Webhooks:Delivery"));
+        failures.AddRange(WebhookTargetPolicy.Validate(options.AllowedPrivateTargets));
 
         return failures.Count == 0
             ? ValidateOptionsResult.Success

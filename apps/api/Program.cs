@@ -2689,6 +2689,13 @@ static IResult MapWebhookEndpointFailure(
                 {
                     ["request"] = ["webhook_endpoint.invalid"],
                 }),
+        AdminWebhookEndpointResultKind.TargetNotPublic =>
+            IntegrationApiProblem.Validation(
+                httpContext,
+                new Dictionary<string, string[]>
+                {
+                    ["url"] = ["webhook_endpoint.target_not_public"],
+                }),
         AdminWebhookEndpointResultKind.SecretUnavailable =>
             IntegrationApiProblem.Create(
                 httpContext,

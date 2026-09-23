@@ -181,6 +181,7 @@ them:
 - `PAYAFFE_WEBHOOK_DELIVERY_MAX_RETRY_DELAY`
 - `PAYAFFE_WEBHOOK_DELIVERY_RETRY_JITTER_RATIO`
 - `PAYAFFE_WEBHOOK_DELIVERY_LEASE_DURATION`
+- `PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS`
 - `PAYAFFE_OBSERVATION_WORKER_ENABLED`
 - `PAYAFFE_OBSERVATION_WORKER_POLL_INTERVAL`
 - `PAYAFFE_OBSERVATION_WORKER_MAX_PAYMENTS_PER_POLL`
@@ -340,6 +341,37 @@ Reading `.env` into the containers needs Docker Compose 2.24 or later. With an
 older Compose, or when the configuration lives elsewhere than `.env` (for
 example `docker compose --env-file`), map the keys in a `compose.override.yaml`
 under the `environment` of both `api` and `worker`.
+
+### Webhook targets on an internal address
+
+Webhook Delivery connects only to public addresses and never follows a redirect
+([ADR 0036](../adr/0036-webhook-delivery-reaches-only-public-addresses.md)). A
+receiver on loopback, a private or link-local network, shared address space, or
+another container on the Compose network is refused: the attempt is terminal
+with `webhook_target.not_public` in Delivery history, and an Endpoint whose URL
+is such an address literally cannot be saved.
+
+`PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS` names the targets that may be reached
+anyway: host names, addresses or CIDR ranges, comma separated. It is part of
+the shared backend environment, because the `api` service checks it when an
+Endpoint is saved and delivers manual resends, and the `worker` delivers
+everything else.
+
+```dotenv
+PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS=shop.internal,10.0.4.17
+```
+
+Name the receiver and nothing wider. Every entry is a target any Admin can
+point a delivery at, so a range such as `10.0.0.0/8` hands them the whole
+network. An entry that is not a host name, an address or a CIDR range stops
+the hosts at startup.
+
+**Before upgrading from 0.3.0 or earlier:** list every Webhook Endpoint whose
+receiver is not on a public address and add it to
+`PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS` in `.env` before the `up`. Until it
+is listed, its deliveries fail terminally and have to be resent once the
+setting is in place. A receiver that answered with a redirect now fails too;
+point the Endpoint at the final URL.
 
 ## Running More Than One Instance
 
@@ -565,6 +597,10 @@ Back up the database before the `up`, not after it
 downgrade, so that artifact is the rollback for a migration that fails on the
 way up. Which version a pull moves to is
 [the tag `PAYAFFE_VERSION` names](#published-image-tags).
+
+An installation upgrading from 0.3.0 or earlier whose shop receives webhooks on
+an internal address allowlists it first; see
+[Webhook targets on an internal address](#webhook-targets-on-an-internal-address).
 
 ## Ports
 

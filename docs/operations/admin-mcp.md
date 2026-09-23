@@ -37,8 +37,12 @@ the host records both its success and its failure.
 | `Mcp:Admin:AdminAccountId` | `Mcp__Admin__AdminAccountId` | required |
 | `Mcp:Admin:PermitLimit` | `Mcp__Admin__PermitLimit` | `60` |
 | `Mcp:Admin:Window` | `Mcp__Admin__Window` | `00:01:00` |
+| `Webhooks:Delivery:AllowedPrivateTargets` | `Webhooks__Delivery__AllowedPrivateTargets` | empty |
 
-The permit limit and window bound write-tool calls per host process. The host
+The permit limit and window bound write-tool calls per host process. A Webhook
+Delivery resend is delivered from this host, so it needs the same private-target
+allowlist as the worker when a receiver sits on an internal address
+([ADR 0036](../adr/0036-webhook-delivery-reaches-only-public-addresses.md)). The host
 never registers the scheduled background workers, so it takes no worker lease
 and processes no batches.
 

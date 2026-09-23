@@ -48,6 +48,10 @@ x-backend-environment: &backend-environment
   Payments__PayerPageBaseUrl: ${PAYAFFE_PUBLIC_URL:?Set PAYAFFE_PUBLIC_URL in .env}/pay
   Webhooks__EndpointSecrets__partner-v1: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V1:-}
   Webhooks__EndpointSecrets__partner-v2: ${PAYAFFE_WEBHOOK_ENDPOINT_SECRET_PARTNER_V2:-}
+  # Webhook Delivery reaches public addresses only, unless the target is named
+  # here (ADR 0036): host names, addresses or CIDR ranges, comma separated. The
+  # API refuses such an Endpoint and resends from it, so both hosts read it.
+  Webhooks__Delivery__AllowedPrivateTargets: ${PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS:-}
   ExchangeRates__Enabled: ${PAYAFFE_EXCHANGE_RATES_ENABLED:-true}
   ExchangeRates__BaseUrl: ${PAYAFFE_EXCHANGE_RATES_BASE_URL:-https://api.coingecko.com}
   ExchangeRates__ApiKeyReference: ${PAYAFFE_EXCHANGE_RATES_API_KEY_REFERENCE:-}

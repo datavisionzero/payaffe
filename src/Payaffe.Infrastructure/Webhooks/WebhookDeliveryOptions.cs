@@ -19,4 +19,10 @@ public sealed class WebhookDeliveryOptions
     public int MaxEventsPerPoll { get; set; } = 25;
 
     public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Host names, addresses and CIDR networks that Webhook Delivery may reach
+    /// although they are not public (ADR 0036), comma separated.
+    /// </summary>
+    public string? AllowedPrivateTargets { get; set; }
 }

@@ -4,6 +4,7 @@ using Payaffe.Infrastructure;
 using Payaffe.Infrastructure.Payments;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Telemetry;
+using Payaffe.Infrastructure.Webhooks;
 using Payaffe.Mcp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +27,9 @@ builder.Services.AddPayaffeInfrastructure(connectionString, registerHostedWorker
 builder.Services.AddHostedService<InstallationModeVerificationHostedService>();
 builder.Services.Configure<PaymentAddressOptions>(builder.Configuration.GetSection("PaymentAddresses"));
 builder.Services.Configure<AdminProjectDefaultsOptions>(builder.Configuration.GetSection("PaymentAddresses"));
+// A manual resend delivers from this host, so it needs the same target
+// allowlist as the worker (ADR 0036).
+builder.Services.Configure<WebhookDeliveryOptions>(builder.Configuration.GetSection("Webhooks:Delivery"));
 builder.Services.AddOptions<AdminMcpOptions>()
     .Bind(builder.Configuration.GetSection("Mcp:Admin"))
     .ValidateDataAnnotations()

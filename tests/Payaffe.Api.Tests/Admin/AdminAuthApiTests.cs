@@ -2164,6 +2164,82 @@ public sealed class AdminAuthApiTests
         Assert.Empty(dbContext.WebhookEndpoints);
     }
 
+    [Theory]
+    [InlineData("http://169.254.169.254/latest/meta-data")]
+    [InlineData("http://127.0.0.1:8080/hooks")]
+    [InlineData("https://10.1.2.3/hooks")]
+    [InlineData("https://[::1]/hooks")]
+    public async Task Webhook_endpoint_creation_and_update_refuse_a_literal_non_public_address(string url)
+    {
+        await using var factory = new PaymentApiFactory();
+        factory.AddWebhookSecret(
+            "configuration:Webhooks:EndpointSecrets:configured",
+            "configured-secret");
+        await factory.SeedAdminAccountAsync(
+            "admin@example.test",
+            "correct-password",
+            totpSecret: TotpSecret);
+        var credentialId = await factory.SeedCredentialAsync("partner-token");
+        using var loginClient = factory.CreateClient();
+        var sessionCookie = await SignInAndGetSessionCookieAsync(loginClient);
+        var rawSessionToken = ExtractCookieValue(sessionCookie);
+        var csrf = await GetAdminCsrfAsync(factory, rawSessionToken);
+        using var sessionClient = CreateHttpsClient(factory);
+        sessionClient.DefaultRequestHeaders.Add(
+            "Cookie",
+            $"__Host-payaffe-admin={rawSessionToken}; {csrf.CookiePair}");
+        sessionClient.DefaultRequestHeaders.Add("X-CSRF-TOKEN", csrf.Token);
+
+        var refusedCreate = await sessionClient.PostAsJsonAsync(
+            "/api/admin/webhook-endpoints",
+            new
+            {
+                projectId = ProjectDefaults.DefaultProjectId,
+                integrationApiCredentialId = credentialId,
+                url,
+                secretReference = "configuration:Webhooks:EndpointSecrets:configured",
+                eventTypes = Array.Empty<string>(),
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, refusedCreate.StatusCode);
+        Assert.Contains(
+            "webhook_endpoint.target_not_public",
+            await refusedCreate.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+
+        var createResponse = await sessionClient.PostAsJsonAsync(
+            "/api/admin/webhook-endpoints",
+            new
+            {
+                projectId = ProjectDefaults.DefaultProjectId,
+                integrationApiCredentialId = credentialId,
+                url = "https://partner.example.test/hooks",
+                secretReference = "configuration:Webhooks:EndpointSecrets:configured",
+                eventTypes = Array.Empty<string>(),
+            });
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var created = await createResponse.Content.ReadFromJsonAsync<AdminWebhookEndpointResponse>();
+        Assert.NotNull(created);
+
+        var refusedUpdate = await sessionClient.PostAsJsonAsync(
+            $"/api/admin/webhook-endpoints/{created.Endpoint.Id:D}/update",
+            new
+            {
+                projectId = ProjectDefaults.DefaultProjectId,
+                expectedVersion = created.Endpoint.Version,
+                url,
+                eventTypes = Array.Empty<string>(),
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, refusedUpdate.StatusCode);
+        Assert.Contains(
+            "webhook_endpoint.target_not_public",
+            await refusedUpdate.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Equal("https://partner.example.test/hooks", Assert.Single(dbContext.WebhookEndpoints).Url);
+    }
+
     private static object CreatePaymentRequest(string externalReference) =>
         new
         {

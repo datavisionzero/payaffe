@@ -98,4 +98,18 @@ public sealed class WorkerOptionsValidatorTests
 
         Assert.False(result.Succeeded);
     }
+
+    [Fact]
+    public void Rejects_an_allowed_private_target_that_is_not_a_host_address_or_network()
+    {
+        var result = new WebhookDeliveryOptionsValidator().Validate(
+            null,
+            new WebhookDeliveryOptions { AllowedPrivateTargets = "shop.internal, 10.0.0.0/40" });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("'10.0.0.0/40'", result.FailureMessage, StringComparison.Ordinal);
+        Assert.True(new WebhookDeliveryOptionsValidator()
+            .Validate(null, new WebhookDeliveryOptions { AllowedPrivateTargets = "shop.internal, 10.0.0.0/8" })
+            .Succeeded);
+    }
 }
