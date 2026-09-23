@@ -190,6 +190,30 @@ public sealed class AdminAuthApiTests
             entry.ReasonCode == "admin_rate_limit.exceeded");
     }
 
+    /// <summary>
+    /// Audit export and Webhook Delivery resend are sensitive mutations like
+    /// the others, and are limited the same way.
+    /// </summary>
+    [Theory]
+    [InlineData("/api/admin/audit-log/export")]
+    [InlineData("/api/admin/webhook-deliveries/{0}/resend")]
+    public async Task Sensitive_admin_mutations_are_rate_limited(string pathTemplate)
+    {
+        await using var factory = new PaymentApiFactory
+        {
+            AdminRateLimitPermitLimit = 1,
+            AdminRateLimitWindow = TimeSpan.FromMinutes(5),
+        };
+        using var client = factory.CreateClient();
+
+        // Different IDs on one route share a budget: the route is the partition.
+        var first = await client.PostAsJsonAsync(string.Format(pathTemplate, Guid.NewGuid()), new { });
+        var second = await client.PostAsJsonAsync(string.Format(pathTemplate, Guid.NewGuid()), new { });
+
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, first.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, second.StatusCode);
+    }
+
     [Fact]
     public async Task Mfa_complete_sets_secure_session_cookie_and_stores_only_session_token_hash()
     {

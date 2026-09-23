@@ -49,6 +49,7 @@ public sealed class PaymentApiTests
         await factory.SeedCredentialAsync(ValidToken);
         using var client = CreateAuthenticatedClient(factory);
         var paymentId = Guid.NewGuid();
+        await AcceptCredentialAsync(client);
         var firstResponse = await client.GetAsync($"/api/v1/payments/{paymentId}");
         Assert.Equal(HttpStatusCode.NotFound, firstResponse.StatusCode);
 
@@ -71,6 +72,95 @@ public sealed class PaymentApiTests
             entry.SubjectType == "integration_api_credential" &&
             entry.SubjectId == "unknown" &&
             entry.ReasonCode == "rate_limited");
+    }
+
+    /// <summary>
+    /// The contract limits each route, not each URL: a caller that walks
+    /// through Payment IDs does not get a fresh budget for every one.
+    /// </summary>
+    [Fact]
+    public async Task Rate_limit_is_shared_by_every_Payment_ID_on_a_route()
+    {
+        await using var factory = new PaymentApiFactory
+        {
+            IntegrationApiRateLimitPermitLimit = 1,
+            IntegrationApiRateLimitWindow = TimeSpan.FromMinutes(1),
+        };
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        await AcceptCredentialAsync(client);
+
+        var first = await client.GetAsync($"/api/v1/payments/{Guid.NewGuid()}");
+        var second = await client.GetAsync($"/api/v1/payments/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.NotFound, first.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, second.StatusCode);
+    }
+
+    /// <summary>
+    /// An invented token is not a partition of its own: otherwise every junk
+    /// Authorization value would open a fresh budget and a new partition.
+    /// </summary>
+    [Fact]
+    public async Task Tokens_never_accepted_share_the_budget_of_their_route_and_address()
+    {
+        await using var factory = new PaymentApiFactory
+        {
+            IntegrationApiRateLimitPermitLimit = 1,
+            IntegrationApiRateLimitWindow = TimeSpan.FromMinutes(1),
+        };
+        using var client = factory.CreateClient();
+        var paymentId = Guid.NewGuid();
+
+        var first = await SendWithTokenAsync(client, paymentId, "junk-token-1");
+        var second = await SendWithTokenAsync(client, paymentId, "junk-token-2");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, first.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task Rate_limit_rejections_are_audited_once_per_partition_and_window()
+    {
+        await using var factory = new PaymentApiFactory
+        {
+            IntegrationApiRateLimitPermitLimit = 1,
+            IntegrationApiRateLimitWindow = TimeSpan.FromMinutes(1),
+        };
+        using var client = factory.CreateClient();
+        var paymentId = Guid.NewGuid();
+
+        var responses = new List<HttpResponseMessage>();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            responses.Add(await SendWithTokenAsync(client, paymentId, $"junk-token-{attempt}"));
+        }
+
+        Assert.Equal(4, responses.Count(response => response.StatusCode == HttpStatusCode.TooManyRequests));
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        Assert.Single(dbContext.AuditLogEntries, entry => entry.EventType == "integration_api.rate_limit");
+    }
+
+    private static async Task<HttpResponseMessage> SendWithTokenAsync(HttpClient client, Guid paymentId, string token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/payments/{paymentId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// A token gets a rate-limit partition of its own once this host has
+    /// accepted it; until then it counts with the callers of its route and
+    /// address that present none. One request on another route settles that
+    /// without spending the budget under test.
+    /// </summary>
+    private static async Task AcceptCredentialAsync(HttpClient client)
+    {
+        using var content = JsonContent.Create(new { });
+        var response = await client.PostAsync("/api/v1/payments", content);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, response.StatusCode);
     }
 
     [Fact]

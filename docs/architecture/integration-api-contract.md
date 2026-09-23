@@ -70,7 +70,12 @@ the caller.
 
 Integration API requests use a fixed-window default rate limit of 120 requests
 per minute for each route, source IP, and bearer-token fingerprint partition.
-Requests without bearer-token evidence are partitioned by route and source IP.
+A route is its pattern, such as `/api/v1/payments/{paymentId}`, so every
+Payment ID on it shares one budget. A bearer token gets a partition of its own
+once the installation has accepted it; requests without a token, and with a
+token not yet accepted, share the partition of their route and source IP, so
+invented tokens cannot open fresh budgets. A rejected request is recorded in
+the Audit Log once per partition and window, not once per request.
 The bearer token itself must not be stored in the rate-limit key, logs, Audit
 Log entries, traces, metrics, or error responses. The source IP is the one the
 host believes in, which behind a reverse proxy means the proxy's until the

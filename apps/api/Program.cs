@@ -151,6 +151,8 @@ builder.Services.AddOptions<PaymentLifecycleWorkerOptions>()
 builder.Services.AddOptions<WebhookDeliveryOptions>()
     .Bind(builder.Configuration.GetSection("Webhooks:Delivery"))
     .ValidateOnStart();
+builder.Services.AddSingleton<RateLimitPartitions>();
+builder.Services.AddSingleton<RateLimitRejectionAuditGate>();
 builder.Services.AddRateLimiter(options =>
 {
     options.OnRejected = async (context, cancellationToken) =>
@@ -163,23 +165,35 @@ builder.Services.AddRateLimiter(options =>
         try
         {
             var clock = httpContext.RequestServices.GetRequiredService<IClock>();
-            var adminAuthentication = httpContext.RequestServices.GetRequiredService<AdminAuthenticationService>();
-            await adminAuthentication.RecordSecurityAuditAsync(
-                new AdminAuditEntry(
-                    Guid.NewGuid(),
-                    clock.UtcNow,
-                    auditEventType,
-                    "denied",
-                    "system",
-                    "unknown",
-                    "api",
-                    httpContext.Connection.RemoteIpAddress?.ToString(),
-                    httpContext.Request.Headers.UserAgent.ToString(),
-                    httpContext.TraceIdentifier,
-                    problemCode,
-                    auditSubjectType,
-                    "unknown"),
-                cancellationToken);
+            var partitionKey = integrationApiRequest
+                ? httpContext.RequestServices.GetRequiredService<RateLimitPartitions>().GetIntegrationApiKey(httpContext)
+                : RateLimitPartitions.GetAdminKey(httpContext);
+            var auditWindow = integrationApiRequest
+                ? httpContext.RequestServices.GetRequiredService<IOptions<IntegrationApiRateLimitOptions>>().Value.Window
+                : httpContext.RequestServices.GetRequiredService<IOptions<AdminAuthenticationOptions>>().Value.RateLimitWindow;
+            // One Audit Log row per partition and window; the rest of a flood
+            // would only turn rejected requests into database writes.
+            var shouldAudit = httpContext.RequestServices.GetRequiredService<RateLimitRejectionAuditGate>()
+                .ShouldAudit(partitionKey, clock.UtcNow, auditWindow > TimeSpan.Zero ? auditWindow : TimeSpan.FromMinutes(1));
+            if (shouldAudit)
+            {
+                await httpContext.RequestServices.GetRequiredService<AdminAuthenticationService>().RecordSecurityAuditAsync(
+                    new AdminAuditEntry(
+                        Guid.NewGuid(),
+                        clock.UtcNow,
+                        auditEventType,
+                        "denied",
+                        "system",
+                        "unknown",
+                        "api",
+                        httpContext.Connection.RemoteIpAddress?.ToString(),
+                        httpContext.Request.Headers.UserAgent.ToString(),
+                        httpContext.TraceIdentifier,
+                        problemCode,
+                        auditSubjectType,
+                        "unknown"),
+                    cancellationToken);
+            }
         }
         catch (Exception exception)
         {
@@ -210,7 +224,7 @@ builder.Services.AddRateLimiter(options =>
             .Value;
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            GetIntegrationApiRateLimitPartitionKey(httpContext),
+            httpContext.RequestServices.GetRequiredService<RateLimitPartitions>().GetIntegrationApiKey(httpContext),
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = Math.Max(1, rateLimitOptions.PermitLimit),
@@ -226,13 +240,8 @@ builder.Services.AddRateLimiter(options =>
         var adminOptions = httpContext.RequestServices
             .GetRequiredService<IOptions<AdminAuthenticationOptions>>()
             .Value;
-        var partitionKey = string.Join(
-            '|',
-            httpContext.Request.Path.Value ?? string.Empty,
-            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
-
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey,
+            RateLimitPartitions.GetAdminKey(httpContext),
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = Math.Max(1, adminOptions.RateLimitPermitLimit),
@@ -736,6 +745,7 @@ adminApi.MapPost("/native-eth-address-pool/import", ImportAdminNativeEthAddressP
 
 adminApi.MapPost("/audit-log/export", ExportAdminAuditLogAsync)
     .WithName("ExportAdminAuditLog")
+    .RequireRateLimiting("AdminAuthentication")
     .WithTags("Admin")
     .Produces<AdminAuditLogExportHttpResponse>(StatusCodes.Status200OK)
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json")
@@ -743,6 +753,7 @@ adminApi.MapPost("/audit-log/export", ExportAdminAuditLogAsync)
 
 adminApi.MapPost("/webhook-deliveries/{eventId:guid}/resend", ResendAdminWebhookDeliveryAsync)
     .WithName("ResendAdminWebhookDelivery")
+    .RequireRateLimiting("AdminAuthentication")
     .WithTags("Admin")
     .Produces<AdminWebhookDeliveryResendHttpResponse>(StatusCodes.Status200OK)
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status401Unauthorized, "application/problem+json")
@@ -808,21 +819,6 @@ static bool IsWebApiPath(string? relativePath)
     return relativePath is not null &&
         (relativePath.StartsWith("api/payer/", StringComparison.Ordinal) ||
             relativePath.StartsWith("api/admin/", StringComparison.Ordinal));
-}
-
-static string GetIntegrationApiRateLimitPartitionKey(HttpContext httpContext)
-{
-    var authorizationHeader = httpContext.Request.Headers.Authorization.ToString();
-    var sourceIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-    var path = httpContext.Request.Path.Value ?? string.Empty;
-    if (string.IsNullOrWhiteSpace(authorizationHeader))
-    {
-        return string.Join('|', path, "anonymous", sourceIp);
-    }
-
-    var credentialFingerprint = Convert.ToHexString(
-        SHA256.HashData(Encoding.UTF8.GetBytes(authorizationHeader)));
-    return string.Join('|', path, credentialFingerprint, sourceIp);
 }
 
 static async Task<IResult> CreatePaymentAsync(
@@ -2868,6 +2864,8 @@ static async Task<AuthenticationEndpointResult> AuthenticateAsync(
     }
 
     var principal = await authenticator.AuthenticateAsync(token, cancellationToken);
+    httpContext.RequestServices.GetRequiredService<RateLimitPartitions>()
+        .RecordAuthentication(httpContext, accepted: principal is not null);
     return principal is null
         ? new AuthenticationEndpointResult(
             null,
