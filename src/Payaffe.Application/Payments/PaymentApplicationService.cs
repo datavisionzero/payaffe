@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Globalization;
 using Payaffe.Application.Installation;
 using Payaffe.Domain.Payments;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Payaffe.Application.Payments;
@@ -17,11 +19,14 @@ public sealed class PaymentApplicationService(
     IBlockchainObservationAdapter blockchainObservationAdapter,
     IClock clock,
     IOptions<PaymentApplicationOptions> options,
-    ConfiguredInstallationMode? installationMode = null)
+    ConfiguredInstallationMode? installationMode = null,
+    ILogger<PaymentApplicationService>? logger = null)
 {
     private static readonly string[] SupportedCurrencies = ["BTC", "LTC", "ETH"];
 
     private readonly PaymentApplicationOptions _options = options.Value;
+
+    private readonly ILogger _logger = logger ?? NullLogger<PaymentApplicationService>.Instance;
 
     public async Task<CreatePaymentResult> CreateAsync(
         Guid integrationApiCredentialId,
@@ -467,9 +472,10 @@ public sealed class PaymentApplicationService(
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception exception)
             {
                 failedCount++;
+                LogTargetFailure(exception, "poll", target.PaymentId, target.ProjectId, target.SupportedCurrency);
                 continue;
             }
             observationCount += observations.Count;
@@ -496,9 +502,10 @@ public sealed class PaymentApplicationService(
                 {
                     throw;
                 }
-                catch (Exception)
+                catch (Exception exception)
                 {
                     failedCount++;
+                    LogTargetFailure(exception, "record", target.PaymentId, target.ProjectId, target.SupportedCurrency);
                     continue;
                 }
 
@@ -575,11 +582,30 @@ public sealed class PaymentApplicationService(
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            LogTargetFailure(exception, "confirmation update", target.PaymentId, target.ProjectId, target.SupportedCurrency);
             return null;
         }
     }
+
+    /// <summary>
+    /// A failure is isolated to its Payment so the rest of the batch goes on,
+    /// and it is logged because a count alone cannot be diagnosed (ADR 0026).
+    /// </summary>
+    private void LogTargetFailure(
+        Exception exception,
+        string step,
+        Guid paymentId,
+        Guid projectId,
+        string supportedCurrency) =>
+        _logger.LogError(
+            exception,
+            "Blockchain Observation {Step} failed for Payment {PaymentId} in Project {ProjectId} ({SupportedCurrency}).",
+            step,
+            paymentId,
+            projectId,
+            supportedCurrency);
 
     public async Task<MonitorBlockchainReorgsResult> MonitorBlockchainReorgsAsync(
         int maxTransactions,
@@ -626,9 +652,10 @@ public sealed class PaymentApplicationService(
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception exception)
             {
                 failedCount++;
+                LogTargetFailure(exception, "reorg poll", target.PaymentId, target.ProjectId, target.SupportedCurrency);
                 continue;
             }
             checkedCount++;
@@ -641,16 +668,30 @@ public sealed class PaymentApplicationService(
                 continue;
             }
 
-            var updateResult = await UpdateBlockchainTransactionConfirmationsAsync(
-                new UpdateBlockchainTransactionConfirmationsCommand(
-                    target.PaymentId,
-                    target.SupportedCurrency,
-                    target.TransactionHash,
-                    observation.Confirmations,
-                    BlockHash: null,
-                    BlockHeight: null,
-                    target.ProjectId),
-                cancellationToken);
+            UpdateBlockchainTransactionConfirmationsResult updateResult;
+            try
+            {
+                updateResult = await UpdateBlockchainTransactionConfirmationsAsync(
+                    new UpdateBlockchainTransactionConfirmationsCommand(
+                        target.PaymentId,
+                        target.SupportedCurrency,
+                        target.TransactionHash,
+                        observation.Confirmations,
+                        BlockHash: null,
+                        BlockHeight: null,
+                        target.ProjectId),
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                failedCount++;
+                LogTargetFailure(exception, "reorg update", target.PaymentId, target.ProjectId, target.SupportedCurrency);
+                continue;
+            }
 
             switch (updateResult.Kind)
             {

@@ -76,7 +76,18 @@ public sealed class SimulatedBlockchainObservationAdapter(
                 transaction.Id.ToString("D")));
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // The worker run shares this context; a stale change would fail
+            // every later write of the run.
+            dbContext.ChangeTracker.Clear();
+            throw;
+        }
+
         return observations;
     }
 

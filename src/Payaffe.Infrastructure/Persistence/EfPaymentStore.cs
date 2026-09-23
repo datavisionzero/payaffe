@@ -198,7 +198,15 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<SelectCurrencyStoreResult> SelectCurrencyAsync(
+    public Task<SelectCurrencyStoreResult> SelectCurrencyAsync(
+        PaymentSelectionDraft selection,
+        PaymentEventDraft paymentEvent,
+        WebhookOutboxEventDraft webhookEvent,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => SelectCurrencyCoreAsync(
+            selection, paymentEvent, webhookEvent, cancellationToken));
+
+    private async Task<SelectCurrencyStoreResult> SelectCurrencyCoreAsync(
         PaymentSelectionDraft selection,
         PaymentEventDraft paymentEvent,
         WebhookOutboxEventDraft webhookEvent,
@@ -295,7 +303,24 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
                 selection.PaymentAddress)));
     }
 
-    public async Task<RecordBlockchainObservationStoreResult> RecordBlockchainObservationAsync(
+    public Task<RecordBlockchainObservationStoreResult> RecordBlockchainObservationAsync(
+        BlockchainObservationDraft observation,
+        PaymentCompletionPolicyDraft completionPolicy,
+        PaymentEventDraft paymentEvent,
+        WebhookOutboxEventDraft webhookEvent,
+        PaymentEventDraft completedPaymentEvent,
+        WebhookOutboxEventDraft completedWebhookEvent,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => RecordBlockchainObservationCoreAsync(
+            observation,
+            completionPolicy,
+            paymentEvent,
+            webhookEvent,
+            completedPaymentEvent,
+            completedWebhookEvent,
+            cancellationToken));
+
+    private async Task<RecordBlockchainObservationStoreResult> RecordBlockchainObservationCoreAsync(
         BlockchainObservationDraft observation,
         PaymentCompletionPolicyDraft completionPolicy,
         PaymentEventDraft paymentEvent,
@@ -385,7 +410,14 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
             : RecordBlockchainObservationStoreResult.Observed(ToReadModel(payment, observedTotal));
     }
 
-    public async Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
+    public Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsAsync(
+        DateTimeOffset expiresBefore,
+        int maxPayments,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => ExpireDuePaymentsCoreAsync(
+            expiresBefore, maxPayments, cancellationToken));
+
+    private async Task<ExpireDuePaymentsStoreResult> ExpireDuePaymentsCoreAsync(
         DateTimeOffset expiresBefore,
         int maxPayments,
         CancellationToken cancellationToken)
@@ -432,7 +464,22 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         return new ExpireDuePaymentsStoreResult(duePayments.Count);
     }
 
-    public async Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
+    public Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsAsync(
+        BlockchainTransactionConfirmationUpdateDraft confirmationUpdate,
+        PaymentCompletionPolicyDraft completionPolicy,
+        PaymentEventDraft completedPaymentEvent,
+        WebhookOutboxEventDraft completedWebhookEvent,
+        PaymentEventDraft reorgPaymentEvent,
+        CancellationToken cancellationToken) =>
+        DiscardChangesOnFailureAsync(() => UpdateBlockchainTransactionConfirmationsCoreAsync(
+            confirmationUpdate,
+            completionPolicy,
+            completedPaymentEvent,
+            completedWebhookEvent,
+            reorgPaymentEvent,
+            cancellationToken));
+
+    private async Task<UpdateBlockchainTransactionConfirmationsStoreResult> UpdateBlockchainTransactionConfirmationsCoreAsync(
         BlockchainTransactionConfirmationUpdateDraft confirmationUpdate,
         PaymentCompletionPolicyDraft completionPolicy,
         PaymentEventDraft completedPaymentEvent,
@@ -542,6 +589,25 @@ public sealed class EfPaymentStore(PayaffeDbContext dbContext) : IPaymentStore
         return StringComparer.Ordinal.Equals(payment.Status, "completed")
             ? UpdateBlockchainTransactionConfirmationsStoreResult.Completed(ToReadModel(payment, observedTotal))
             : UpdateBlockchainTransactionConfirmationsStoreResult.Updated(ToReadModel(payment, observedTotal));
+    }
+
+    /// <summary>
+    /// A write that fails leaves its entities in the change tracker, and the
+    /// next save in the same scope would send them again. A worker run shares
+    /// one scope across many Payments, so without this one failed write would
+    /// fail every later write of the run, including the lease release.
+    /// </summary>
+    private async Task<T> DiscardChangesOnFailureAsync<T>(Func<Task<T>> write)
+    {
+        try
+        {
+            return await write();
+        }
+        catch
+        {
+            dbContext.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     private async Task<IDbContextTransaction?> BeginTransactionIfRelationalAsync(CancellationToken cancellationToken)

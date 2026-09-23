@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Payaffe.Application;
 using Payaffe.Application.Payments;
 using Payaffe.Infrastructure;
@@ -6,7 +7,9 @@ using Payaffe.Infrastructure.Payments;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
 using Payaffe.Migrations;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -160,19 +163,90 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
         Assert.Single(context.DbContext.WebhookOutboxEvents, webhookEvent => webhookEvent.EventType == "payment.completed");
     }
 
-    private async Task<WorkerContext> BuildContextAsync(QueuedBlockchainObservationAdapter observationAdapter)
+    /// <summary>
+    /// One failed write must stay with its Payment. The whole run shares one
+    /// database context, so a write that fails and is not discarded would be
+    /// sent again by every later write of the run, including the lease
+    /// release, and the same Payment would fail first on every tick.
+    /// </summary>
+    [Fact]
+    public async Task A_failed_write_for_one_payment_does_not_fail_the_rest_of_the_run()
+    {
+        Guid? poisonedPaymentId = null;
+        var observationAdapter = new DelegatingBlockchainObservationAdapter(target =>
+        {
+            poisonedPaymentId ??= target.PaymentId;
+            var transactionHash = target.PaymentId == poisonedPaymentId ? "tx-poison" : $"tx-{target.PaymentId:N}";
+            return [new BlockchainObservation(transactionHash, "0.00039980", WorkerNow.AddMinutes(1), 1, "test-provider", null)];
+        });
+        var logs = new CapturingLoggerProvider();
+        await using var context = await BuildContextAsync(observationAdapter, paymentCount: 2, logs);
+        await context.DbContext.Database.ExecuteSqlRawAsync(
+            """
+            create function app.reject_poisoned_transaction() returns trigger language plpgsql as $$
+            begin
+                if new.transaction_hash = 'tx-poison' then
+                    raise exception 'poisoned write';
+                end if;
+                return new;
+            end $$;
+            create trigger reject_poisoned_transaction before insert on app.matching_blockchain_transactions
+                for each row execute function app.reject_poisoned_transaction();
+            """);
+        using var worker = new BlockchainObservationHostedService(
+            context.ServiceProvider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new BlockchainObservationWorkerOptions
+            {
+                Enabled = true,
+                PollInterval = TimeSpan.FromHours(1),
+                MaxPaymentsPerPoll = 10,
+            }),
+            NullLogger<BlockchainObservationHostedService>.Instance,
+            SchemaMigrationState.AlreadyApplied());
+
+        try
+        {
+            await worker.StartAsync(CancellationToken.None);
+            await WaitUntilAsync(context.DbContext, dbContext => dbContext.BackgroundWorkerLeases.Any(
+                lease => lease.WorkerName == "blockchain-observation" && lease.LastSucceededAt != null));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        context.DbContext.ChangeTracker.Clear();
+        var payments = context.DbContext.Payments.ToList();
+        Assert.Equal("waiting_for_payment", Assert.Single(payments, payment => payment.Id == poisonedPaymentId).Status);
+        Assert.Equal("completed", Assert.Single(payments, payment => payment.Id != poisonedPaymentId).Status);
+        var lease = Assert.Single(context.DbContext.BackgroundWorkerLeases, lease => lease.WorkerName == "blockchain-observation");
+        Assert.Equal(0, lease.ConsecutiveFailureCount);
+        Assert.Contains(
+            logs.Entries,
+            entry => entry.Level == LogLevel.Error &&
+                     entry.Exception is not null &&
+                     entry.Message.Contains(poisonedPaymentId!.Value.ToString(), StringComparison.Ordinal));
+    }
+
+    private async Task<WorkerContext> BuildContextAsync(
+        IBlockchainObservationAdapter observationAdapter,
+        int paymentCount = 1,
+        CapturingLoggerProvider? logs = null)
     {
         var connectionString = await postgres.CreateDatabaseAsync();
         var services = new ServiceCollection();
+        if (logs is not null)
+        {
+            services.AddLogging(builder => builder.AddProvider(logs));
+        }
+
         services.AddPayaffeApplication();
         services.AddPayaffeInfrastructure(connectionString);
         services.AddSingleton<IClock, FixedClock>();
-        services.AddSingleton<IPayerPageIdGenerator, FixedPayerPageIdGenerator>();
+        services.AddSingleton<IPayerPageIdGenerator, SequentialPayerPageIdGenerator>();
         services.AddScoped<IExchangeRateSource, FixedExchangeRateSource>();
         services.AddScoped<IPaymentAddressProvider, FixedPaymentAddressProvider>();
-        services.AddSingleton(observationAdapter);
-        services.AddScoped<IBlockchainObservationAdapter>(provider =>
-            provider.GetRequiredService<QueuedBlockchainObservationAdapter>());
+        services.AddScoped(_ => observationAdapter);
         services.Configure<PaymentApplicationOptions>(options =>
         {
             options.PayerPageBaseUrl = "https://pay.example.test/pay";
@@ -185,20 +259,23 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
         await SeedCredentialAsync(serviceProvider);
 
         var payments = serviceProvider.GetRequiredService<PaymentApplicationService>();
-        await payments.CreateAsync(
-            CredentialId,
-            new CreatePaymentCommand(
-                "EUR",
-                1999,
-                "order-123",
-                PaymentContext: null,
-                ReturnUrl: null,
-                "create-order-123"),
-            CancellationToken.None);
-        var selectResult = await payments.SelectCurrencyAsync(
-            new SelectPaymentCurrencyCommand("fixed-payer-page-id", "btc"),
-            CancellationToken.None);
-        Assert.Equal(SelectPaymentCurrencyResultKind.Selected, selectResult.Kind);
+        for (var number = 1; number <= paymentCount; number++)
+        {
+            await payments.CreateAsync(
+                CredentialId,
+                new CreatePaymentCommand(
+                    "EUR",
+                    1999,
+                    $"order-{number}",
+                    PaymentContext: null,
+                    ReturnUrl: null,
+                    $"create-order-{number}"),
+                CancellationToken.None);
+            var selectResult = await payments.SelectCurrencyAsync(
+                new SelectPaymentCurrencyCommand($"payer-page-{number}", "btc"),
+                CancellationToken.None);
+            Assert.Equal(SelectPaymentCurrencyResultKind.Selected, selectResult.Kind);
+        }
 
         var dbContext = serviceProvider.GetRequiredService<PayaffeDbContext>();
         return new WorkerContext(serviceProvider, dbContext);
@@ -211,7 +288,7 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
         services.AddPayaffeApplication();
         services.AddPayaffeInfrastructure(connectionString);
         services.AddSingleton<IClock, FixedClock>();
-        services.AddSingleton<IPayerPageIdGenerator, FixedPayerPageIdGenerator>();
+        services.AddSingleton<IPayerPageIdGenerator, SequentialPayerPageIdGenerator>();
         services.AddScoped<IExchangeRateSource, FixedExchangeRateSource>();
         services.AddScoped<IPaymentAddressProvider, FixedPaymentAddressProvider>();
         services.AddSingleton(observationAdapter);
@@ -241,7 +318,7 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
                 "create-order-123"),
             CancellationToken.None);
         await payments.SelectCurrencyAsync(
-            new SelectPaymentCurrencyCommand("fixed-payer-page-id", "btc"),
+            new SelectPaymentCurrencyCommand("payer-page-1", "btc"),
             CancellationToken.None);
         await payments.RecordBlockchainObservationAsync(
             new RecordBlockchainObservationCommand(
@@ -326,6 +403,24 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
         Assert.NotEmpty(dbContext.ReorgAlerts);
     }
 
+    private static async Task WaitUntilAsync(PayaffeDbContext dbContext, Func<PayaffeDbContext, bool> condition)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            dbContext.ChangeTracker.Clear();
+            if (condition(dbContext))
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(25));
+        }
+
+        dbContext.ChangeTracker.Clear();
+        Assert.True(condition(dbContext), "The worker did not reach the expected state in time.");
+    }
+
     private sealed record WorkerContext(
         ServiceProvider ServiceProvider,
         PayaffeDbContext DbContext) : IAsyncDisposable
@@ -341,9 +436,64 @@ public sealed class BlockchainObservationHostedServiceTests(PostgreSqlFixture po
         public DateTimeOffset UtcNow => WorkerNow;
     }
 
-    private sealed class FixedPayerPageIdGenerator : IPayerPageIdGenerator
+    private sealed class SequentialPayerPageIdGenerator : IPayerPageIdGenerator
     {
-        public string Generate() => "fixed-payer-page-id";
+        private int _next;
+
+        public string Generate() => $"payer-page-{Interlocked.Increment(ref _next)}";
+    }
+
+    /// <summary>
+    /// Answers every poll from a function of its target and remembers which
+    /// targets were polled, in order.
+    /// </summary>
+    private sealed class DelegatingBlockchainObservationAdapter(
+        Func<BlockchainObservationTarget, IReadOnlyList<BlockchainObservation>> poll)
+        : IBlockchainObservationAdapter
+    {
+        public ConcurrentQueue<BlockchainObservationTarget> PolledTargets { get; } = new();
+
+        public Task StartWatchingAsync(
+            BlockchainObservationTarget target,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<BlockchainObservation>> PollAsync(
+            BlockchainObservationTarget target,
+            CancellationToken cancellationToken)
+        {
+            PolledTargets.Enqueue(target);
+            return Task.FromResult(poll(target));
+        }
+    }
+
+    private sealed record CapturedLogEntry(LogLevel Level, string Message, Exception? Exception);
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public ConcurrentQueue<CapturedLogEntry> Entries { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(Entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class CapturingLogger(ConcurrentQueue<CapturedLogEntry> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter) =>
+                entries.Enqueue(new CapturedLogEntry(logLevel, formatter(state, exception), exception));
+        }
     }
 
     private sealed class FixedExchangeRateSource : IExchangeRateSource

@@ -408,6 +408,38 @@ public sealed class PaymentApplicationServiceTests
     }
 
     [Fact]
+    public async Task Monitor_blockchain_reorgs_isolates_a_failed_write_to_its_target()
+    {
+        var failingPaymentId = Guid.NewGuid();
+        var store = new CapturingReorgMonitoringStore { FailingPaymentId = failingPaymentId };
+        store.AddTarget(new BlockchainReorgMonitoringTarget(
+            failingPaymentId, "BTC", "btc-test-address", "0.00039980", "tx-123", CurrentConfirmations: 1));
+        store.AddTarget(new BlockchainReorgMonitoringTarget(
+            PaymentId, "BTC", "btc-test-address", "0.00039980", "tx-123", CurrentConfirmations: 1));
+        var observation = new CapturingBlockchainObservationAdapter();
+        observation.AddObservation(new BlockchainObservation(
+            "tx-123",
+            "0.00039980",
+            DateTimeOffset.Parse("2026-07-04T12:05:00Z"),
+            Confirmations: 0,
+            "test-provider",
+            "provider-observation-123"));
+        var service = CreateService(
+            store,
+            TimeSpan.FromHours(1),
+            new FixedExchangeRateSource(),
+            new FixedPaymentAddressProvider(),
+            observation);
+
+        var result = await service.MonitorBlockchainReorgsAsync(25, CancellationToken.None);
+
+        Assert.Equal(2, result.TargetCount);
+        Assert.Equal(1, result.FailedCount);
+        Assert.Equal(1, result.ReorgAlertCount);
+        Assert.Equal(PaymentId, store.ConfirmationUpdate!.PaymentId);
+    }
+
+    [Fact]
     public async Task Monitor_blockchain_reorgs_rejects_non_positive_batch_size()
     {
         var service = CreateService(new CapturingPaymentStore(), TimeSpan.FromHours(1));
@@ -1074,6 +1106,8 @@ public sealed class PaymentApplicationServiceTests
 
         public PaymentEventDraft? ReorgPaymentEvent { get; private set; }
 
+        public Guid? FailingPaymentId { get; init; }
+
         public void AddTarget(BlockchainReorgMonitoringTarget target)
         {
             _targets.Add(target);
@@ -1162,6 +1196,11 @@ public sealed class PaymentApplicationServiceTests
             PaymentEventDraft reorgPaymentEvent,
             CancellationToken cancellationToken)
         {
+            if (confirmationUpdate.PaymentId == FailingPaymentId)
+            {
+                throw new InvalidOperationException("Simulated write failure.");
+            }
+
             ConfirmationUpdate = confirmationUpdate;
             ReorgPaymentEvent = reorgPaymentEvent;
 
