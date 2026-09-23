@@ -3,8 +3,14 @@ import axe from "axe-core";
 import { HttpResponse, http } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminAddressesPage } from "../components/admin/addresses-page";
-import { AdminIntegrationsPage } from "../components/admin/integrations-page";
-import { AdminWebhooksPage } from "../components/admin/webhooks-page";
+import {
+  AdminIntegrationCreatePage,
+  AdminIntegrationsPage
+} from "../components/admin/integrations-page";
+import {
+  AdminWebhookEndpointCreatePage,
+  AdminWebhooksPage
+} from "../components/admin/webhooks-page";
 import {
   adminServer,
   completeStepUp,
@@ -67,12 +73,26 @@ afterEach(() => {
 afterAll(() => adminServer.close());
 
 describe("AdminIntegrationsPage", () => {
-  it("creates a credential with CSRF and clears its one-time token", async () => {
+  it("lists credentials with a link to the separate create page", async () => {
     state.authenticated = true;
     renderAdmin(<AdminIntegrationsPage />);
 
     expect(
       await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create credential" })).toHaveAttribute(
+      "href",
+      "/admin/projects/00000000-0000-0000-0000-000000000001/integrations/new"
+    );
+    expect(screen.queryByLabelText("Credential name")).not.toBeInTheDocument();
+  });
+
+  it("creates a credential with CSRF, shows its one-time token, and returns once cleared", async () => {
+    state.authenticated = true;
+    renderAdmin(<AdminIntegrationCreatePage />);
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Create credential" })
     ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Credential name"), {
       target: { value: "New integration" }
@@ -81,17 +101,21 @@ describe("AdminIntegrationsPage", () => {
 
     await vi.waitFor(() => expect(state.csrf.credentialCreate).toBe("csrf-token"));
     expect(await screen.findByText("payaffe_test_one_time_token")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Credential name")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear sensitive value" }));
     expect(screen.queryByText("payaffe_test_one_time_token")).not.toBeInTheDocument();
+    expect(nav.push).toHaveBeenCalledWith(
+      "/admin/projects/00000000-0000-0000-0000-000000000001/integrations"
+    );
   });
 
   it("drops the one-time token from the mutation cache when it is cleared", async () => {
     state.authenticated = true;
-    const { queryClient } = renderAdmin(<AdminIntegrationsPage />);
+    const { queryClient } = renderAdmin(<AdminIntegrationCreatePage />);
     const cachedResults = () =>
       JSON.stringify(queryClient.getMutationCache().getAll().map((mutation) => mutation.state.data));
 
-    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    await screen.findByRole("heading", { level: 1, name: "Create credential" });
     createCredential();
     expect(await screen.findByText("payaffe_test_one_time_token")).toBeInTheDocument();
     expect(cachedResults()).toContain("payaffe_test_one_time_token");
@@ -118,9 +142,9 @@ describe("AdminIntegrationsPage", () => {
           : stepUpRequired();
       })
     );
-    renderAdmin(<AdminIntegrationsPage />);
+    renderAdmin(<AdminIntegrationCreatePage />);
 
-    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    await screen.findByRole("heading", { level: 1, name: "Create credential" });
     createCredential();
     const dialog = await completeStepUp();
 
@@ -133,9 +157,9 @@ describe("AdminIntegrationsPage", () => {
   it("has no automated accessibility violations in the step-up prompt", async () => {
     state.authenticated = true;
     adminServer.use(http.post("/api/admin/integration-api-credentials", () => stepUpRequired()));
-    renderAdmin(<AdminIntegrationsPage />);
+    renderAdmin(<AdminIntegrationCreatePage />);
 
-    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    await screen.findByRole("heading", { level: 1, name: "Create credential" });
     createCredential();
     const dialog = await screen.findByRole("dialog", { name: "Confirm step-up" });
 
@@ -152,9 +176,9 @@ describe("AdminIntegrationsPage", () => {
         return stepUpRequired();
       })
     );
-    renderAdmin(<AdminIntegrationsPage />);
+    renderAdmin(<AdminIntegrationCreatePage />);
 
-    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    await screen.findByRole("heading", { level: 1, name: "Create credential" });
     createCredential();
     const dialog = await completeStepUp("000000");
 
@@ -171,9 +195,9 @@ describe("AdminIntegrationsPage", () => {
         return stepUpRequired();
       })
     );
-    renderAdmin(<AdminIntegrationsPage />);
+    renderAdmin(<AdminIntegrationCreatePage />);
 
-    await screen.findByRole("heading", { level: 1, name: "Integration API Credentials" });
+    await screen.findByRole("heading", { level: 1, name: "Create credential" });
     createCredential();
     const dialog = await screen.findByRole("dialog", { name: "Confirm step-up" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -219,11 +243,23 @@ describe("AdminIntegrationsPage", () => {
 });
 
 describe("AdminWebhooksPage", () => {
-  it("creates a Webhook Endpoint from the endpoints view", async () => {
+  it("links to the separate create page from the endpoints view", async () => {
     state.authenticated = true;
     renderAdmin(<AdminWebhooksPage />);
 
     await screen.findByRole("heading", { level: 2, name: "Webhook Endpoints" });
+    expect(screen.getByRole("link", { name: "Create Webhook Endpoint" })).toHaveAttribute(
+      "href",
+      "/admin/projects/00000000-0000-0000-0000-000000000001/webhooks/new"
+    );
+    expect(screen.queryByLabelText("Webhook Endpoint URL")).not.toBeInTheDocument();
+  });
+
+  it("creates a Webhook Endpoint and returns to the endpoints view", async () => {
+    state.authenticated = true;
+    renderAdmin(<AdminWebhookEndpointCreatePage />);
+
+    await screen.findByRole("heading", { level: 1, name: "Create Webhook Endpoint" });
     await screen.findByRole("option", { name: "Shop integration" });
     fireEvent.change(screen.getByLabelText("Integration API Credential"), {
       target: { value: credentialId }
@@ -238,6 +274,11 @@ describe("AdminWebhooksPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create Webhook Endpoint" }));
 
     await vi.waitFor(() => expect(state.csrf.webhookCreate).toBe("csrf-token"));
+    await vi.waitFor(() =>
+      expect(nav.push).toHaveBeenCalledWith(
+        "/admin/projects/00000000-0000-0000-0000-000000000001/webhooks"
+      )
+    );
   });
 
   it("marks the selected view and resends a failed Delivery from it", async () => {

@@ -2,8 +2,11 @@ import { fireEvent, screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AdminAccountPage } from "../components/admin/account-page";
-import { AdminAuditLogDetailPage } from "../components/admin/audit-log-detail-page";
-import { AdminAuditLogPage } from "../components/admin/audit-log-page";
+import {
+  AdminAuditLogDetailPage,
+  AdminProjectAuditLogDetailPage
+} from "../components/admin/audit-log-detail-page";
+import { AdminAuditLogPage, AdminProjectAuditLogPage } from "../components/admin/audit-log-page";
 import {
   adminServer,
   auditEventId,
@@ -110,6 +113,61 @@ describe("AdminAuditLogPage", () => {
     await completeStepUp();
 
     expect(await screen.findByText(/Exported 1 event/)).toBeInTheDocument();
+  });
+});
+
+describe("AdminProjectAuditLogPage", () => {
+  it("lists only the route Project's entries and keeps detail links inside the Project", async () => {
+    state.authenticated = true;
+    let requestedProjectId: string | null = null;
+    adminServer.use(
+      http.get("/api/admin/audit-log", ({ request }) => {
+        requestedProjectId = new URL(request.url).searchParams.get("projectId");
+        return HttpResponse.json({
+          entries: [{ ...auditLogDetail, projectId: "00000000-0000-0000-0000-000000000001" }]
+        });
+      })
+    );
+    renderAdmin(<AdminProjectAuditLogPage />);
+
+    expect(await screen.findByRole("link", { name: "admin.audit_log.list" })).toHaveAttribute(
+      "href",
+      `/admin/projects/00000000-0000-0000-0000-000000000001/audit-log/${auditEventId}`
+    );
+    expect(requestedProjectId).toBe("00000000-0000-0000-0000-000000000001");
+    expect(screen.queryByRole("combobox", { name: "Project filter" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Project" })).not.toBeInTheDocument();
+  });
+
+  it("exports only the route Project", async () => {
+    state.authenticated = true;
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    let exportedProjectId: unknown;
+    adminServer.use(
+      http.post("/api/admin/audit-log/export", async ({ request }) => {
+        exportedProjectId = ((await request.json()) as { projectId: unknown }).projectId;
+        return HttpResponse.json({ exportedAt: "2026-07-05T10:30:00Z", entries: [auditLogDetail] });
+      })
+    );
+    renderAdmin(<AdminProjectAuditLogPage />);
+
+    await screen.findByRole("link", { name: "admin.audit_log.list" });
+    fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
+
+    await vi.waitFor(() =>
+      expect(exportedProjectId).toBe("00000000-0000-0000-0000-000000000001")
+    );
+  });
+
+  it("returns from a detail to the Project audit log", async () => {
+    state.authenticated = true;
+    renderAdmin(<AdminProjectAuditLogDetailPage eventId={auditEventId} />);
+
+    expect(await screen.findByText("trace-123")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to audit log" })).toHaveAttribute(
+      "href",
+      "/admin/projects/00000000-0000-0000-0000-000000000001/audit-log"
+    );
   });
 });
 

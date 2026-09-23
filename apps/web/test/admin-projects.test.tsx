@@ -1,6 +1,7 @@
 import { fireEvent, screen } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { AdminProjectsPage } from "../components/admin/projects-page";
+import { Route, Routes } from "react-router";
+import { AdminProjectCreatePage, AdminProjectsPage } from "../components/admin/projects-page";
 import { adminServer, renderAdmin, resetAdminState, state } from "./admin-harness";
 
 beforeAll(() => adminServer.listen({ onUnhandledRequest: "error" }));
@@ -12,10 +13,29 @@ afterEach(() => {
 afterAll(() => adminServer.close());
 
 describe("AdminProjectsPage", () => {
-  it("creates a Project with CSRF and makes it available for navigation", async () => {
+  it("lists Projects with a link to the separate create page", async () => {
     state.authenticated = true;
     renderAdmin(<AdminProjectsPage />);
 
+    expect(await screen.findByRole("link", { name: "Default Project" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create Project" })).toHaveAttribute(
+      "href",
+      "/admin/projects/new"
+    );
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  });
+
+  it("creates a Project with CSRF and returns to the list for navigation", async () => {
+    state.authenticated = true;
+    renderAdmin(
+      <Routes>
+        <Route path="/admin/projects" element={<AdminProjectsPage />} />
+        <Route path="/admin/projects/new" element={<AdminProjectCreatePage />} />
+      </Routes>,
+      { initialEntries: ["/admin/projects/new"] }
+    );
+
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/admin/projects");
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Storefront" } });
     fireEvent.change(screen.getByLabelText("Slug"), { target: { value: "storefront" } });
     fireEvent.click(screen.getByRole("button", { name: "Create Project" }));

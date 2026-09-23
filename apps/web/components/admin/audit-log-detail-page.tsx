@@ -8,6 +8,8 @@ import { ErrorMessage, InfoItem, PageHeader, Panel, StateMessage } from "./commo
 import { formatDateTime } from "./format";
 import { adminQueries } from "./queries";
 import { useSearchParams } from "../../lib/navigation";
+import { useAdminProject } from "./project-context";
+import { adminProjectPath } from "./project-routes";
 import { StepUpButton, isStepUpRequired } from "./step-up";
 
 const t = createText({
@@ -31,7 +33,35 @@ const t = createText({
 
 export function AdminAuditLogDetailPage({ eventId }: { eventId: string }) {
   const searchParams = useSearchParams();
-  const projectId = searchParams.get("projectId") ?? undefined;
+  return (
+    <AuditLogDetail
+      backHref="/admin/audit-log"
+      eventId={eventId}
+      projectId={searchParams.get("projectId") ?? undefined}
+    />
+  );
+}
+
+export function AdminProjectAuditLogDetailPage({ eventId }: { eventId: string }) {
+  const project = useAdminProject();
+  return (
+    <AuditLogDetail
+      backHref={adminProjectPath(project.projectId, "/audit-log")}
+      eventId={eventId}
+      projectId={project.projectId}
+    />
+  );
+}
+
+function AuditLogDetail({
+  backHref,
+  eventId,
+  projectId
+}: {
+  backHref: string;
+  eventId: string;
+  projectId: string | undefined;
+}) {
   const query = useQuery(adminQueries.auditLogEntry(eventId, projectId));
 
   return (
@@ -40,7 +70,7 @@ export function AdminAuditLogDetailPage({ eventId }: { eventId: string }) {
         description={t("auditLogDetailDescription")}
         title={query.data?.eventType ?? t("auditLogDetailTitle")}
       />
-      <Link className="inline-block text-sm font-medium text-[var(--brand-ink)]" href="/admin/audit-log">
+      <Link className="inline-block text-sm font-medium text-[var(--brand-ink)]" href={backHref}>
         {t("backToAuditLog")}
       </Link>
       {query.isPending ? <StateMessage>{t("auditLogDetailLoading")}</StateMessage> : null}

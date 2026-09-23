@@ -17,12 +17,27 @@ const AdminAuditLogDetailPage = lazy(() =>
     default: module.AdminAuditLogDetailPage
   }))
 );
+const AdminProjectAuditLogDetailPage = lazy(() =>
+  import("./components/admin/audit-log-detail-page").then((module) => ({
+    default: module.AdminProjectAuditLogDetailPage
+  }))
+);
+const AdminProjectAuditLogPage = lazy(() =>
+  import("./components/admin/audit-log-page").then((module) => ({
+    default: module.AdminProjectAuditLogPage
+  }))
+);
 const AdminAuditLogPage = lazy(() =>
   import("./components/admin/audit-log-page").then((module) => ({ default: module.AdminAuditLogPage }))
 );
 const AdminIntegrationsPage = lazy(() =>
   import("./components/admin/integrations-page").then((module) => ({
     default: module.AdminIntegrationsPage
+  }))
+);
+const AdminIntegrationCreatePage = lazy(() =>
+  import("./components/admin/integrations-page").then((module) => ({
+    default: module.AdminIntegrationCreatePage
   }))
 );
 const AdminMonitoringPage = lazy(() =>
@@ -42,6 +57,11 @@ const AdminPaymentsPage = lazy(() =>
 const AdminWebhooksPage = lazy(() =>
   import("./components/admin/webhooks-page").then((module) => ({ default: module.AdminWebhooksPage }))
 );
+const AdminWebhookEndpointCreatePage = lazy(() =>
+  import("./components/admin/webhooks-page").then((module) => ({
+    default: module.AdminWebhookEndpointCreatePage
+  }))
+);
 const PayerPage = lazy(() =>
   import("./components/payer-page").then((module) => ({ default: module.PayerPage }))
 );
@@ -50,6 +70,11 @@ const AdminLandingPage = lazy(() =>
 );
 const AdminProjectsPage = lazy(() =>
   import("./components/admin/projects-page").then((module) => ({ default: module.AdminProjectsPage }))
+);
+const AdminProjectCreatePage = lazy(() =>
+  import("./components/admin/projects-page").then((module) => ({
+    default: module.AdminProjectCreatePage
+  }))
 );
 const LegacyProjectRedirect = lazy(() =>
   import("./components/admin/projects-page").then((module) => ({
@@ -67,14 +92,19 @@ export function App() {
         <Route path="/admin" element={<AdminShellRoute />}>
           <Route index element={<AdminLandingPage />} />
           <Route path="projects" element={<AdminProjectsPage />} />
+          <Route path="projects/new" element={<AdminProjectCreatePage />} />
           <Route path="projects/:projectId">
             <Route index element={<AdminOverviewPage />} />
             <Route path="payments" element={<AdminPaymentsPage />} />
             <Route path="payments/:paymentId" element={<AdminPaymentRoute />} />
             <Route path="monitoring" element={<AdminMonitoringPage />} />
             <Route path="webhooks" element={<AdminWebhooksPage />} />
+            <Route path="webhooks/new" element={<AdminWebhookEndpointCreatePage />} />
             <Route path="integrations" element={<AdminIntegrationsPage />} />
+            <Route path="integrations/new" element={<AdminIntegrationCreatePage />} />
             <Route path="addresses" element={<AdminAddressesPage />} />
+            <Route path="audit-log" element={<AdminProjectAuditLogPage />} />
+            <Route path="audit-log/:eventId" element={<AdminProjectAuditLogRoute />} />
           </Route>
           <Route path="payments" element={<LegacyProjectRedirect suffix="/payments" />} />
           <Route path="payments/:paymentId" element={<LegacyPaymentRoute />} />
@@ -159,6 +189,11 @@ function LegacyPaymentRoute() {
 function AdminAuditLogRoute() {
   const { eventId } = useParams();
   return eventId ? <AdminAuditLogDetailPage eventId={eventId} /> : <Navigate replace to="/admin/audit-log" />;
+}
+
+function AdminProjectAuditLogRoute() {
+  const { eventId } = useParams();
+  return eventId ? <AdminProjectAuditLogDetailPage eventId={eventId} /> : <Navigate replace to=".." />;
 }
 
 function NotFoundPage() {

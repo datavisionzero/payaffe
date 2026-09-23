@@ -130,6 +130,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     ? projects.data.find((project) => project.projectId === routeProjectId) ?? null
     : null;
   const routeProjectMissing = routeProjectId !== null && selectedProject === null;
+  // Installation views carry no Project in their route; the navigation and the
+  // switcher keep the last chosen one so the Admin does not lose it.
+  const rememberedProjectId = routeProjectId ? null : readSelectedProjectId();
+  const navigationProject = routeProjectId
+    ? selectedProject
+    : projects.data.find((project) => project.projectId === rememberedProjectId) ?? null;
 
   const selectProject = async (projectId: string) => {
     if (!projectId) {
@@ -159,7 +165,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         onToggleNav={() => setNavOpen((open) => !open)}
         onSelectProject={(projectId) => void selectProject(projectId)}
         projects={projects.data}
-        selectedProject={selectedProject}
+        selectedProject={navigationProject}
         session={session.data}
       />
       {session.data.testMode ? <TestModeBanner /> : null}
@@ -175,7 +181,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <AdminNav
           onNavigate={() => setNavOpen(false)}
           open={navOpen}
-          projectId={selectedProject?.projectId ?? null}
+          project={navigationProject}
         />
         <main
           className="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
@@ -210,6 +216,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
   );
+}
+
+function readSelectedProjectId(): string | null {
+  try {
+    return window.localStorage?.getItem("payaffe:selected-project-id") ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function TestModeBanner() {

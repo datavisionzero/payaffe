@@ -430,7 +430,7 @@ export const adminServer = setupServer(
   http.get("/api/admin/csrf", () => HttpResponse.json({ csrfToken: "csrf-token" }))
 );
 
-export function renderAdmin(ui: React.ReactNode) {
+export function renderAdmin(ui: React.ReactNode, { initialEntries }: { initialEntries?: string[] } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -440,7 +440,7 @@ export function renderAdmin(ui: React.ReactNode) {
 
   const rendered = render(
     <ThemeProvider>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
         <QueryClientProvider client={queryClient}>
           <AdminProjectProvider project={project}>
             <StepUpProvider>{ui}</StepUpProvider>

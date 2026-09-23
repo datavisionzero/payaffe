@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Navigate } from "react-router";
-import { useSearchParams } from "../../lib/navigation";
+import { useRouter, useSearchParams } from "../../lib/navigation";
 import Link from "../../lib/link";
 import {
   type AdminProject,
@@ -11,8 +11,10 @@ import {
   projectFormSchema
 } from "../../lib/admin-api";
 import {
+  CancelLink,
   EmptyMessage,
   ErrorMessage,
+  LinkButton,
   PageHeader,
   Panel,
   StateMessage,
@@ -21,7 +23,7 @@ import {
   TextField
 } from "./common";
 import { formatDateTime } from "./format";
-import { adminProjectPath } from "./project-routes";
+import { adminProjectCreatePath, adminProjectPath } from "./project-routes";
 import { adminQueries } from "./queries";
 import { useWithStepUp } from "./step-up";
 
@@ -68,7 +70,12 @@ export function AdminLandingPage() {
           </Link>
         </div>
         {projects.length === 0 ? (
-          <EmptyMessage>Create a Project before configuring payment operations.</EmptyMessage>
+          <EmptyMessage>
+            <Link className="font-medium text-[var(--brand-ink)]" href={adminProjectCreatePath}>
+              Create a Project
+            </Link>{" "}
+            before configuring payment operations.
+          </EmptyMessage>
         ) : (
           <ul className="mt-5 grid gap-2">
             {projects.map((project) => (
@@ -105,29 +112,11 @@ export function AdminProjectsPage() {
   const queryClient = useQueryClient();
   const query = useQuery(adminQueries.projects());
   const withStepUp = useWithStepUp();
-  const form = useForm<ProjectForm>({ defaultValues: { name: "", slug: "" } });
-  const createMutation = useMutation({
-    mutationFn: (command: Parameters<typeof createAdminProject>[0]) =>
-      withStepUp(() => createAdminProject(command)),
-    onSuccess: async () => {
-      form.reset();
-      await queryClient.invalidateQueries({ queryKey: adminQueries.projects().queryKey });
-    }
-  });
   const statusMutation = useMutation({
     mutationFn: ({ project, status }: { project: AdminProject; status: string }) =>
       withStepUp(() => changeAdminProjectStatus(project, status)),
     onSuccess: async () =>
       queryClient.invalidateQueries({ queryKey: adminQueries.projects().queryKey })
-  });
-  const submit = form.handleSubmit((values) => {
-    const parsed = projectFormSchema.safeParse(values);
-    if (!parsed.success) {
-      form.setError("name", { message: "Enter a Project name." });
-      form.setError("slug", { message: "Use lowercase letters, numbers, and single hyphens." });
-      return;
-    }
-    createMutation.mutate(parsed.data);
   });
 
   const changeStatus = (project: AdminProject, status: string) => {
@@ -143,37 +132,22 @@ export function AdminProjectsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        actions={<LinkButton href={adminProjectCreatePath}>Create Project</LinkButton>}
         description="Installation-wide Project lifecycle. All Admins can manage every Project."
         title="Projects"
       />
-      <Panel>
-        <h2 className="text-lg font-semibold">Create Project</h2>
-        <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
-          <TextField
-            error={form.formState.errors.name?.message}
-            label="Name"
-            maxLength={255}
-            {...form.register("name")}
-          />
-          <TextField
-            error={form.formState.errors.slug?.message}
-            label="Slug"
-            maxLength={100}
-            {...form.register("slug")}
-          />
-          <div className="sm:col-span-2">
-            <SubmitButton busy={createMutation.isPending}>
-              {createMutation.isPending ? "Creating" : "Create Project"}
-            </SubmitButton>
-          </div>
-        </form>
-        {createMutation.isError ? <ErrorMessage error={createMutation.error} /> : null}
-      </Panel>
 
       {query.isPending ? <StateMessage>Loading Projects</StateMessage> : null}
       {query.isError ? <ErrorMessage error={query.error} /> : null}
       {statusMutation.isError ? <ErrorMessage error={statusMutation.error} /> : null}
-      {query.data?.length === 0 ? <EmptyMessage>No Projects exist yet.</EmptyMessage> : null}
+      {query.data?.length === 0 ? (
+        <EmptyMessage>
+          No Projects exist yet.{" "}
+          <Link className="font-medium text-[var(--brand-ink)]" href={adminProjectCreatePath}>
+            Create the first Project
+          </Link>
+        </EmptyMessage>
+      ) : null}
       <div className="grid gap-3">
         {query.data?.map((project) => (
           <article
@@ -231,6 +205,62 @@ export function AdminProjectsPage() {
           </article>
         ))}
       </div>
+    </div>
+  );
+}
+
+export function AdminProjectCreatePage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const withStepUp = useWithStepUp();
+  const form = useForm<ProjectForm>({ defaultValues: { name: "", slug: "" } });
+  const createMutation = useMutation({
+    mutationFn: (command: Parameters<typeof createAdminProject>[0]) =>
+      withStepUp(() => createAdminProject(command)),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminQueries.projects().queryKey });
+      router.push("/admin/projects");
+    }
+  });
+  const submit = form.handleSubmit((values) => {
+    const parsed = projectFormSchema.safeParse(values);
+    if (!parsed.success) {
+      form.setError("name", { message: "Enter a Project name." });
+      form.setError("slug", { message: "Use lowercase letters, numbers, and single hyphens." });
+      return;
+    }
+    createMutation.mutate(parsed.data);
+  });
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        description="A Project is an isolated payment-processing boundary with its own configuration."
+        title="Create Project"
+      />
+      <Panel>
+        <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit}>
+          <TextField
+            error={form.formState.errors.name?.message}
+            label="Name"
+            maxLength={255}
+            {...form.register("name")}
+          />
+          <TextField
+            error={form.formState.errors.slug?.message}
+            label="Slug"
+            maxLength={100}
+            {...form.register("slug")}
+          />
+          <div className="flex flex-wrap gap-3 sm:col-span-2">
+            <SubmitButton busy={createMutation.isPending}>
+              {createMutation.isPending ? "Creating" : "Create Project"}
+            </SubmitButton>
+            <CancelLink href="/admin/projects">Cancel</CancelLink>
+          </div>
+        </form>
+        {createMutation.isError ? <ErrorMessage error={createMutation.error} /> : null}
+      </Panel>
     </div>
   );
 }
