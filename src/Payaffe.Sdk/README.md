@@ -122,6 +122,14 @@ await foreach (var state in payaffe.PollPaymentAsync(paymentId, cancellationToke
 }
 ```
 
+Polling is the reconciliation path, so a transient failure does not end it. A
+transport failure, a timeout, or a `429`, `502`, `503` or `504` that outlasts
+the read's own retries is skipped, and the next read waits the grown interval,
+or the server's `Retry-After` when that is longer. Any other API error, such as
+an authentication failure or `payment.not_found`, ends the loop with a
+`PayaffeApiException`, and so does your cancellation token. Treat the
+enumeration as running until the Payment is terminal or you stop it.
+
 Poll once per order, not once per open browser tab. `expired` is terminal but
 is not a failure: a late transfer may still be completed or manually settled,
 so treat only `completed` and `settled` as success.
@@ -242,6 +250,11 @@ that same instruction here. Neither surface can replace the other's selection.
 `RetryAfter` when the response carried it. It never contains the bearer token
 or the request body. Cancellation and caller-owned HTTP timeouts stay
 distinguishable from API errors.
+
+A single call retries a `429` or `503` up to `MaximumRetries` times, waiting at
+most `MaximumRetryDelay` between attempts. When the server asks for a longer
+`Retry-After`, the call does not sleep through it: it throws at once with
+`RetryAfter` set, and you decide whether to wait.
 
 Unknown future values of Payment Status, Supported Currency, option status, and
 error codes are preserved rather than rejected, because adding one is a

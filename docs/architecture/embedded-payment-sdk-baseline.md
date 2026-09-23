@@ -166,11 +166,16 @@ The SDK does not hide an infinite retry loop. `PollPaymentAsync` defaults to:
 - `Retry-After` as a lower bound after `429` or `503`;
 - no retry for authentication, authorization, validation, not-found, or
   conflict responses;
+- continued polling through transport failures, timeouts, and `429`, `502`,
+  `503` or `504` responses that outlast a single read's retries, because
+  polling is the reconciliation path;
 - completion when `completed`, `settled`, or `expired` is observed;
 - immediate cancellation when the caller's token is cancelled.
 
 Callers may configure the interval bounds but cannot configure zero-delay busy
-polling. A target backend should normally poll once for all viewers of an order,
+polling. A single request never waits longer than its configured maximum retry
+delay: a `Retry-After` beyond it is returned to the caller in the error instead
+of being slept through. A target backend should normally poll once for all viewers of an order,
 not once per open browser tab.
 
 Creation may be retried only with the original body and original

@@ -159,6 +159,16 @@ public sealed class PayaffeClient
         }
     }
 
+    /// <summary>
+    /// Reads Payment state until it is terminal or the caller cancels.
+    /// </summary>
+    /// <remarks>
+    /// Polling is the reconciliation path, so a transient failure does not end
+    /// it: a transport failure, a timeout, or a 429, 502, 503 or 504 that
+    /// outlasted the request's own retries is skipped, and the next read waits
+    /// the grown interval, or longer when the server sent <c>Retry-After</c>.
+    /// Any other API error ends polling with a <see cref="PayaffeApiException"/>.
+    /// </remarks>
     public async IAsyncEnumerable<Payment> PollPaymentAsync(
         Guid paymentId,
         PaymentPollingOptions? options = null,
@@ -170,16 +180,30 @@ public sealed class PayaffeClient
 
         while (true)
         {
-            Payment payment = await GetPaymentAsync(paymentId, cancellationToken)
-                .ConfigureAwait(false);
-            yield return payment;
-
-            if (payment.Status.IsTerminal)
+            Payment? payment = null;
+            TimeSpan? retryAfter = null;
+            try
             {
-                yield break;
+                payment = await GetPaymentAsync(paymentId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception) when (IsTransientPollingFailure(exception, cancellationToken))
+            {
+                retryAfter = (exception as PayaffeApiException)?.RetryAfter;
             }
 
-            await Task.Delay(ApplyJitter(interval, pollingOptions.JitterRatio), cancellationToken)
+            if (payment is not null)
+            {
+                yield return payment;
+
+                if (payment.Status.IsTerminal)
+                {
+                    yield break;
+                }
+            }
+
+            TimeSpan delay = ApplyJitter(interval, pollingOptions.JitterRatio);
+            await Task.Delay(retryAfter > delay ? retryAfter.Value : delay, cancellationToken)
                 .ConfigureAwait(false);
             interval = DoubleAndCap(interval, pollingOptions.MaximumInterval);
         }
@@ -241,7 +265,11 @@ public sealed class PayaffeClient
                     cancellationToken).ConfigureAwait(false);
 
                 TimeSpan? retryAfter = GetRetryAfter(response);
-                if (ShouldRetry(response.StatusCode) && attempt < _options.MaximumRetries)
+                // A Retry-After beyond the retry delay bound is handed to the
+                // caller in the exception rather than blocking the call.
+                if (ShouldRetry(response.StatusCode) &&
+                    attempt < _options.MaximumRetries &&
+                    !(retryAfter > _options.MaximumRetryDelay))
                 {
                     await DelayBeforeRetryAsync(attempt, retryAfter, cancellationToken)
                         .ConfigureAwait(false);
@@ -300,6 +328,21 @@ public sealed class PayaffeClient
 
     private static bool ShouldRetry(HttpStatusCode statusCode) =>
         statusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable;
+
+    private static bool IsTransientPollingFailure(
+        Exception exception,
+        CancellationToken cancellationToken) =>
+        exception switch
+        {
+            HttpRequestException => true,
+            OperationCanceledException => !cancellationToken.IsCancellationRequested,
+            PayaffeApiException apiException => apiException.StatusCode is
+                HttpStatusCode.TooManyRequests or
+                HttpStatusCode.BadGateway or
+                HttpStatusCode.ServiceUnavailable or
+                HttpStatusCode.GatewayTimeout,
+            _ => false,
+        };
 
     private static TimeSpan DoubleAndCap(TimeSpan value, TimeSpan maximum)
     {
