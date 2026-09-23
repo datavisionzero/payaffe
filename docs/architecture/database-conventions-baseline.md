@@ -194,5 +194,8 @@ Implementation must include focused verification that:
 - technical instants use `timestamptz`,
 - mutable concurrent resources have a concurrency value where needed,
 - concurrent hosts applying the schema on startup do so exactly once,
+- the migrated schema and the EF Core model describe the same tables,
+  columns, keys, foreign keys, indexes, and check constraints, because the
+  migrations are written by hand and no model snapshot catches the drift,
 - explicit SQL paths preserve authorization, Audit Log, Project or installation
   context, and observability expectations.

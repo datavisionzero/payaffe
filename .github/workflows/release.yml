@@ -33,7 +33,7 @@ jobs:
       ref: ${{ steps.read.outputs.ref }}
       latest: ${{ steps.read.outputs.latest }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
 
@@ -77,42 +77,82 @@ jobs:
             exit 1
           fi
 
+          # `latest` is what an operator following the deployment compose file
+          # pulls, so only the highest release may move it. A prerelease must
+          # not: someone who never asked for one would be upgraded into it by an
+          # ordinary `docker compose pull`. Nor may a patch to an older line --
+          # v0.2.1 released after v0.3.0 would otherwise move every such
+          # installation backwards. The remote's tags are the list, so a shallow
+          # checkout is enough.
+          latest=false
+          case "$version" in
+            *-*) ;;
+            *)
+              highest="$(git ls-remote --tags --refs origin 'v*' \
+                | sed -E 's#.*refs/tags/v##' \
+                | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+                | sort -t. -k1,1n -k2,2n -k3,3n \
+                | tail -n 1)"
+              if [ "$highest" = "$version" ]; then
+                latest=true
+              else
+                echo "v$highest is the highest release, so :latest stays where it is."
+              fi
+              ;;
+          esac
+
           {
             echo "version=$version"
             echo "ref=$TAG"
-            # `latest` is what an operator following the deployment compose file
-            # pulls, so a prerelease must not move it: someone who never asked
-            # for one would be upgraded into it by an ordinary `docker compose
-            # pull`.
-            case "$version" in
-              *-*) echo "latest=false" ;;
-              *) echo "latest=true" ;;
-            esac
+            echo "latest=$latest"
           } >> "$GITHUB_OUTPUT"
 
           echo "Releasing payaffe $version from $TAG."
 
   # The release gate. A tag does not publish anything its tests did not pass —
   # expressing it here costs one repeated test run and is cheaper than
-  # discovering it from a published image.
+  # discovering it from a published image. The backend and the frontend are
+  # both gated, because the api image ships the built frontend.
   verify:
     name: Verify
     needs: version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.version.outputs.ref }}
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
       - run: dotnet restore Payaffe.slnx
       - run: dotnet build Payaffe.slnx -c Release --no-restore
       - run: dotnet test Payaffe.slnx -c Release --no-build
 
+  # The same frontend checks CI runs, against the tagged commit.
+  verify-frontend:
+    name: Verify frontend
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      # After setup-node, for the reason ci.yml gives.
+      - name: Enable Corepack
+        run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @payaffe/web test
+      - run: pnpm --filter @payaffe/web typecheck
+      - name: Install the browser Playwright drives
+        run: pnpm --filter @payaffe/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @payaffe/web e2e
+
   images:
     name: Images
-    needs: [version, verify]
+    needs: [version, verify, verify-frontend]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -127,7 +167,7 @@ jobs:
       matrix:
         image: [api, worker, migrations, mcp]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.version.outputs.ref }}
       # Emulation for the architecture the runner is not. An operator running a
@@ -135,11 +175,10 @@ jobs:
       # Graviton, a Pi -- as on x86, and an image that exists for one of the two
       # is an image half of them cannot start. The first release shipped amd64
       # only and this is what that cost.
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Sign in to the registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -167,7 +206,7 @@ jobs:
       # API address on purpose -- one static build works at every installation
       # origin (ADR 0030).
       - name: Build and publish
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/${{ matrix.image }}/Dockerfile

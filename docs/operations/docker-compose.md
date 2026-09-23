@@ -108,7 +108,7 @@ meant for an installation:
 | Tag | Moved by | For |
 | --- | --- | --- |
 | `0.1.0` | nothing, once published | what an installation pins |
-| `latest` | a release tag, never a prerelease | an installation that accepts every release |
+| `latest` | the highest release tag, never a prerelease or a patch to an older line | an installation that accepts every release |
 | `main` | every green trunk push | our own staging installation |
 
 `main` is the trunk, which is to say a commit whose tests passed and nothing
