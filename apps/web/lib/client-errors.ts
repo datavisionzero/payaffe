@@ -34,6 +34,11 @@ function describe(value: unknown): { name: string; message: string; stack?: stri
   return { name: "UnhandledRejection", message: message.slice(0, MAX_MESSAGE) };
 }
 
+// A Payer Page ID is a bearer capability for its Payment and stays out of logs.
+function redactPath(path: string): string {
+  return path.replace(/^\/pay\/[^/]+/, "/pay/{payerPageId}");
+}
+
 export function reportClientError(value: unknown): void {
   if (typeof window === "undefined" || reported >= MAX_REPORTS_PER_PAGE) {
     return;
@@ -54,7 +59,7 @@ export function reportClientError(value: unknown): void {
       stack: described.stack,
       // The path only. The server drops a query string too, and neither of us
       // wants what the payer page carries in one.
-      path: window.location.pathname
+      path: redactPath(window.location.pathname)
     })
     // Deliberately swallowed. A reporter that reports its own failure is a
     // loop, and the console already has the original error.
