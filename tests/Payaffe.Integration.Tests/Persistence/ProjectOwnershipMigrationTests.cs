@@ -9,6 +9,7 @@ using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using NBitcoin;
 
@@ -242,13 +243,62 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
     }
 
     [Fact]
-    public async Task Restart_fails_when_hosts_disagree_on_legacy_settings()
+    public async Task Restart_after_finished_upgrade_ignores_changed_legacy_settings_with_a_warning()
     {
         var connectionString = await postgres.CreateDatabaseAsync();
         await using (var first = BuildProvider(connectionString, paymentTolerancePercent: 1m))
         {
             await SchemaMigrator.ApplyAsync(first, CancellationToken.None);
         }
+
+        var logs = new RecordingLoggerProvider();
+        await using var second = BuildProvider(
+            connectionString,
+            paymentTolerancePercent: 3m,
+            ethLowCapacityThreshold: 10,
+            loggerProvider: logs);
+        await SchemaMigrator.ApplyAsync(second, CancellationToken.None);
+
+        Assert.Contains(
+            logs.Entries,
+            entry => entry.Level == LogLevel.Warning &&
+                     entry.Message.Contains("database owns these settings", StringComparison.Ordinal));
+        await using var scope = second.CreateAsyncScope();
+        var configuration = Assert.Single(
+            scope.ServiceProvider.GetRequiredService<PayaffeDbContext>().ProjectConfigurations);
+        Assert.Equal(1m, configuration.PaymentTolerancePercent);
+        Assert.Equal(20, configuration.NativeEthLowCapacityThreshold);
+    }
+
+    [Fact]
+    public async Task Restart_fails_when_hosts_disagree_on_legacy_settings_while_the_upgrade_is_pending()
+    {
+        var connectionString = await postgres.CreateDatabaseAsync();
+        await using (var first = BuildProvider(connectionString, paymentTolerancePercent: 1m))
+        {
+            await SchemaMigrator.ApplyAsync(first, CancellationToken.None);
+        }
+
+        // A Payment that selected a currency without a policy snapshot, as a
+        // host that predates the multi-Project upgrade still writes it.
+        var credentialId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await ExecuteAsync(
+            connectionString,
+            """
+            insert into auth.integration_api_credentials
+                (project_id, id, name, token_hash, status, created_at, updated_at, version)
+            values ('00000000-0000-0000-0000-000000000001', @credential_id, 'legacy', 'hash', 'active', @now, @now, 1);
+            insert into app.payments
+                (project_id, id, integration_api_credential_id, external_reference, fiat_currency,
+                 fiat_amount_minor, status, payer_page_id, selected_currency, expires_at,
+                 late_acceptance_ends_at, created_at, updated_at, version)
+            values ('00000000-0000-0000-0000-000000000001', @payment_id, @credential_id, 'legacy', 'EUR',
+                    100, 'waiting_for_payment', 'legacy-page', 'BTC', @now, @now, @now, @now, 1);
+            """,
+            ("credential_id", credentialId),
+            ("payment_id", Guid.NewGuid()),
+            ("now", now));
 
         await using var second = BuildProvider(connectionString, paymentTolerancePercent: 3m);
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -530,10 +580,17 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
         string connectionString,
         TimeSpan? paymentExpiration = null,
         decimal paymentTolerancePercent = 1m,
-        int ethLowCapacityThreshold = 20)
+        int ethLowCapacityThreshold = 20,
+        ILoggerProvider? loggerProvider = null)
     {
         var services = new ServiceCollection();
-        services.AddLogging();
+        services.AddLogging(logging =>
+        {
+            if (loggerProvider is not null)
+            {
+                logging.AddProvider(loggerProvider);
+            }
+        });
         services.AddPayaffeApplication();
         services.AddPayaffeInfrastructure(connectionString, registerHostedWorkers: false);
         services.Configure<PaymentApplicationOptions>(options =>
@@ -563,5 +620,48 @@ public sealed class ProjectOwnershipMigrationTests(PostgreSqlFixture postgres) :
         }
 
         await command.ExecuteNonQueryAsync();
+    }
+
+    private sealed class RecordingLoggerProvider : ILoggerProvider
+    {
+        private readonly List<(LogLevel Level, string Message)> entries = [];
+
+        public IReadOnlyList<(LogLevel Level, string Message)> Entries
+        {
+            get
+            {
+                lock (entries)
+                {
+                    return entries.ToArray();
+                }
+            }
+        }
+
+        public ILogger CreateLogger(string categoryName) => new RecordingLogger(this);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class RecordingLogger(RecordingLoggerProvider provider) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                lock (provider.entries)
+                {
+                    provider.entries.Add((logLevel, formatter(state, exception)));
+                }
+            }
+        }
     }
 }
