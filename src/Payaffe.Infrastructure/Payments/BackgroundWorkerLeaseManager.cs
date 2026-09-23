@@ -71,7 +71,7 @@ public sealed class BackgroundWorkerLeaseManager(PayaffeDbContext dbContext)
     /// per item rather than with this named lease, such as Webhook Delivery.
     /// The row then carries its last success, last failure and consecutive
     /// failure count like any other worker's, which is what the repeated
-    /// failure alert reads. The update is one statement, so instances that
+    /// failure alert reads. The upsert is one statement, so instances that
     /// report at the same time do not lose each other's count.
     /// </summary>
     public async Task RecordRunAsync(
@@ -86,24 +86,28 @@ public sealed class BackgroundWorkerLeaseManager(PayaffeDbContext dbContext)
             return;
         }
 
+        // One statement, so a run cancelled while reporting never leaves a row
+        // that exists but does not carry the outcome.
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
-            insert into app.background_worker_leases
-                (worker_name, consecutive_failure_count, updated_at, version)
-            values ({workerName}, 0, {now}, 1)
-            on conflict (worker_name) do nothing
-            """,
-            cancellationToken);
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            update app.background_worker_leases
-            set last_succeeded_at = case when {succeeded} then {now} else last_succeeded_at end,
-                last_failed_at = case when {succeeded} then last_failed_at else {now} end,
+            insert into app.background_worker_leases as lease
+                (worker_name, last_succeeded_at, last_failed_at, last_safe_error_code,
+                 consecutive_failure_count, updated_at, version)
+            values (
+                {workerName},
+                case when {succeeded} then {now} end,
+                case when {succeeded} then null else {now} end,
+                {safeErrorCode},
+                case when {succeeded} then 0 else 1 end,
+                {now},
+                1)
+            on conflict (worker_name) do update
+            set last_succeeded_at = case when {succeeded} then {now} else lease.last_succeeded_at end,
+                last_failed_at = case when {succeeded} then lease.last_failed_at else {now} end,
                 last_safe_error_code = {safeErrorCode},
-                consecutive_failure_count = case when {succeeded} then 0 else consecutive_failure_count + 1 end,
+                consecutive_failure_count = case when {succeeded} then 0 else lease.consecutive_failure_count + 1 end,
                 updated_at = {now},
-                version = version + 1
-            where worker_name = {workerName}
+                version = lease.version + 1
             """,
             cancellationToken);
     }
