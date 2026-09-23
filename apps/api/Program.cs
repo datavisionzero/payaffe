@@ -245,6 +245,16 @@ builder.Services.AddRateLimiter(options =>
     // source address and deliberately small: a browser that is failing reports
     // once, and a caller that wants to write a thousand lines into the
     // operator's log store is the case this bounds.
+    options.AddPolicy("PayerSimulation", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true,
+            }));
     options.AddPolicy("ClientErrors", httpContext =>
     {
         var clientErrorOptions = httpContext.RequestServices
@@ -498,6 +508,24 @@ payerApi.MapPost("/payments/{payerPageId}/currency-selection", SelectPayerPaymen
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status400BadRequest, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
     .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json");
+
+// The Payer Page's "I have paid" in a Test Mode installation (ADR 0033). Like
+// the Integration API route, it is not mapped at all in a live installation.
+// The Payer holds only the Payer Page link, as for currency selection; the
+// limit per address keeps an open link from being used to fill the table.
+if (installationMode.IsTest)
+{
+    payerApi.MapPost("/payments/{payerPageId}/simulated-transactions", RecordPayerSimulatedTransactionAsync)
+        .WithName("RecordPayerSimulatedTransaction")
+        .WithTags("Payer")
+        .RequireRateLimiting("PayerSimulation")
+        .Accepts<RecordSimulatedTransactionHttpRequest>("application/json")
+        .Produces<SimulatedTransactionResponse>(StatusCodes.Status201Created)
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status400BadRequest, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status404NotFound, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status409Conflict, "application/problem+json")
+        .Produces<IntegrationApiProblemResponse>(StatusCodes.Status429TooManyRequests, "application/problem+json");
+}
 
 var adminApi = app.MapGroup("/api/admin");
 
@@ -994,6 +1022,47 @@ static async Task<IResult> RecordSimulatedTransactionAsync(
                     StatusCodes.Status409Conflict,
                     "Idempotency conflict.",
                     "idempotency.conflict"),
+            RecordSimulatedTransactionResultKind.PaymentNotFound =>
+                IntegrationApiProblem.Create(
+                    httpContext,
+                    StatusCodes.Status404NotFound,
+                    "Payment was not found.",
+                    "payment.not_found"),
+            RecordSimulatedTransactionResultKind.PaymentNotReady =>
+                IntegrationApiProblem.Create(
+                    httpContext,
+                    StatusCodes.Status409Conflict,
+                    "Payment is not waiting for a payment.",
+                    "payment.not_waiting_for_payment"),
+            _ => throw new InvalidOperationException($"Unsupported simulation result {result.Kind}."),
+        };
+    }
+    catch (DomainRuleException exception)
+    {
+        return IntegrationApiProblem.Validation(
+            httpContext,
+            new Dictionary<string, string[]>
+            {
+                [exception.Code.StartsWith("amount.", StringComparison.Ordinal) ? "amount" : "request"] = [exception.Code],
+            });
+    }
+}
+
+static async Task<IResult> RecordPayerSimulatedTransactionAsync(
+    HttpContext httpContext,
+    string payerPageId,
+    RecordSimulatedTransactionHttpRequest request,
+    PaymentSimulationService simulation,
+    CancellationToken cancellationToken)
+{
+    try
+    {
+        var result = await simulation.RecordForPayerPageAsync(payerPageId, request.Amount, cancellationToken);
+        return result.Kind switch
+        {
+            RecordSimulatedTransactionResultKind.Recorded => Results.Json(
+                result.Transaction,
+                statusCode: StatusCodes.Status201Created),
             RecordSimulatedTransactionResultKind.PaymentNotFound =>
                 IntegrationApiProblem.Create(
                     httpContext,

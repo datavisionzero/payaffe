@@ -96,6 +96,28 @@ public sealed class PaymentSimulationService(
             transaction.RecordedAt));
     }
 
+    /// <summary>
+    /// The Payer Page's "I have paid": the Payer holds the Payer Page link and
+    /// nothing else, so the Payment is found by it.
+    /// </summary>
+    public async Task<RecordSimulatedTransactionResult> RecordForPayerPageAsync(
+        string payerPageId,
+        string? amount,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(payerPageId))
+        {
+            throw new DomainRuleException("Payer Page identifier is required.", "payer_page_id.required");
+        }
+
+        var payment = await store.FindPaymentByPayerPageIdAsync(payerPageId.Trim(), cancellationToken);
+        return payment is null
+            ? RecordSimulatedTransactionResult.PaymentNotFound()
+            : await RecordSimulatedTransactionAsync(
+                new RecordSimulatedTransactionCommand(payment.ProjectId, payment.PaymentId, amount),
+                cancellationToken);
+    }
+
     private static string? NormalizeIdempotencyKey(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -144,8 +166,7 @@ public sealed record SimulatedTransactionResponse(
     string PaymentAddress,
     string TransactionHash,
     string Amount,
-    DateTimeOffset RecordedAt,
-    string? IdempotencyKey = null);
+    DateTimeOffset RecordedAt);
 
 public sealed record RecordSimulatedTransactionResult(
     RecordSimulatedTransactionResultKind Kind,
@@ -192,6 +213,10 @@ public interface ISimulatedTransactionStore
         Guid paymentId,
         CancellationToken cancellationToken);
 
+    Task<SimulationTargetPayment?> FindPaymentByPayerPageIdAsync(
+        string payerPageId,
+        CancellationToken cancellationToken);
+
     Task<SimulatedTransactionResponse?> FindByIdempotencyKeyAsync(
         Guid projectId,
         Guid paymentId,
@@ -205,6 +230,7 @@ public interface ISimulatedTransactionStore
 }
 
 public sealed record SimulationTargetPayment(
+    Guid ProjectId,
     Guid PaymentId,
     string Status,
     string? SelectedCurrency,

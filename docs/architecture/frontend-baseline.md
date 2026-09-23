@@ -268,6 +268,17 @@ After Currency Selection the Payer Page uses the returned Payment
 Instruction's `uri` unchanged for its wallet link and QR payload. Frontend code
 does not reconstruct BTC, LTC, or native ETH URIs from display fields.
 
+In a Test Mode installation
+([ADR 0033](../adr/0033-a-test-installation-simulates-its-external-truth.md))
+the Payer Page and the Admin UI show a persistent test-mode indicator, read from
+the Payment's `testMode` and the Admin session's `testMode`. While a test
+Payment waits for its money, the Payer Page offers to simulate paying the exact
+amount, half of it, or half again; the backend owns the simulation through a
+Payer route that only a Test Mode installation maps. The browser API snapshot
+under `docs/contracts/web/` is taken from a Test Mode installation so the web
+application is typed for that route; a live installation serves the same
+document without it.
+
 ## Server State And Polling
 
 TanStack Query manages server state.

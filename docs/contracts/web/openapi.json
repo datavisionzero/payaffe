@@ -126,6 +126,86 @@
         }
       }
     },
+    "/api/payer/payments/{payerPageId}/simulated-transactions": {
+      "post": {
+        "tags": [
+          "Payer"
+        ],
+        "operationId": "RecordPayerSimulatedTransaction",
+        "parameters": [
+          {
+            "name": "payerPageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordSimulatedTransactionHttpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatedTransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationApiProblemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/projects": {
       "get": {
         "tags": [
@@ -3929,6 +4009,20 @@
           }
         }
       },
+      "RecordSimulatedTransactionHttpRequest": {
+        "required": [
+          "amount"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "SelectPayerPaymentCurrencyHttpRequest": {
         "required": [
           "supportedCurrency"
@@ -3940,6 +4034,39 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "SimulatedTransactionResponse": {
+        "required": [
+          "paymentId",
+          "supportedCurrency",
+          "paymentAddress",
+          "transactionHash",
+          "amount",
+          "recordedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supportedCurrency": {
+            "type": "string"
+          },
+          "paymentAddress": {
+            "type": "string"
+          },
+          "transactionHash": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

@@ -658,3 +658,66 @@ test("Admin reaches the Webhook Deliveries view by its own URL", async ({ page }
   ).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("Payer of a test mode payment simulates paying and sees it complete", async ({ page }) => {
+  const testPayment = {
+    ...payment,
+    status: "waiting_for_payment",
+    completedAt: null,
+    observedTotal: null,
+    returnUrl: null,
+    payerPageUrl: "https://pay.example.test/pay/payer-test-mode",
+    paymentAddress: "tb1qsimulated",
+    testMode: true,
+    paymentInstruction: {
+      supportedCurrency: "BTC",
+      network: "testnet",
+      chainId: null,
+      amount: "0.0003998",
+      amountAtomic: "39980",
+      paymentAddress: "tb1qsimulated",
+      uri: "bitcoin:?tb=tb1qsimulated&amount=0.0003998",
+      expiresAt: "2026-07-04T13:00:00Z"
+    }
+  };
+  let simulatedAmount: unknown = "not requested";
+  await page.route("**/api/payer/payments/payer-test-mode**", async (route) => {
+    if (route.request().method() === "POST") {
+      simulatedAmount = route.request().postDataJSON().amount;
+      return route.fulfill({
+        status: 201,
+        json: {
+          paymentId: testPayment.paymentId,
+          supportedCurrency: "BTC",
+          paymentAddress: "tb1qsimulated",
+          transactionHash: "a".repeat(64),
+          amount: "0.0003998",
+          recordedAt: "2026-07-04T12:10:00Z"
+        }
+      });
+    }
+
+    return route.fulfill({
+      json: simulatedAmount === "not requested"
+        ? testPayment
+        : { ...testPayment, status: "completed", completedAt: "2026-07-04T12:30:00Z" }
+    });
+  });
+
+  await page.goto("/pay/payer-test-mode");
+
+  await expect(page.getByRole("region", { name: "Test mode" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open payment instruction in a compatible wallet" })).toHaveAttribute(
+    "href",
+    "bitcoin:?tb=tb1qsimulated&amount=0.0003998"
+  );
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  await page.getByRole("button", { name: "I have paid" }).click();
+
+  // The confirmation is shown only while the Payment still waits: the page
+  // refetches at once, and a completed Payment has nothing left to simulate.
+  await expect(page.getByText("Payment completed")).toBeVisible();
+  expect(simulatedAmount).toBeNull();
+  await expect(page.getByRole("button", { name: "I have paid" })).toHaveCount(0);
+});

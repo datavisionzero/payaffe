@@ -27,7 +27,9 @@ const t = createText({
   retiredAddresses: "Retired",
   submitting: "Working",
   unusedAddresses: "Unused",
-  "validation.addressPool": "Enter one or more unique Native ETH addresses in 0x format."
+  "validation.addressPool": "Enter one or more unique Native ETH addresses in 0x format.",
+  testModeNotice:
+    "This installation is in test mode and assigns simulated Payment Addresses for every currency. This pool is not used, and nothing needs to be imported."
 });
 
 export function AdminAddressesPage() {
@@ -36,6 +38,7 @@ export function AdminAddressesPage() {
   const queryClient = useQueryClient();
   const form = useForm<AddressPoolImportFormInput>({ defaultValues: { addresses: "" } });
   const query = useQuery(adminQueries.addressPool(projectId));
+  const session = useQuery(adminQueries.session());
   const mutation = useMutation({
     mutationFn: (addresses: string[]) => importAdminNativeEthAddressPool(projectId, addresses),
     onSuccess: async () => {
@@ -55,6 +58,7 @@ export function AdminAddressesPage() {
   return (
     <div className="space-y-6">
       <PageHeader description={t("addressPoolDescription")} title={t("addressPoolTitle")} />
+      {session.data?.testMode ? <StateMessage>{t("testModeNotice")}</StateMessage> : null}
       {query.isPending ? <StateMessage>{t("loading")}</StateMessage> : null}
       {query.isError ? <ErrorMessage error={query.error} /> : null}
       {query.data ? (

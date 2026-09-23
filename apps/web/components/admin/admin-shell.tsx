@@ -21,7 +21,10 @@ const t = createText({
   project: "Project",
   redirecting: "Taking you to sign-in.",
   signedInAs: "Signed in as",
-  skipToContent: "Skip to content"
+  skipToContent: "Skip to content",
+  testModeTitle: "Test mode",
+  testModeDescription:
+    "Payments in this installation are simulated: addresses, exchange rates and blockchain observation are not real, and no real money is received."
 });
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -157,6 +160,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         selectedProject={selectedProject}
         session={session.data}
       />
+      {session.data.testMode ? <TestModeBanner /> : null}
       {navOpen ? (
         <button
           aria-label="Close navigation"
@@ -203,6 +207,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+  );
+}
+
+function TestModeBanner() {
+  return (
+    <section
+      aria-labelledby="admin-test-mode-title"
+      className="border-b-2 border-dashed border-[var(--danger)] bg-[var(--card)] px-4 py-2 text-sm sm:px-6 lg:px-8"
+    >
+      <span className="font-semibold uppercase tracking-wide" id="admin-test-mode-title">
+        {t("testModeTitle")}
+      </span>{" "}
+      <span className="text-[var(--muted-foreground)]">{t("testModeDescription")}</span>
+    </section>
   );
 }
 

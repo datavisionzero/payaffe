@@ -125,6 +125,7 @@ export const webhookDeliveries = {
 // only about what it rendered afterwards.
 export const state = {
   authenticated: false,
+  testMode: false,
   projects: [{ ...project }],
   stepUpAuthenticatedAt: session.stepUpAuthenticatedAt as string,
   csrf: {} as Record<string, string | null>,
@@ -159,6 +160,7 @@ export const state = {
 export function resetAdminState() {
   window.localStorage?.clear();
   state.authenticated = false;
+  state.testMode = false;
   state.projects = [{ ...project }];
   state.stepUpAuthenticatedAt = session.stepUpAuthenticatedAt;
   state.csrf = {};
@@ -242,7 +244,7 @@ export const adminServer = setupServer(
     return HttpResponse.json({ project: updated });
   }),
   http.get("/api/admin/session", () =>
-    guarded({ ...session, stepUpAuthenticatedAt: state.stepUpAuthenticatedAt })
+    guarded({ ...session, stepUpAuthenticatedAt: state.stepUpAuthenticatedAt, testMode: state.testMode })
   ),
   http.post("/api/admin/auth/login", async ({ request }) => {
     const body = (await request.json()) as { username?: string; password?: string };

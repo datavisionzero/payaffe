@@ -14,6 +14,22 @@ public sealed class EfSimulatedTransactionStore(PayaffeDbContext dbContext) : IS
             .AsNoTracking()
             .Where(payment => payment.ProjectId == projectId && payment.Id == paymentId)
             .Select(payment => new SimulationTargetPayment(
+                payment.ProjectId,
+                payment.Id,
+                payment.Status,
+                payment.SelectedCurrency,
+                payment.PaymentAddress,
+                payment.ExpectedCryptoAmount))
+            .SingleOrDefaultAsync(cancellationToken);
+
+    public Task<SimulationTargetPayment?> FindPaymentByPayerPageIdAsync(
+        string payerPageId,
+        CancellationToken cancellationToken) =>
+        dbContext.Payments
+            .AsNoTracking()
+            .Where(payment => payment.PayerPageId == payerPageId)
+            .Select(payment => new SimulationTargetPayment(
+                payment.ProjectId,
                 payment.Id,
                 payment.Status,
                 payment.SelectedCurrency,

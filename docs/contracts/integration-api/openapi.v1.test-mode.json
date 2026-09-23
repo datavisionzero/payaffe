@@ -887,12 +887,6 @@
           "recordedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "idempotencyKey": {
-            "type": [
-              "null",
-              "string"
-            ]
           }
         }
       }

@@ -133,6 +133,47 @@ public sealed class SimulatedTransactionApiTests
         Assert.Equal("live", (await GetAsync(client, payment.PaymentId)).TestMode ? "test" : "live");
     }
 
+    [Fact]
+    public async Task The_payer_page_can_simulate_paying_with_nothing_but_its_link()
+    {
+        await using var factory = new PaymentApiFactory { TestMode = true };
+        await factory.SeedCredentialAsync(Token);
+        using var client = CreateClient(factory);
+        var payment = await CreateSelectedPaymentAsync(client);
+        var payerPageId = payment.PayerPageUrl[(payment.PayerPageUrl.LastIndexOf('/') + 1)..];
+        using var browser = factory.CreateClient();
+
+        using var response = await browser.PostAsJsonAsync(
+            $"/api/payer/payments/{payerPageId}/simulated-transactions",
+            new { amount = (string?)null });
+        using var unknown = await browser.PostAsJsonAsync(
+            "/api/payer/payments/not-a-payer-page/simulated-transactions",
+            new { amount = (string?)null });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        await PollAsync(factory);
+        await PollAsync(factory);
+        Assert.Equal(PaymentStatus.Completed, (await GetAsync(client, payment.PaymentId)).Status);
+    }
+
+    [Fact]
+    public async Task A_live_payer_page_has_no_simulation_route()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(Token);
+        using var client = CreateClient(factory);
+        var payment = await CreateSelectedPaymentAsync(client);
+        var payerPageId = payment.PayerPageUrl[(payment.PayerPageUrl.LastIndexOf('/') + 1)..];
+
+        using var response = await factory.CreateClient().PostAsJsonAsync(
+            $"/api/payer/payments/{payerPageId}/simulated-transactions",
+            new { amount = (string?)null });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(PaymentStatus.WaitingForPayment, (await GetAsync(client, payment.PaymentId)).Status);
+    }
+
     private static HttpClient CreateClient(PaymentApiFactory factory, string token = Token)
     {
         var client = factory.CreateClient();

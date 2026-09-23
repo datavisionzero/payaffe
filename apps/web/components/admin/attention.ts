@@ -32,6 +32,7 @@ export function useAdminAttention(projectId: string | null): AdminAttention {
     enabled: projectQueriesEnabled,
     staleTime: BADGE_STALE_TIME
   });
+  const session = useQuery({ ...adminQueries.session(), staleTime: BADGE_STALE_TIME });
   const addressPool = useQuery({
     ...adminQueries.addressPool(projectId ?? ""),
     enabled: projectQueriesEnabled,
@@ -45,6 +46,8 @@ export function useAdminAttention(projectId: string | null): AdminAttention {
   return {
     monitoring: (reorgAlerts.data?.length ?? 0) + degradedCurrencies,
     webhooks: webhookDeliveries.data?.length ?? 0,
-    addressesLowCapacity: addressPool.data?.isLowCapacity ?? false
+    // A Test Mode installation assigns simulated addresses and never draws on
+    // the pool, so an empty one is nothing to attend to.
+    addressesLowCapacity: !session.data?.testMode && (addressPool.data?.isLowCapacity ?? false)
   };
 }
