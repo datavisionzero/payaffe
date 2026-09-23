@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,9 @@ var webAllowedOrigins = builder.Configuration
     .Get<string[]>() ?? [];
 
 builder.Services.AddProblemDetails();
+// A body that cannot be bound throws instead of ending in a bare 400, so the
+// exception handler below can answer with the contract's validation shape.
+builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 if (webAllowedOrigins.Length > 0)
 {
     builder.Services.AddCors(options =>
@@ -315,6 +319,37 @@ else
         "Client addresses come from X-Forwarded-For. {TrustedProxyCount} proxy entries are trusted.",
         trustedProxies.Count);
 }
+
+// Every error leaves as ProblemDetails with a code and a correlation ID, the
+// unexpected ones included; a bare 500 gives an integrator nothing to quote.
+app.UseExceptionHandler(new ExceptionHandlerOptions
+{
+    ExceptionHandler = async httpContext =>
+    {
+        var exception = httpContext.Features.Get<IExceptionHandlerFeature>()?.Error;
+        var result = exception is BadHttpRequestException badRequest
+            ? IntegrationApiProblem.Create(
+                httpContext,
+                badRequest.StatusCode,
+                "Validation failed.",
+                "validation.failed",
+                new Dictionary<string, object?>
+                {
+                    ["errors"] = new Dictionary<string, string[]>
+                    {
+                        ["request"] = [badRequest.StatusCode == StatusCodes.Status400BadRequest
+                            ? "request.invalid_json"
+                            : "request.invalid"],
+                    },
+                })
+            : IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status500InternalServerError,
+                "An unexpected error occurred.",
+                "unexpected_error");
+        await result.ExecuteAsync(httpContext);
+    },
+});
 
 if (webAllowedOrigins.Length > 0)
 {
@@ -872,12 +907,14 @@ static async Task<IResult> CreatePaymentAsync(
                     StatusCodes.Status409Conflict,
                     "Idempotency conflict.",
                     "idempotency.conflict"),
+            // The contract names why: an archived Project is read-only, a
+            // disabled one still serves polling and Currency Selection.
             CreatePaymentResultKind.ProjectUnavailable =>
                 IntegrationApiProblem.Create(
                     httpContext,
                     StatusCodes.Status409Conflict,
                     "Project is not accepting new Payments.",
-                    "project.not_active"),
+                    credential.Principal!.ProjectStatus == "archived" ? "project.archived" : "project.disabled"),
             _ => throw new InvalidOperationException($"Unsupported create result {result.Kind}."),
         };
     }

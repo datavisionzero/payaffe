@@ -370,7 +370,13 @@ credential, secret, provider payload, or another Project's resource state.
 
 Validation errors use `validation.failed` with an `errors` extension. The
 extension maps field paths to lists of machine-readable validation codes.
-Validation codes are API contract values, not localized UI strings.
+Validation codes are API contract values, not localized UI strings. A request
+body that is not valid JSON is a `validation.failed` error with
+`request.invalid_json` under `request`.
+
+A failure the API did not anticipate is a `500` with `unexpected_error` and a
+`correlationId`, never a bare status or a stack trace. Payment Creation for an
+archived Project returns `project.archived`.
 
 ## Pagination, Sorting, And Filtering
 

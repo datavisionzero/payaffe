@@ -5,7 +5,9 @@ using System.Text.Json;
 using Payaffe.Application.Payments;
 using Payaffe.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Payaffe.Api.Tests.Payments;
 
@@ -367,7 +369,74 @@ public sealed class PaymentApiTests
 
         Assert.Equal(HttpStatusCode.OK, existingResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        await AssertProblemCodeAsync(response, "project.not_active");
+        await AssertProblemCodeAsync(response, "project.disabled");
+    }
+
+    [Fact]
+    public async Task Archived_project_rejects_new_payment_with_the_contract_code()
+    {
+        await using var factory = new PaymentApiFactory();
+        var projectId = await factory.SeedProjectAsync(status: "archived");
+        await factory.SeedCredentialAsync("archived-project-token", projectId: projectId);
+        using var client = CreateAuthenticatedClient(factory, "archived-project-token");
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "archived-project-create");
+
+        var response = await client.PostAsJsonAsync("/api/v1/payments", ValidCreatePaymentRequest());
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await AssertProblemCodeAsync(response, "project.archived");
+    }
+
+    [Fact]
+    public async Task Malformed_json_body_returns_the_contract_validation_problem()
+    {
+        await using var factory = new PaymentApiFactory();
+        await factory.SeedCredentialAsync(ValidToken);
+        using var client = CreateAuthenticatedClient(factory);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "malformed-json");
+        using var content = new StringContent("{\"fiatCurrency\": ", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("/api/v1/payments", content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        using var problem = await ReadProblemAsync(response);
+        Assert.Equal("validation.failed", problem.RootElement.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(problem.RootElement.GetProperty("correlationId").GetString()));
+        Assert.Equal(
+            "request.invalid_json",
+            problem.RootElement.GetProperty("errors").GetProperty("request")[0].GetString());
+    }
+
+    [Fact]
+    public async Task Unhandled_exception_returns_the_contract_unexpected_error_problem()
+    {
+        await using var baseFactory = new PaymentApiFactory();
+        await using var factory = baseFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IIntegrationApiCredentialAuthenticator>();
+                services.AddScoped<IIntegrationApiCredentialAuthenticator, ThrowingAuthenticator>();
+            }));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ValidToken);
+
+        var response = await client.GetAsync($"/api/v1/payments/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        using var problem = await ReadProblemAsync(response);
+        Assert.Equal("unexpected_error", problem.RootElement.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(problem.RootElement.GetProperty("correlationId").GetString()));
+        Assert.DoesNotContain("ThrowingAuthenticator", problem.RootElement.GetRawText(), StringComparison.Ordinal);
+    }
+
+    private sealed class ThrowingAuthenticator : IIntegrationApiCredentialAuthenticator
+    {
+        public Task<AuthenticatedIntegrationApiCredential?> AuthenticateAsync(
+            string bearerToken,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("ThrowingAuthenticator failed on purpose.");
     }
 
     [Fact]
