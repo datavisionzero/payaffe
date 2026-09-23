@@ -166,7 +166,10 @@
               "retiredCount",
               "unusedCount"
             ],
-            "type": "object"
+            "type": [
+              "null",
+              "object"
+            ]
           },
           "status": {
             "type": "string"

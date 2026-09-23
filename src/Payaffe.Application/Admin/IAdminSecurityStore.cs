@@ -6,6 +6,14 @@ public interface IAdminSecurityStore
         string normalizedUsername,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The account's status (<c>active</c> or <c>disabled</c>), or null when
+    /// no such account exists.
+    /// </summary>
+    Task<string?> FindAccountStatusAsync(
+        Guid adminAccountId,
+        CancellationToken cancellationToken);
+
     Task RecordSuccessfulPasswordVerificationAsync(
         Guid adminAccountId,
         DateTimeOffset occurredAt,

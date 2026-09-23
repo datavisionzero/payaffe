@@ -36,6 +36,17 @@ public sealed class EfAdminSecurityStore(PayaffeDbContext dbContext) : IAdminSec
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<string?> FindAccountStatusAsync(
+        Guid adminAccountId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.AdminAccounts
+            .AsNoTracking()
+            .Where(account => account.Id == adminAccountId)
+            .Select(account => account.Status)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task RecordSuccessfulPasswordVerificationAsync(
         Guid adminAccountId,
         DateTimeOffset occurredAt,

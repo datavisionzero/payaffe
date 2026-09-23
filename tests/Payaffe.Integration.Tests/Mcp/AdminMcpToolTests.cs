@@ -73,6 +73,7 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
         var result = await AdminMcpTools.SummarizeAddressPoolAsync(context.Services, ProjectDefaults.DefaultProjectId);
 
         Assert.Equal("resolved", result.Status);
+        Assert.NotNull(result.Pool);
         Assert.Equal(0, result.Pool.UnusedCount);
         Assert.True(result.Pool.IsLowCapacity);
     }
@@ -148,6 +149,58 @@ public sealed class AdminMcpToolTests(PostgreSqlFixture postgres) : IClassFixtur
         var entry = Assert.Single(await context.ReadAuditEntriesAsync("mcp.payment.settle"));
         Assert.Equal("denied", entry.Outcome);
         Assert.Equal("payment.not_found", entry.ReasonCode);
+    }
+
+    [Fact]
+    public async Task A_disabled_Admin_Account_can_neither_read_nor_write_and_the_refusal_is_audited()
+    {
+        await using var context = await BuildContextAsync();
+        await using (var scope = context.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+            var account = await dbContext.AdminAccounts.SingleAsync(candidate => candidate.Id == AdminAccountId);
+            account.Status = "disabled";
+            await dbContext.SaveChangesAsync();
+        }
+
+        var search = await AdminMcpTools.SearchPaymentsAsync(context.Services, ProjectDefaults.DefaultProjectId, 25);
+        var import = await AdminMcpTools.ImportNativeEthAddressesAsync(
+            context.Services,
+            ProjectDefaults.DefaultProjectId,
+            ["0x2222222222222222222222222222222222222222"],
+            confirmed: true);
+
+        Assert.Equal("authentication.required", search.Code);
+        Assert.Empty(search.Payments);
+        Assert.Equal("authentication.required", import.Code);
+        var entry = Assert.Single(await context.ReadAuditEntriesAsync("mcp.address_pool.import_native_eth"));
+        Assert.Equal("denied", entry.Outcome);
+        Assert.Equal("admin_account.disabled", entry.ReasonCode);
+        Assert.Single(await context.ReadAuditEntriesAsync("mcp.payment.search"));
+    }
+
+    [Fact]
+    public async Task Host_start_refuses_an_unknown_Admin_Account()
+    {
+        await using var context = await BuildContextAsync();
+        var service = new AdminMcpAccountVerificationHostedService(
+            context.Services,
+            Options.Create(new AdminMcpOptions { AdminAccountId = Guid.NewGuid() }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AdminMcpAccountVerificationHostedService>.Instance);
+
+        await Assert.ThrowsAsync<AdminMcpAccountUnavailableException>(() => service.StartAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Host_start_accepts_the_active_Admin_Account()
+    {
+        await using var context = await BuildContextAsync();
+        var service = new AdminMcpAccountVerificationHostedService(
+            context.Services,
+            context.Services.GetRequiredService<IOptions<AdminMcpOptions>>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AdminMcpAccountVerificationHostedService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
     }
 
     private async Task<McpToolContext> BuildContextAsync()
