@@ -297,6 +297,7 @@ public sealed class AdminMcpTools
             WebhookManualResendResultKind.Resent => "webhook_delivery.resent",
             WebhookManualResendResultKind.NotFound => "webhook_delivery.not_found",
             WebhookManualResendResultKind.NotResendable => "webhook_delivery.not_resendable",
+            WebhookManualResendResultKind.InProgress => "webhook_delivery.in_progress",
             _ => "unexpected_error",
         };
 

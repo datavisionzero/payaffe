@@ -10,6 +10,9 @@ public sealed record AdminWebhookEndpointResult(
     public static AdminWebhookEndpointResult InvalidInput() =>
         new(AdminWebhookEndpointResultKind.InvalidInput, Endpoint: null);
 
+    public static AdminWebhookEndpointResult TargetNotPublic() =>
+        new(AdminWebhookEndpointResultKind.TargetNotPublic, Endpoint: null);
+
     public static AdminWebhookEndpointResult SecretUnavailable() =>
         new(AdminWebhookEndpointResultKind.SecretUnavailable, Endpoint: null);
 
@@ -30,6 +33,7 @@ public enum AdminWebhookEndpointResultKind
 {
     Success,
     InvalidInput,
+    TargetNotPublic,
     SecretUnavailable,
     NotFound,
     ParentCredentialUnavailable,

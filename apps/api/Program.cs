@@ -2496,6 +2496,7 @@ static async Task<IResult> ResendAdminWebhookDeliveryAsync(
         WebhookManualResendResultKind.Resent => "webhook_delivery.resent",
         WebhookManualResendResultKind.NotFound => "webhook_delivery.not_found",
         WebhookManualResendResultKind.NotResendable => "webhook_delivery.not_resendable",
+        WebhookManualResendResultKind.InProgress => "webhook_delivery.in_progress",
         _ => throw new InvalidOperationException($"Unsupported webhook resend result {result.Kind}."),
     };
     await adminAuthentication.RecordSecurityAuditAsync(
@@ -2527,6 +2528,12 @@ static async Task<IResult> ResendAdminWebhookDeliveryAsync(
                 StatusCodes.Status409Conflict,
                 "Webhook Delivery cannot be resent.",
                 "webhook_delivery.not_resendable"),
+        WebhookManualResendResultKind.InProgress =>
+            IntegrationApiProblem.Create(
+                httpContext,
+                StatusCodes.Status409Conflict,
+                "Webhook Delivery is being delivered right now.",
+                "webhook_delivery.in_progress"),
         _ => throw new InvalidOperationException($"Unsupported webhook resend result {result.Kind}."),
     };
 }
@@ -2690,6 +2697,13 @@ static IResult MapWebhookEndpointFailure(
                 new Dictionary<string, string[]>
                 {
                     ["request"] = ["webhook_endpoint.invalid"],
+                }),
+        AdminWebhookEndpointResultKind.TargetNotPublic =>
+            IntegrationApiProblem.Validation(
+                httpContext,
+                new Dictionary<string, string[]>
+                {
+                    ["url"] = ["webhook_endpoint.target_not_public"],
                 }),
         AdminWebhookEndpointResultKind.SecretUnavailable =>
             IntegrationApiProblem.Create(

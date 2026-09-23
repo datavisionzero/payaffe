@@ -113,7 +113,8 @@ context.
 
 Outgoing Webhook Deliveries use these headers:
 
-- `Payaffe-Webhook-Id`: Delivery identifier,
+- `Payaffe-Webhook-Id`: Delivery identifier, the id of the delivery attempt
+  recorded in Webhook Delivery history, new for every attempt,
 - `Payaffe-Webhook-Timestamp`: Unix timestamp in seconds,
 - `Payaffe-Webhook-Signature`: signature value,
 - `Payaffe-Webhook-Event-Type`: event type,
@@ -161,6 +162,9 @@ Receivers must:
 
 Manual resend creates a new Delivery attempt for the same event contract. It
 does not create a new Payment lifecycle event.
+Manual resend takes the same event lease as the delivery worker; while the
+event is being delivered it is refused with `webhook_delivery.in_progress`
+rather than racing the worker.
 Admin-triggered manual resend requires server-side Admin authorization, CSRF
 evidence for the browser route, a fresh Step-up, and Audit Log recording.
 
@@ -181,7 +185,8 @@ Retryable failures are:
 
 HTTP `2xx` responses are successful. Other HTTP `3xx` and `4xx` responses are
 terminal by default unless a future ADR or implementation note records a
-specific exception.
+specific exception. Redirects are never followed: a `3xx` is recorded as the
+answer and nothing is sent to its `Location`.
 
 The MVP uses exponential backoff with bounded jitter, a configurable maximum
 attempt count, and a terminal failed state when automatic retry is exhausted.
@@ -189,6 +194,24 @@ The first concrete settings are `Webhooks:Delivery:RetryDelay`,
 `RetryBackoffMultiplier`, `MaxRetryDelay`, `RetryJitterRatio`, and
 `MaxAttempts`; Compose exposes matching `PAYAFFE_WEBHOOK_DELIVERY_*`
 environment variables for operators.
+
+## Delivery Targets
+
+Webhook Delivery connects only to public addresses
+([ADR 0036](../adr/0036-webhook-delivery-reaches-only-public-addresses.md)).
+Loopback, link-local, private, shared (CGNAT), unspecified, multicast and
+reserved addresses are refused unless the target host, its address, or a range
+containing it is listed in `Webhooks:Delivery:AllowedPrivateTargets`
+(`PAYAFFE_WEBHOOK_ALLOWED_PRIVATE_TARGETS` in Compose). The check applies to the
+addresses a host name resolves to when the connection is opened, so a name that
+changes what it resolves to is judged at delivery. Delivery does not use an HTTP
+proxy.
+
+A refused delivery is a terminal attempt with the safe error code
+`webhook_target.not_public` and no HTTP status. Creating or updating a Webhook
+Endpoint whose host is a literal non-public address outside the allowlist is
+refused with the validation error `webhook_endpoint.target_not_public`. Plain
+`http` stays allowed for public targets.
 
 ## Delivery History
 

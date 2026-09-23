@@ -11,6 +11,8 @@ using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
 using Payaffe.Infrastructure.Telemetry;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Payaffe.Infrastructure.Webhooks;
@@ -21,8 +23,15 @@ public sealed class WebhookDeliveryProcessor(
     IWebhookSecretResolver secretResolver,
     IClock clock,
     IOptions<WebhookDeliveryOptions> options,
-    ConfiguredInstallationMode? installationMode = null)
+    ConfiguredInstallationMode? installationMode = null,
+    ILogger<WebhookDeliveryProcessor>? logger = null)
 {
+    /// <summary>
+    /// The safe error code of an event whose processing failed for a reason
+    /// other than the receiver's answer, such as a payload that cannot be built.
+    /// </summary>
+    public const string ProcessingFailedErrorCode = "webhook_delivery.processing_failed";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -31,36 +40,62 @@ public sealed class WebhookDeliveryProcessor(
 
     private readonly WebhookDeliveryOptions _options = options.Value;
 
+    private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
+
     private readonly string _workerId = $"{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid():N}";
 
-    public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken)
+    /// <summary>The Webhook Endpoint of the delivery in progress, once it is known.</summary>
+    private Guid? _deliveringEndpointId;
+
+    public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken) =>
+        await ProcessNextEventAsync(cancellationToken) != WebhookEventProcessing.None;
+
+    /// <summary>
+    /// Claims and delivers one due event. Whatever goes wrong with that one
+    /// event is written to it as a failed attempt, so an event that fails
+    /// every time runs out of attempts instead of being claimed first on every
+    /// poll and starving the others.
+    /// </summary>
+    public async Task<WebhookEventProcessing> ProcessNextEventAsync(CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
         var webhookEvent = await ClaimNextAsync(now, cancellationToken);
 
         if (webhookEvent is null)
         {
-            return false;
+            return WebhookEventProcessing.None;
         }
 
         try
         {
             await DeliverAsync(webhookEvent, cancellationToken);
+            return WebhookEventProcessing.Processed;
         }
-        finally
+        catch (DbUpdateConcurrencyException)
         {
-            webhookEvent.LockedBy = null;
-            webhookEvent.LockedUntil = null;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            LogLeaseLost(webhookEvent.Id);
+            dbContext.ChangeTracker.Clear();
+            return WebhookEventProcessing.Processed;
         }
-
-        return true;
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(
+                exception,
+                "Webhook Event {WebhookEventId} could not be processed and is counted as a failed attempt.",
+                webhookEvent.Id);
+            await RecordProcessingFailureAsync(webhookEvent.ProjectId, webhookEvent.Id, cancellationToken);
+            return WebhookEventProcessing.Failed;
+        }
     }
 
     /// <summary>
     /// Claims exactly one due Webhook Event so that concurrent workers cannot
     /// deliver the same event twice. An active lease is skipped and becomes
     /// claimable again once it expires, which recovers a crashed worker's event.
+    /// Every later write to the event is conditional on still holding the
+    /// lease (<c>locked_by</c> is a concurrency token), so a worker whose lease
+    /// expired cannot overwrite the outcome or the lease of the one that took
+    /// over.
     /// </summary>
     private async Task<WebhookOutboxEventRecord?> ClaimNextAsync(
         DateTimeOffset now,
@@ -119,15 +154,109 @@ public sealed class WebhookDeliveryProcessor(
         webhookEvent.LockedUntil = now.Add(leaseDuration);
     }
 
+    /// <summary>
+    /// Delivers a failed event again at an Admin's request. The resend takes
+    /// the same event lease the worker does, so it is refused while a worker
+    /// or another resend holds the event instead of racing it and overwriting
+    /// its outcome.
+    /// </summary>
     public async Task<WebhookManualResendResult> ResendAsync(
         Guid projectId,
         Guid webhookEventId,
         CancellationToken cancellationToken)
     {
-        var webhookEvent = await dbContext.WebhookOutboxEvents
-            .SingleOrDefaultAsync(
-                candidate => candidate.ProjectId == projectId && candidate.Id == webhookEventId,
-                cancellationToken);
+        var claim = await ClaimForResendAsync(projectId, webhookEventId, clock.UtcNow, cancellationToken);
+        if (claim.Result is not null)
+        {
+            return claim.Result;
+        }
+
+        var webhookEvent = claim.Event!;
+        try
+        {
+            await DeliverAsync(webhookEvent, cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            LogLeaseLost(webhookEventId);
+            dbContext.ChangeTracker.Clear();
+            return WebhookManualResendResult.InProgress();
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(
+                exception,
+                "Webhook Event {WebhookEventId} could not be resent and is counted as a failed attempt.",
+                webhookEventId);
+            await RecordProcessingFailureAsync(projectId, webhookEventId, cancellationToken);
+            var failed = await dbContext.WebhookOutboxEvents
+                .AsNoTracking()
+                .SingleAsync(
+                    candidate => candidate.ProjectId == projectId && candidate.Id == webhookEventId,
+                    cancellationToken);
+            return WebhookManualResendResult.Resent(failed.Status);
+        }
+
+        return WebhookManualResendResult.Resent(webhookEvent.Status);
+    }
+
+    private async Task<(WebhookOutboxEventRecord? Event, WebhookManualResendResult? Result)> ClaimForResendAsync(
+        Guid projectId,
+        Guid webhookEventId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (!dbContext.Database.IsRelational())
+        {
+            var candidate = await dbContext.WebhookOutboxEvents
+                .SingleOrDefaultAsync(
+                    webhookEvent => webhookEvent.ProjectId == projectId && webhookEvent.Id == webhookEventId,
+                    cancellationToken);
+            var refusal = RefuseResend(candidate, now);
+            if (refusal is not null)
+            {
+                return (null, refusal);
+            }
+
+            ApplyLease(candidate!, now);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return (candidate, null);
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var claimed = await dbContext.WebhookOutboxEvents
+            .FromSqlInterpolated(
+                $"""
+                select * from outbox.webhook_events
+                where project_id = {projectId} and id = {webhookEventId}
+                for update skip locked
+                """)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (claimed is null)
+        {
+            // Skipped rather than missing when a worker is claiming it right now.
+            var exists = await dbContext.WebhookOutboxEvents
+                .AsNoTracking()
+                .AnyAsync(
+                    webhookEvent => webhookEvent.ProjectId == projectId && webhookEvent.Id == webhookEventId,
+                    cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return (null, exists ? WebhookManualResendResult.InProgress() : WebhookManualResendResult.NotFound());
+        }
+
+        var refused = RefuseResend(claimed, now);
+        if (refused is null)
+        {
+            ApplyLease(claimed, now);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return refused is null ? (claimed, null) : (null, refused);
+    }
+
+    private static WebhookManualResendResult? RefuseResend(WebhookOutboxEventRecord? webhookEvent, DateTimeOffset now)
+    {
         if (webhookEvent is null)
         {
             return WebhookManualResendResult.NotFound();
@@ -138,14 +267,16 @@ public sealed class WebhookDeliveryProcessor(
             return WebhookManualResendResult.NotResendable(webhookEvent.Status);
         }
 
-        await DeliverAsync(webhookEvent, cancellationToken);
-        return WebhookManualResendResult.Resent(webhookEvent.Status);
+        return webhookEvent.LockedUntil > now
+            ? WebhookManualResendResult.InProgress()
+            : null;
     }
 
     private async Task DeliverAsync(
         WebhookOutboxEventRecord webhookEvent,
         CancellationToken cancellationToken)
     {
+        _deliveringEndpointId = null;
         var endpoints = await dbContext.WebhookEndpoints
             .Where(candidate =>
                 candidate.ProjectId == webhookEvent.ProjectId &&
@@ -156,12 +287,17 @@ public sealed class WebhookDeliveryProcessor(
         var endpoint = endpoints.FirstOrDefault(candidate => SupportsEventType(candidate, webhookEvent.EventType));
         if (endpoint is null)
         {
-            webhookEvent.Status = "terminal_failed";
-            webhookEvent.LastErrorCode = "webhook_endpoint.not_found";
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await WriteOutcomeAsync(
+                webhookEvent,
+                attempt: null,
+                "terminal_failed",
+                "webhook_endpoint.not_found",
+                nextAttemptAt: null,
+                cancellationToken);
             return;
         }
 
+        _deliveringEndpointId = endpoint.Id;
         var payment = await dbContext.Payments
             .AsNoTracking()
             .SingleAsync(
@@ -187,17 +323,12 @@ public sealed class WebhookDeliveryProcessor(
         }
         if (string.IsNullOrWhiteSpace(secret))
         {
-            await RecordAttemptAsync(
+            await ApplyTerminalFailureAsync(
                 webhookEvent,
                 endpoint,
-                "terminal_failed",
-                httpStatusCode: null,
                 "webhook_secret.unavailable",
-                nextRetryAt: null,
+                httpStatusCode: null,
                 cancellationToken);
-            webhookEvent.Status = "terminal_failed";
-            webhookEvent.LastErrorCode = "webhook_secret.unavailable";
-            await dbContext.SaveChangesAsync(cancellationToken);
             return;
         }
 
@@ -207,132 +338,246 @@ public sealed class WebhookDeliveryProcessor(
         {
             Content = new StringContent(rawBody, Encoding.UTF8, "application/json"),
         };
-        var deliveryId = Guid.NewGuid();
+        // The delivery id a receiver sees is the id of the attempt row, so
+        // it can be matched to Delivery history.
+        var attemptId = Guid.NewGuid();
         var timestamp = clock.UtcNow;
-        request.Headers.Add("Payaffe-Webhook-Id", deliveryId.ToString("D"));
+        request.Headers.Add("Payaffe-Webhook-Id", attemptId.ToString("D"));
         request.Headers.Add("Payaffe-Webhook-Timestamp", timestamp.ToUnixTimeSeconds().ToString());
         request.Headers.Add("Payaffe-Webhook-Signature", WebhookSignatureService.CreateSignature(secret, timestamp, rawBody));
         request.Headers.Add("Payaffe-Webhook-Event-Type", webhookEvent.EventType);
         request.Headers.Add("Payaffe-Webhook-Event-Version", webhookEvent.EventVersion);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
+        HttpStatusCode statusCode;
         try
         {
-            using var response = await httpClient.SendAsync(request, cancellationToken);
-            await ApplyHttpResultAsync(webhookEvent, endpoint, response.StatusCode, cancellationToken);
+            // Bounded here as well as on the client, so the request always
+            // ends inside the event lease however the client was built.
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(_options.RequestTimeout);
+            using var response = await httpClient.SendAsync(request, timeout.Token);
+            statusCode = response.StatusCode;
+        }
+        catch (HttpRequestException exception) when (exception.InnerException is WebhookTargetRefusedException)
+        {
+            // Retrying cannot change where the name points often enough to be
+            // worth it, and an Admin needs to see the reason, not a retry.
+            await ApplyTerminalFailureAsync(
+                webhookEvent,
+                endpoint,
+                WebhookTargetPolicy.RefusedErrorCode,
+                httpStatusCode: null,
+                cancellationToken,
+                attemptId);
+            return;
         }
         catch (HttpRequestException)
         {
-            await ApplyRetryableFailureAsync(webhookEvent, endpoint, "http.request_failed", cancellationToken);
+            await ApplyRetryableFailureAsync(webhookEvent, endpoint, "http.request_failed", cancellationToken, attemptId: attemptId);
+            return;
         }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            await ApplyRetryableFailureAsync(webhookEvent, endpoint, "http.timeout", cancellationToken);
+            await ApplyRetryableFailureAsync(webhookEvent, endpoint, "http.timeout", cancellationToken, attemptId: attemptId);
+            return;
         }
+
+        await ApplyHttpResultAsync(webhookEvent, endpoint, statusCode, attemptId, cancellationToken);
     }
 
     private async Task ApplyHttpResultAsync(
         WebhookOutboxEventRecord webhookEvent,
         WebhookEndpointRecord endpoint,
         HttpStatusCode statusCode,
+        Guid attemptId,
         CancellationToken cancellationToken)
     {
         if ((int)statusCode >= 200 && (int)statusCode <= 299)
         {
-            var nextAttemptNumber = webhookEvent.AttemptCount + 1;
-            await RecordAttemptAsync(
+            await WriteOutcomeAsync(
                 webhookEvent,
-                endpoint,
-                "succeeded",
-                (int)statusCode,
+                new AttemptOutcome(endpoint.Id, "succeeded", (int)statusCode, SafeErrorCode: null, NextRetryAt: null, attemptId),
+                "delivered",
                 safeErrorCode: null,
-                nextRetryAt: null,
+                nextAttemptAt: null,
                 cancellationToken);
-            webhookEvent.AttemptCount = nextAttemptNumber;
-            webhookEvent.Status = "delivered";
-            webhookEvent.LastErrorCode = null;
-            await dbContext.SaveChangesAsync(cancellationToken);
             return;
         }
 
         if (IsRetryable(statusCode))
         {
-            await ApplyRetryableFailureAsync(webhookEvent, endpoint, $"http.{(int)statusCode}", cancellationToken, (int)statusCode);
+            await ApplyRetryableFailureAsync(webhookEvent, endpoint, $"http.{(int)statusCode}", cancellationToken, (int)statusCode, attemptId);
             return;
         }
 
-        await RecordAttemptAsync(
+        await ApplyTerminalFailureAsync(
             webhookEvent,
             endpoint,
-            "terminal_failed",
-            (int)statusCode,
             $"http.{(int)statusCode}",
-            nextRetryAt: null,
-            cancellationToken);
-        webhookEvent.AttemptCount++;
-        webhookEvent.Status = "terminal_failed";
-        webhookEvent.LastErrorCode = $"http.{(int)statusCode}";
-        await dbContext.SaveChangesAsync(cancellationToken);
+            (int)statusCode,
+            cancellationToken,
+            attemptId);
     }
 
-    private async Task ApplyRetryableFailureAsync(
+    private Task ApplyTerminalFailureAsync(
+        WebhookOutboxEventRecord webhookEvent,
+        WebhookEndpointRecord endpoint,
+        string safeErrorCode,
+        int? httpStatusCode,
+        CancellationToken cancellationToken,
+        Guid? attemptId = null) =>
+        WriteOutcomeAsync(
+            webhookEvent,
+            new AttemptOutcome(endpoint.Id, "terminal_failed", httpStatusCode, safeErrorCode, NextRetryAt: null, attemptId),
+            "terminal_failed",
+            safeErrorCode,
+            nextAttemptAt: null,
+            cancellationToken);
+
+    private Task ApplyRetryableFailureAsync(
         WebhookOutboxEventRecord webhookEvent,
         WebhookEndpointRecord endpoint,
         string safeErrorCode,
         CancellationToken cancellationToken,
-        int? httpStatusCode = null)
+        int? httpStatusCode = null,
+        Guid? attemptId = null)
     {
-        var nextAttemptNumber = webhookEvent.AttemptCount + 1;
-        var exhausted = nextAttemptNumber >= _options.MaxAttempts;
-        DateTimeOffset? nextRetryAt = exhausted
-            ? null
-            : clock.UtcNow.Add(CalculateRetryDelay(_options, nextAttemptNumber));
-        await RecordAttemptAsync(
+        var (status, nextRetryAt) = NextRetry(webhookEvent);
+        return WriteOutcomeAsync(
             webhookEvent,
-            endpoint,
-            exhausted ? "terminal_failed" : "retry_pending",
-            httpStatusCode,
+            new AttemptOutcome(endpoint.Id, status, httpStatusCode, safeErrorCode, nextRetryAt, attemptId),
+            status,
             safeErrorCode,
             nextRetryAt,
             cancellationToken);
-
-        webhookEvent.AttemptCount = nextAttemptNumber;
-        webhookEvent.Status = exhausted ? "terminal_failed" : "retry_pending";
-        webhookEvent.NextAttemptAt = nextRetryAt ?? webhookEvent.NextAttemptAt;
-        webhookEvent.LastErrorCode = safeErrorCode;
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task RecordAttemptAsync(
+    private (string Status, DateTimeOffset? NextRetryAt) NextRetry(WebhookOutboxEventRecord webhookEvent)
+    {
+        var nextAttemptNumber = webhookEvent.AttemptCount + 1;
+        return nextAttemptNumber >= _options.MaxAttempts
+            ? ("terminal_failed", null)
+            : ("retry_pending", clock.UtcNow.Add(CalculateRetryDelay(_options, nextAttemptNumber)));
+    }
+
+    /// <summary>
+    /// Writes the outcome of one delivery: the attempt row, the event state,
+    /// and the released lease, in one save. The update is conditional on the
+    /// lease this processor took, so it fails as a whole with a
+    /// <see cref="DbUpdateConcurrencyException"/> when another owner has taken
+    /// the event over in the meantime.
+    /// </summary>
+    private async Task WriteOutcomeAsync(
         WebhookOutboxEventRecord webhookEvent,
-        WebhookEndpointRecord endpoint,
-        string result,
-        int? httpStatusCode,
+        AttemptOutcome? attempt,
+        string status,
         string? safeErrorCode,
-        DateTimeOffset? nextRetryAt,
+        DateTimeOffset? nextAttemptAt,
         CancellationToken cancellationToken)
     {
-        dbContext.WebhookDeliveryAttempts.Add(new WebhookDeliveryAttemptRecord
+        if (attempt is not null)
         {
-            ProjectId = webhookEvent.ProjectId,
-            Id = Guid.NewGuid(),
-            WebhookEventId = webhookEvent.Id,
-            WebhookEndpointId = endpoint.Id,
-            AttemptNumber = webhookEvent.AttemptCount + 1,
-            AttemptedAt = clock.UtcNow,
-            Result = result,
-            HttpStatusCode = httpStatusCode,
-            SafeErrorCode = safeErrorCode,
-            NextRetryAt = nextRetryAt,
-            CorrelationId = webhookEvent.CorrelationId,
-        });
+            dbContext.WebhookDeliveryAttempts.Add(new WebhookDeliveryAttemptRecord
+            {
+                ProjectId = webhookEvent.ProjectId,
+                Id = attempt.Id ?? Guid.NewGuid(),
+                WebhookEventId = webhookEvent.Id,
+                WebhookEndpointId = attempt.EndpointId,
+                AttemptNumber = webhookEvent.AttemptCount + 1,
+                AttemptedAt = clock.UtcNow,
+                Result = attempt.Result,
+                HttpStatusCode = attempt.HttpStatusCode,
+                SafeErrorCode = attempt.SafeErrorCode,
+                NextRetryAt = attempt.NextRetryAt,
+                CorrelationId = webhookEvent.CorrelationId,
+            });
+            webhookEvent.AttemptCount++;
+        }
 
+        webhookEvent.Status = status;
+        webhookEvent.LastErrorCode = safeErrorCode;
+        webhookEvent.NextAttemptAt = nextAttemptAt ?? webhookEvent.NextAttemptAt;
+        webhookEvent.LockedBy = null;
+        webhookEvent.LockedUntil = null;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Every attempt outcome passes through here, including manual resend,
-        // so this is the one place the delivery counter has to be updated.
-        PayaffeTelemetry.RecordWebhookAttempt(result);
+        if (attempt is not null)
+        {
+            // Every attempt outcome passes through here, including manual
+            // resend, so this is the one place the delivery counter has to be
+            // updated.
+            PayaffeTelemetry.RecordWebhookAttempt(attempt.Result);
+        }
+
+        if (status == "terminal_failed")
+        {
+            PayaffeTelemetry.RecordWebhookTerminalTransition();
+        }
     }
+
+    /// <summary>
+    /// Counts an unexpected failure as an attempt with the usual backoff, so
+    /// the event becomes terminal once attempts run out. The tracked state may
+    /// be what failed to save, so the event is read again, and nothing is
+    /// written when the lease is no longer this processor's.
+    /// </summary>
+    private async Task RecordProcessingFailureAsync(
+        Guid projectId,
+        Guid webhookEventId,
+        CancellationToken cancellationToken)
+    {
+        dbContext.ChangeTracker.Clear();
+        var webhookEvent = await dbContext.WebhookOutboxEvents
+            .SingleOrDefaultAsync(
+                candidate => candidate.ProjectId == projectId && candidate.Id == webhookEventId,
+                cancellationToken);
+        if (webhookEvent is null || !StringComparer.Ordinal.Equals(webhookEvent.LockedBy, _workerId))
+        {
+            LogLeaseLost(webhookEventId);
+            return;
+        }
+
+        var (status, nextRetryAt) = NextRetry(webhookEvent);
+        var attempt = _deliveringEndpointId is { } endpointId
+            ? new AttemptOutcome(endpointId, status, HttpStatusCode: null, ProcessingFailedErrorCode, nextRetryAt)
+            : null;
+        if (attempt is null)
+        {
+            // Without an Endpoint there is no attempt row to write, but the
+            // failure still counts towards the attempt limit.
+            webhookEvent.AttemptCount++;
+        }
+
+        try
+        {
+            await WriteOutcomeAsync(
+                webhookEvent,
+                attempt,
+                status,
+                ProcessingFailedErrorCode,
+                nextRetryAt,
+                cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            LogLeaseLost(webhookEventId);
+            dbContext.ChangeTracker.Clear();
+        }
+    }
+
+    private void LogLeaseLost(Guid webhookEventId) =>
+        _logger.LogWarning(
+            "Webhook Event {WebhookEventId} was taken over by another worker before its outcome was written; this outcome was discarded.",
+            webhookEventId);
+
+    private sealed record AttemptOutcome(
+        Guid EndpointId,
+        string Result,
+        int? HttpStatusCode,
+        string? SafeErrorCode,
+        DateTimeOffset? NextRetryAt,
+        Guid? Id = null);
 
     private static bool IsRetryable(HttpStatusCode statusCode)
     {
@@ -470,4 +715,16 @@ public sealed class WebhookDeliveryProcessor(
         DateTimeOffset ExpiresAt,
         DateTimeOffset? CompletedAt,
         DateTimeOffset? SettledAt);
+}
+
+public enum WebhookEventProcessing
+{
+    /// <summary>No event was due.</summary>
+    None,
+
+    /// <summary>One event was claimed and its outcome handled.</summary>
+    Processed,
+
+    /// <summary>One event failed for a reason other than the receiver's answer.</summary>
+    Failed,
 }

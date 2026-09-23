@@ -1,4 +1,8 @@
+using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using Payaffe.Application;
 using Payaffe.Application.Payments;
 using Payaffe.Application.Webhooks;
@@ -6,8 +10,11 @@ using Payaffe.Infrastructure;
 using Payaffe.Infrastructure.Auth;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
+using Payaffe.Infrastructure.Telemetry;
 using Payaffe.Infrastructure.Webhooks;
 using Payaffe.Migrations;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -326,6 +333,480 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
         Assert.Equal(1, attempt.AttemptNumber);
     }
 
+    [Theory]
+    [InlineData("http://169.254.169.254/latest/meta-data")]
+    [InlineData("http://10.0.0.1/hooks")]
+    [InlineData("http://192.168.1.1/hooks")]
+    [InlineData("http://100.64.0.1/hooks")]
+    [InlineData("http://[fe80::1]/hooks")]
+    [InlineData("http://[fd00::1]/hooks")]
+    [InlineData("http://0.0.0.0/hooks")]
+    public async Task Delivery_refuses_a_private_or_link_local_target(string endpointUrl)
+    {
+        await using var context = await BuildContextAsync(
+            HttpStatusCode.NoContent,
+            endpointUrl: endpointUrl,
+            useDeliveryHandler: true);
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        AssertRefused(context);
+    }
+
+    [Fact]
+    public async Task Delivery_refuses_a_loopback_target_without_connecting()
+    {
+        await using var receiver = LoopbackReceiver.Start(port => "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        await using var context = await BuildContextAsync(
+            HttpStatusCode.NoContent,
+            endpointUrl: $"http://127.0.0.1:{receiver.Port}/hooks",
+            useDeliveryHandler: true);
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        AssertRefused(context);
+        Assert.Equal(0, receiver.ConnectionCount);
+    }
+
+    [Fact]
+    public async Task Delivery_refuses_a_host_name_that_resolves_to_loopback()
+    {
+        await using var receiver = LoopbackReceiver.Start(port => "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        await using var context = await BuildContextAsync(
+            HttpStatusCode.NoContent,
+            endpointUrl: $"http://localhost:{receiver.Port}/hooks",
+            useDeliveryHandler: true);
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        AssertRefused(context);
+        Assert.Equal(0, receiver.ConnectionCount);
+    }
+
+    [Fact]
+    public async Task Delivery_reaches_an_allowlisted_private_target()
+    {
+        await using var receiver = LoopbackReceiver.Start(port => "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        await using var context = await BuildContextAsync(
+            HttpStatusCode.NoContent,
+            options => options.AllowedPrivateTargets = "localhost",
+            endpointUrl: $"http://localhost:{receiver.Port}/hooks",
+            useDeliveryHandler: true);
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        Assert.Equal("delivered", Assert.Single(context.DbContext.WebhookOutboxEvents).Status);
+        Assert.Equal(1, receiver.ConnectionCount);
+    }
+
+    [Fact]
+    public async Task Delivery_treats_a_redirect_as_terminal_and_does_not_follow_it()
+    {
+        await using var receiver = LoopbackReceiver.Start(port =>
+            $"HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/elsewhere\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        await using var context = await BuildContextAsync(
+            HttpStatusCode.NoContent,
+            options => options.AllowedPrivateTargets = "127.0.0.1",
+            endpointUrl: $"http://127.0.0.1:{receiver.Port}/hooks",
+            useDeliveryHandler: true);
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        Assert.Equal("terminal_failed", webhookEvent.Status);
+        Assert.Equal("http.307", webhookEvent.LastErrorCode);
+        var attempt = Assert.Single(context.DbContext.WebhookDeliveryAttempts);
+        Assert.Equal(307, attempt.HttpStatusCode);
+        Assert.Equal(1, receiver.ConnectionCount);
+        Assert.Equal(["POST /hooks HTTP/1.1"], receiver.RequestLines);
+    }
+
+    private static void AssertRefused(ProcessorContext context)
+    {
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        Assert.Equal("terminal_failed", webhookEvent.Status);
+        Assert.Equal(WebhookTargetPolicy.RefusedErrorCode, webhookEvent.LastErrorCode);
+        Assert.Equal(1, webhookEvent.AttemptCount);
+        var attempt = Assert.Single(context.DbContext.WebhookDeliveryAttempts);
+        Assert.Equal("terminal_failed", attempt.Result);
+        Assert.Null(attempt.HttpStatusCode);
+        Assert.Equal(WebhookTargetPolicy.RefusedErrorCode, attempt.SafeErrorCode);
+        Assert.Null(attempt.NextRetryAt);
+    }
+
+    /// <summary>
+    /// A raw socket server, so a test can count connections and see whether a
+    /// redirect was followed without any HTTP stack on the receiving side.
+    /// </summary>
+    private sealed class LoopbackReceiver : IAsyncDisposable
+    {
+        private readonly TcpListener _listener;
+        private readonly Func<int, string> _response;
+        private readonly CancellationTokenSource _stopping = new();
+        private readonly Task _acceptLoop;
+        private int _connectionCount;
+
+        private LoopbackReceiver(Func<int, string> response)
+        {
+            _listener = new TcpListener(IPAddress.Loopback, 0);
+            _listener.Start();
+            _response = response;
+            _acceptLoop = AcceptAsync();
+        }
+
+        public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+        public int ConnectionCount => Volatile.Read(ref _connectionCount);
+
+        public ConcurrentQueue<string> RequestLines { get; } = new();
+
+        public static LoopbackReceiver Start(Func<int, string> response) => new(response);
+
+        private async Task AcceptAsync()
+        {
+            try
+            {
+                while (!_stopping.IsCancellationRequested)
+                {
+                    using var client = await _listener.AcceptTcpClientAsync(_stopping.Token);
+                    Interlocked.Increment(ref _connectionCount);
+                    var stream = client.GetStream();
+                    using var reader = new StreamReader(stream, Encoding.ASCII, leaveOpen: true);
+                    var requestLine = await reader.ReadLineAsync(_stopping.Token);
+                    if (requestLine is not null)
+                    {
+                        RequestLines.Enqueue(requestLine);
+                    }
+
+                    var bytes = Encoding.ASCII.GetBytes(_response(Port));
+                    await stream.WriteAsync(bytes, _stopping.Token);
+                    await stream.FlushAsync(_stopping.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _stopping.CancelAsync();
+            _listener.Stop();
+            await _acceptLoop;
+            _stopping.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task A_poison_event_counts_as_a_failed_attempt_and_the_next_event_is_still_delivered()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.NoContent);
+        var (poison, healthy) = await AddPoisonEventAsync(context);
+
+        Assert.Equal(WebhookEventProcessing.Failed, await context.Processor.ProcessNextEventAsync(CancellationToken.None));
+        Assert.Equal(WebhookEventProcessing.Processed, await context.Processor.ProcessNextEventAsync(CancellationToken.None));
+
+        context.DbContext.ChangeTracker.Clear();
+        var poisonEvent = context.DbContext.WebhookOutboxEvents.Single(webhookEvent => webhookEvent.Id == poison);
+        Assert.Equal("retry_pending", poisonEvent.Status);
+        Assert.Equal(1, poisonEvent.AttemptCount);
+        Assert.Equal(WebhookDeliveryProcessor.ProcessingFailedErrorCode, poisonEvent.LastErrorCode);
+        Assert.Equal(ProcessorNow.AddMinutes(1), poisonEvent.NextAttemptAt);
+        Assert.Null(poisonEvent.LockedBy);
+        var poisonAttempt = context.DbContext.WebhookDeliveryAttempts.Single(attempt => attempt.WebhookEventId == poison);
+        Assert.Equal("retry_pending", poisonAttempt.Result);
+        Assert.Equal(WebhookDeliveryProcessor.ProcessingFailedErrorCode, poisonAttempt.SafeErrorCode);
+        Assert.Equal(
+            "delivered",
+            context.DbContext.WebhookOutboxEvents.Single(webhookEvent => webhookEvent.Id == healthy).Status);
+        Assert.Equal(1, context.Handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task A_poison_event_becomes_terminal_when_its_attempts_run_out()
+    {
+        await using var context = await BuildContextAsync(
+            HttpStatusCode.NoContent,
+            options => options.MaxAttempts = 1);
+        var (poison, _) = await AddPoisonEventAsync(context);
+
+        Assert.Equal(WebhookEventProcessing.Failed, await context.Processor.ProcessNextEventAsync(CancellationToken.None));
+
+        context.DbContext.ChangeTracker.Clear();
+        var poisonEvent = context.DbContext.WebhookOutboxEvents.Single(webhookEvent => webhookEvent.Id == poison);
+        Assert.Equal("terminal_failed", poisonEvent.Status);
+        Assert.Equal(1, poisonEvent.AttemptCount);
+        Assert.Null(poisonEvent.LockedBy);
+    }
+
+    [Fact]
+    public async Task HostedService_delivers_past_a_poison_event_and_reports_the_failure()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.NoContent);
+        var (poison, healthy) = await AddPoisonEventAsync(context);
+        using var worker = new WebhookDeliveryHostedService(
+            context.ServiceProvider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new WebhookDeliveryOptions
+            {
+                Enabled = true,
+                PollInterval = TimeSpan.FromHours(1),
+                MaxEventsPerPoll = 5,
+            }),
+            NullLogger<WebhookDeliveryHostedService>.Instance,
+            SchemaMigrationState.AlreadyApplied());
+
+        try
+        {
+            await worker.StartAsync(CancellationToken.None);
+            await context.Handler.WaitForRequestAsync(TimeSpan.FromSeconds(5));
+            await WaitForAsync(() =>
+            {
+                context.DbContext.ChangeTracker.Clear();
+                return context.DbContext.BackgroundWorkerLeases.Any(lease => lease.WorkerName == "webhook-delivery");
+            });
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        context.DbContext.ChangeTracker.Clear();
+        Assert.Equal("delivered", context.DbContext.WebhookOutboxEvents.Single(webhookEvent => webhookEvent.Id == healthy).Status);
+        Assert.Equal("retry_pending", context.DbContext.WebhookOutboxEvents.Single(webhookEvent => webhookEvent.Id == poison).Status);
+        var lease = context.DbContext.BackgroundWorkerLeases.Single(record => record.WorkerName == "webhook-delivery");
+        Assert.Equal(1, lease.ConsecutiveFailureCount);
+        Assert.Equal(WebhookDeliveryProcessor.ProcessingFailedErrorCode, lease.LastSafeErrorCode);
+        Assert.NotNull(lease.LastFailedAt);
+    }
+
+    [Fact]
+    public async Task A_worker_that_lost_its_lease_does_not_overwrite_the_new_owner()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.NoContent);
+        var takeoverUntil = ProcessorNow.AddMinutes(5);
+        context.Handler.OnSend = async () =>
+        {
+            await using var scope = context.ServiceProvider.CreateAsyncScope();
+            var other = scope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+            await other.WebhookOutboxEvents.ExecuteUpdateAsync(setters => setters
+                .SetProperty(webhookEvent => webhookEvent.LockedBy, "other-worker")
+                .SetProperty(webhookEvent => webhookEvent.LockedUntil, takeoverUntil));
+        };
+
+        Assert.Equal(WebhookEventProcessing.Processed, await context.Processor.ProcessNextEventAsync(CancellationToken.None));
+
+        context.DbContext.ChangeTracker.Clear();
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        Assert.Equal("pending", webhookEvent.Status);
+        Assert.Equal(0, webhookEvent.AttemptCount);
+        Assert.Equal("other-worker", webhookEvent.LockedBy);
+        Assert.Equal(takeoverUntil, webhookEvent.LockedUntil);
+        Assert.Empty(context.DbContext.WebhookDeliveryAttempts);
+    }
+
+    [Fact]
+    public async Task A_slow_receiver_is_cut_off_at_the_request_timeout()
+    {
+        await using var context = await BuildContextAsync(
+            HttpStatusCode.NoContent,
+            options => options.RequestTimeout = TimeSpan.FromSeconds(1));
+        context.Handler.Delay = TimeSpan.FromSeconds(30);
+
+        var started = DateTimeOffset.UtcNow;
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        Assert.True(DateTimeOffset.UtcNow - started < TimeSpan.FromSeconds(10));
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        Assert.Equal("retry_pending", webhookEvent.Status);
+        Assert.Equal("http.timeout", webhookEvent.LastErrorCode);
+    }
+
+    [Fact]
+    public void The_delivery_client_times_out_at_the_configured_request_timeout()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        services.AddPayaffeApplication();
+        services.AddPayaffeInfrastructure("Host=localhost;Database=payaffe");
+        services.Configure<WebhookDeliveryOptions>(options => options.RequestTimeout = TimeSpan.FromSeconds(7));
+
+        using var serviceProvider = services.BuildServiceProvider();
+        using var client = serviceProvider
+            .GetRequiredService<IHttpClientFactory>()
+            .CreateClient(nameof(WebhookDeliveryProcessor));
+
+        Assert.Equal(TimeSpan.FromSeconds(7), client.Timeout);
+    }
+
+    /// <summary>
+    /// Adds a second, healthy Payment and turns the first Payment's event into
+    /// one that fails every time: its observed amount cannot be parsed, so the
+    /// payload can never be built. The poison event is due first.
+    /// </summary>
+    private static async Task<(Guid Poison, Guid Healthy)> AddPoisonEventAsync(ProcessorContext context)
+    {
+        var poison = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        var payments = context.ServiceProvider.GetRequiredService<PaymentApplicationService>();
+        await payments.CreateAsync(
+            CredentialId,
+            new CreatePaymentCommand(
+                "EUR",
+                2999,
+                "order-456",
+                PaymentContext: null,
+                ReturnUrl: null,
+                "create-order-456"),
+            CancellationToken.None);
+        context.DbContext.ChangeTracker.Clear();
+        var healthy = context.DbContext.WebhookOutboxEvents.Single(webhookEvent => webhookEvent.Id != poison.Id).Id;
+
+        context.DbContext.MatchingBlockchainTransactions.Add(new MatchingBlockchainTransactionRecord
+        {
+            Id = Guid.NewGuid(),
+            PaymentId = poison.PaymentId,
+            SupportedCurrency = "BTC",
+            PaymentAddress = "btc-test-address",
+            TransactionHash = "poison-transaction",
+            ObservedAmount = "not-a-number",
+            ObservedAt = ProcessorNow,
+            FirstObservedAt = ProcessorNow,
+            ProviderName = "test",
+            LastCheckedAt = ProcessorNow,
+            CreatedAt = ProcessorNow,
+            UpdatedAt = ProcessorNow,
+        });
+        await context.DbContext.SaveChangesAsync();
+        await context.DbContext.WebhookOutboxEvents
+            .Where(webhookEvent => webhookEvent.Id == poison.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(
+                webhookEvent => webhookEvent.NextAttemptAt,
+                ProcessorNow.AddMinutes(-1)));
+        context.DbContext.ChangeTracker.Clear();
+        return (poison.Id, healthy);
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (DateTimeOffset.UtcNow < deadline && !condition())
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(25));
+        }
+
+        Assert.True(condition());
+    }
+
+    [Fact]
+    public async Task ResendAsync_is_refused_while_a_worker_holds_the_event_lease()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.ServiceUnavailable);
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+        await LeaseEventAsync(context, "other-worker", ProcessorNow.AddMinutes(1));
+        context.Handler.ResponseStatusCode = HttpStatusCode.Gone;
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+
+        var result = await context.Processor.ResendAsync(webhookEvent.ProjectId, webhookEvent.Id, CancellationToken.None);
+
+        Assert.Equal(WebhookManualResendResultKind.InProgress, result.Kind);
+        Assert.Equal(1, context.Handler.RequestCount);
+        context.DbContext.ChangeTracker.Clear();
+        var unchanged = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        Assert.Equal("retry_pending", unchanged.Status);
+        Assert.Equal(1, unchanged.AttemptCount);
+        Assert.Equal("other-worker", unchanged.LockedBy);
+        Assert.Single(context.DbContext.WebhookDeliveryAttempts);
+    }
+
+    [Fact]
+    public async Task ResendAsync_is_refused_while_a_worker_is_claiming_the_event()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.ServiceUnavailable);
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+
+        await using var claimScope = context.ServiceProvider.CreateAsyncScope();
+        var claimContext = claimScope.ServiceProvider.GetRequiredService<PayaffeDbContext>();
+        await using var claim = await claimContext.Database.BeginTransactionAsync();
+        await claimContext.WebhookOutboxEvents
+            .FromSqlInterpolated($"select * from outbox.webhook_events where id = {webhookEvent.Id} for update")
+            .ToListAsync();
+
+        var result = await context.Processor.ResendAsync(webhookEvent.ProjectId, webhookEvent.Id, CancellationToken.None);
+
+        Assert.Equal(WebhookManualResendResultKind.InProgress, result.Kind);
+        Assert.Equal(1, context.Handler.RequestCount);
+        await claim.RollbackAsync();
+    }
+
+    [Fact]
+    public async Task ResendAsync_takes_the_lease_so_a_worker_cannot_claim_the_event_meanwhile()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.ServiceUnavailable);
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+        var webhookEvent = Assert.Single(context.DbContext.WebhookOutboxEvents);
+        webhookEvent.NextAttemptAt = ProcessorNow;
+        await context.DbContext.SaveChangesAsync();
+        context.Handler.ResponseStatusCode = HttpStatusCode.NoContent;
+        bool? workerClaimed = null;
+        context.Handler.OnSend = async () =>
+        {
+            context.Handler.OnSend = null;
+            await using var workerScope = context.ServiceProvider.CreateAsyncScope();
+            var worker = workerScope.ServiceProvider.GetRequiredService<WebhookDeliveryProcessor>();
+            workerClaimed = await worker.ProcessNextAsync(CancellationToken.None);
+        };
+
+        var result = await context.Processor.ResendAsync(webhookEvent.ProjectId, webhookEvent.Id, CancellationToken.None);
+
+        Assert.Equal(WebhookManualResendResultKind.Resent, result.Kind);
+        Assert.Equal("delivered", result.Status);
+        Assert.False(workerClaimed);
+        Assert.Equal(2, context.Handler.RequestCount);
+        context.DbContext.ChangeTracker.Clear();
+        var attempts = context.DbContext.WebhookDeliveryAttempts.OrderBy(attempt => attempt.AttemptNumber).ToArray();
+        Assert.Equal([1, 2], attempts.Select(attempt => attempt.AttemptNumber));
+        Assert.Null(Assert.Single(context.DbContext.WebhookOutboxEvents).LockedBy);
+    }
+
+    [Fact]
+    public async Task The_delivery_id_header_is_the_stored_attempt_id()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.NoContent);
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        var attempt = Assert.Single(context.DbContext.WebhookDeliveryAttempts);
+        Assert.Equal(
+            attempt.Id.ToString("D"),
+            context.Handler.Request!.Headers.GetValues("Payaffe-Webhook-Id").Single());
+    }
+
+    [Fact]
+    public async Task A_terminal_outcome_counts_one_terminal_transition()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.BadRequest);
+        long transitions = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, activeListener) =>
+        {
+            if (instrument.Meter.Name == PayaffeTelemetry.MeterName &&
+                instrument.Name == "payaffe.webhook.delivery.terminal")
+            {
+                activeListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, measurement, _, _) =>
+            Interlocked.Add(ref transitions, measurement));
+        listener.Start();
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        Assert.Equal("terminal_failed", Assert.Single(context.DbContext.WebhookOutboxEvents).Status);
+        // The meter is process-global and other test classes run alongside,
+        // so this can only be a lower bound.
+        Assert.True(Interlocked.Read(ref transitions) >= 1);
+    }
+
     private static async Task LeaseEventAsync(
         ProcessorContext context,
         string owner,
@@ -340,7 +821,9 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
 
     private async Task<ProcessorContext> BuildContextAsync(
         HttpStatusCode responseStatusCode,
-        Action<WebhookDeliveryOptions>? configureWebhookDelivery = null)
+        Action<WebhookDeliveryOptions>? configureWebhookDelivery = null,
+        string endpointUrl = "https://receiver.example.test/webhooks/payaffe",
+        bool useDeliveryHandler = false)
     {
         var connectionString = await postgres.CreateDatabaseAsync();
         var handler = new CapturingHttpMessageHandler(responseStatusCode);
@@ -360,12 +843,16 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
             options.RetryJitterRatio = 0;
             configureWebhookDelivery?.Invoke(options);
         });
-        services.AddScoped(serviceProvider => new WebhookDeliveryProcessor(
-            serviceProvider.GetRequiredService<PayaffeDbContext>(),
-            new HttpClient(handler),
-            serviceProvider.GetRequiredService<IWebhookSecretResolver>(),
-            serviceProvider.GetRequiredService<IClock>(),
-            serviceProvider.GetRequiredService<IOptions<WebhookDeliveryOptions>>()));
+        if (!useDeliveryHandler)
+        {
+            services.AddScoped(serviceProvider => new WebhookDeliveryProcessor(
+                serviceProvider.GetRequiredService<PayaffeDbContext>(),
+                new HttpClient(handler),
+                serviceProvider.GetRequiredService<IWebhookSecretResolver>(),
+                serviceProvider.GetRequiredService<IClock>(),
+                serviceProvider.GetRequiredService<IOptions<WebhookDeliveryOptions>>()));
+        }
+
         services.Configure<PaymentApplicationOptions>(options =>
         {
             options.PayerPageBaseUrl = "https://pay.example.test/pay";
@@ -393,7 +880,7 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
         {
             Id = Guid.NewGuid(),
             IntegrationApiCredentialId = CredentialId,
-            Url = "https://receiver.example.test/webhooks/payaffe",
+            Url = endpointUrl,
             SecretReference = "secret://webhooks/test-endpoint",
             Status = "active",
             EventTypes = null,
@@ -443,6 +930,10 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
 
         public bool SimulateTimeout { get; set; }
 
+        public TimeSpan Delay { get; set; }
+
+        public Func<Task>? OnSend { get; set; }
+
         public int RequestCount { get; private set; }
 
         public HttpRequestMessage? Request { get; private set; }
@@ -465,6 +956,16 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             _requestCaptured.TrySetResult();
+            if (OnSend is not null)
+            {
+                await OnSend();
+            }
+
+            if (Delay > TimeSpan.Zero)
+            {
+                await Task.Delay(Delay, cancellationToken);
+            }
+
             if (SimulateTimeout)
             {
                 throw new TaskCanceledException("Simulated receiver timeout.");
@@ -492,7 +993,10 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
 
     private sealed class FixedPayerPageIdGenerator : IPayerPageIdGenerator
     {
-        public string Generate() => "fixed-payer-page-id";
+        private int _generated;
+
+        public string Generate() =>
+            Interlocked.Increment(ref _generated) == 1 ? "fixed-payer-page-id" : $"fixed-payer-page-id-{_generated}";
     }
 
     private sealed class FixedExchangeRateSource : IExchangeRateSource

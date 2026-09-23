@@ -35,7 +35,8 @@ product tables, not in metric attributes.
 | `payaffe.worker.runs` | counter | `worker.name`, `outcome` | One background batch. `outcome` is `completed`, `skipped` when another instance holds the lease, or `failed`. |
 | `payaffe.worker.consecutive_failures` | gauge | `worker.name` | Failed batches in a row for a named worker lease. |
 | `payaffe.webhook.delivery.attempts` | counter | `result` | One Webhook Delivery attempt, including manual resend. `result` is `succeeded`, `retry_pending`, or `terminal_failed`. |
-| `payaffe.webhook.terminal_failures` | gauge | – | Webhook Outbox events in a terminal failed state. |
+| `payaffe.webhook.delivery.terminal` | counter | – | One Webhook Outbox event that became terminal failed. The terminal-delivery alert reads its increase. |
+| `payaffe.webhook.terminal_failures` | gauge | – | Webhook Outbox events in a terminal failed state. Terminal events stay, so this is a backlog, not an alert source. |
 | `payaffe.observation.unavailable` | gauge | `currency` | `1` while Blockchain Observation for that Supported Currency is unavailable. |
 | `payaffe.address_pool.available` | gauge | `currency` | Unassigned native ETH Address Pool entries. |
 | `payaffe.reorg_alerts.open` | gauge | – | Reorg Alerts still awaiting operator review. |
@@ -145,8 +146,9 @@ Webhook retry policy should adjust them and record the deviation.
 
 ## Worker Liveness
 
-The worker container reports healthy while the host can still reach the
-database, through a heartbeat file and the `dotnet Payaffe.Worker.dll health`
+The worker container reports healthy once its schema migration has completed,
+while the host can still reach the database and no worker loop has died,
+through a heartbeat file and the `dotnet Payaffe.Worker.dll health`
 command that its Compose healthcheck runs. That is liveness only. It answers
 "is this process alive and connected", not "is the scheduled work progressing";
 the second question belongs to the worker alert rules and the lease table
