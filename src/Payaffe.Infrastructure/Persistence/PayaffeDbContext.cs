@@ -1126,6 +1126,11 @@ public sealed class PayaffeDbContext(DbContextOptions<PayaffeDbContext> options)
                 .HasName("ak_webhook_events_project_id_id");
             entity.HasIndex(webhookEvent => new { webhookEvent.ProjectId, webhookEvent.Status, webhookEvent.NextAttemptAt })
                 .HasDatabaseName("ix_webhook_events_project_status_next_attempt_at");
+            // The delivery claim runs across every Project, so the Project-led
+            // index above cannot serve it.
+            entity.HasIndex(webhookEvent => new { webhookEvent.NextAttemptAt, webhookEvent.CreatedAt })
+                .HasDatabaseName("ix_webhook_events_due")
+                .HasFilter("status in ('pending', 'retry_pending')");
             entity.HasIndex(webhookEvent => webhookEvent.PaymentId)
                 .HasDatabaseName("ix_webhook_events_payment_id");
             entity.HasIndex(webhookEvent => webhookEvent.IntegrationApiCredentialId)

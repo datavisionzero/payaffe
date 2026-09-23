@@ -646,8 +646,10 @@ string. It does not expose connection strings, credentials, payment data, or
 raw configuration.
 
 The worker host serves no HTTP endpoint. It writes a heartbeat file every
-`PAYAFFE_WORKER_HEALTH_PROBE_INTERVAL`, but only while it can still reach the
-database, and its container healthcheck runs the same executable again:
+`PAYAFFE_WORKER_HEALTH_PROBE_INTERVAL`, but only once its schema migration has
+completed, while it can still reach the database, and while none of its worker
+loops has stopped with a failure. Its container healthcheck runs the same
+executable again:
 
 ```sh
 docker compose exec worker dotnet Payaffe.Worker.dll health

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -9,6 +10,7 @@ using Payaffe.Infrastructure;
 using Payaffe.Infrastructure.Auth;
 using Payaffe.Infrastructure.Persistence;
 using Payaffe.Infrastructure.Persistence.Records;
+using Payaffe.Infrastructure.Telemetry;
 using Payaffe.Infrastructure.Webhooks;
 using Payaffe.Migrations;
 using Microsoft.EntityFrameworkCore;
@@ -777,6 +779,32 @@ public sealed class WebhookDeliveryProcessorTests(PostgreSqlFixture postgres) : 
         Assert.Equal(
             attempt.Id.ToString("D"),
             context.Handler.Request!.Headers.GetValues("Payaffe-Webhook-Id").Single());
+    }
+
+    [Fact]
+    public async Task A_terminal_outcome_counts_one_terminal_transition()
+    {
+        await using var context = await BuildContextAsync(HttpStatusCode.BadRequest);
+        long transitions = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, activeListener) =>
+        {
+            if (instrument.Meter.Name == PayaffeTelemetry.MeterName &&
+                instrument.Name == "payaffe.webhook.delivery.terminal")
+            {
+                activeListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, measurement, _, _) =>
+            Interlocked.Add(ref transitions, measurement));
+        listener.Start();
+
+        Assert.True(await context.Processor.ProcessNextAsync(CancellationToken.None));
+
+        Assert.Equal("terminal_failed", Assert.Single(context.DbContext.WebhookOutboxEvents).Status);
+        // The meter is process-global and other test classes run alongside,
+        // so this can only be a lower bound.
+        Assert.True(Interlocked.Read(ref transitions) >= 1);
     }
 
     private static async Task LeaseEventAsync(

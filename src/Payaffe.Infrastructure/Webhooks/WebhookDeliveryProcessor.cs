@@ -509,6 +509,11 @@ public sealed class WebhookDeliveryProcessor(
             // updated.
             PayaffeTelemetry.RecordWebhookAttempt(attempt.Result);
         }
+
+        if (status == "terminal_failed")
+        {
+            PayaffeTelemetry.RecordWebhookTerminalTransition();
+        }
     }
 
     /// <summary>

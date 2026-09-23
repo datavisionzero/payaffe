@@ -69,9 +69,9 @@ builder.Services.AddPayaffeInstallationMode(builder.Configuration);
 builder.Services.AddPayaffeApplication();
 builder.Services.AddPayaffeInfrastructure(connectionString!, applySchemaOnStartup: true);
 
-// After the infrastructure registration, and that is not cosmetic: hosted
-// services start in registration order, so the heartbeat this host is judged
-// healthy by cannot begin before the schema migration has returned.
+// The heartbeat this host is judged healthy by waits for the schema migration
+// to complete (it runs in the background, ADR 0027) and stops while a worker
+// loop has died; see WorkerHealthHostedService.
 builder.Services.AddHostedService<WorkerHealthHostedService>();
 
 try
